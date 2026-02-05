@@ -123,6 +123,7 @@ model Sort {
   race                Race?            @relation(fields: [raceId], references: [id])
   personnages         PersonnageSort[]
   cooldowns           SortCooldown[]
+  monstres            MonstreSort[]
 }
 
 model Equipement {
@@ -167,14 +168,15 @@ model Effet {
 // ==================== MONDE & MAPS ====================
 
 model Region {
-  id          Int        @id @default(autoincrement())
-  nom         String     @unique
+  id          Int              @id @default(autoincrement())
+  nom         String           @unique
   description String?
   type        RegionType
-  niveauMin   Int        @default(1)
-  niveauMax   Int        @default(10)
+  niveauMin   Int              @default(1)
+  niveauMax   Int              @default(10)
   maps        Map[]
   donjons     Donjon[]
+  monstres    RegionMonstre[]
 }
 
 model Map {
@@ -187,8 +189,6 @@ model Map {
   largeur         Int
   hauteur         Int
   tauxRencontre   Float           @default(0.2)
-  spawns          ZoneSpawn[]
-  ennemisActifs   MapEnnemi[]
   groupesEnnemis  GroupeEnnemi[]
   connectionsFrom MapConnection[] @relation("FromMap")
   connectionsTo   MapConnection[] @relation("ToMap")
@@ -209,49 +209,48 @@ model MapConnection {
 }
 
 model MonstreTemplate {
-  id           Int         @id @default(autoincrement())
-  nom          String
-  force        Int
-  intelligence Int
-  dexterite    Int
-  agilite      Int
-  vie          Int
-  chance       Int
-  pvBase       Int
-  paBase       Int         @default(6)
-  pmBase       Int         @default(3)
-  niveauBase   Int         @default(1)
-  xpRecompense Int         @default(10)
-  spawns       ZoneSpawn[]
-  ennemisActifs MapEnnemi[]
+  id             Int                  @id @default(autoincrement())
+  nom            String
+  force          Int
+  intelligence   Int
+  dexterite      Int
+  agilite        Int
+  vie            Int
+  chance         Int
+  pvBase         Int
+  paBase         Int                  @default(6)
+  pmBase         Int                  @default(3)
+  niveauBase     Int                  @default(1)
+  xpRecompense   Int                  @default(10)
   groupesMembres GroupeEnnemiMembre[]
-  donjonsBoss  Donjon[]
+  donjonsBoss    Donjon[]
+  regions        RegionMonstre[]
+  sorts          MonstreSort[]
+  combatEntites  CombatEntite[]
 }
 
-model ZoneSpawn {
+model RegionMonstre {
   id          Int             @id @default(autoincrement())
-  mapId       Int
-  map         Map             @relation(fields: [mapId], references: [id])
+  regionId    Int
+  region      Region          @relation(fields: [regionId], references: [id])
   monstreId   Int
   monstre     MonstreTemplate @relation(fields: [monstreId], references: [id])
   probabilite Float           @default(1.0)
-  quantiteMin Int             @default(1)
-  quantiteMax Int             @default(3)
+
+  @@unique([regionId, monstreId])
+  @@index([regionId])
 }
 
-model MapEnnemi {
-  id          Int             @id @default(autoincrement())
-  mapId       Int
-  map         Map             @relation(fields: [mapId], references: [id])
-  monstreId   Int
-  monstre     MonstreTemplate @relation(fields: [monstreId], references: [id])
-  positionX   Int
-  positionY   Int
-  quantite    Int             @default(1)
-  niveau      Int             @default(1)
-  respawnTime Int?
-  vaincu      Boolean         @default(false)
-  vainquuAt   DateTime?
+model MonstreSort {
+  id        Int             @id @default(autoincrement())
+  monstreId Int
+  monstre   MonstreTemplate @relation(fields: [monstreId], references: [id])
+  sortId    Int
+  sort      Sort            @relation(fields: [sortId], references: [id])
+  priorite  Int             @default(1)
+
+  @@unique([monstreId, sortId])
+  @@index([monstreId])
 }
 
 model GroupeEnnemi {
@@ -382,33 +381,36 @@ model CombatCase {
 }
 
 model CombatEntite {
-  id           Int             @id @default(autoincrement())
-  combatId     Int
-  combat       Combat          @relation(fields: [combatId], references: [id])
-  personnageId Int?
-  nom          String
-  equipe       Int
-  positionX    Int
-  positionY    Int
-  initiative   Int
-  ordreJeu     Int
-  pvMax        Int
-  pvActuels    Int
-  paMax        Int
-  paActuels    Int
-  pmMax        Int
-  pmActuels    Int
-  force        Int
-  intelligence Int
-  dexterite    Int
-  agilite      Int
-  vie          Int
-  chance       Int
-  invocateurId       Int?
-  invocateur         CombatEntite?   @relation("Invocations", fields: [invocateurId], references: [id])
-  invocations        CombatEntite[]  @relation("Invocations")
-  armeData           Json?
-  armeCooldownRestant Int            @default(0)
+  id                  Int              @id @default(autoincrement())
+  combatId            Int
+  combat              Combat           @relation(fields: [combatId], references: [id])
+  personnageId        Int?
+  nom                 String
+  equipe              Int
+  positionX           Int
+  positionY           Int
+  initiative          Int
+  ordreJeu            Int
+  pvMax               Int
+  pvActuels           Int
+  paMax               Int
+  paActuels           Int
+  pmMax               Int
+  pmActuels           Int
+  force               Int
+  intelligence        Int
+  dexterite           Int
+  agilite             Int
+  vie                 Int
+  chance              Int
+  invocateurId        Int?
+  invocateur          CombatEntite?    @relation("Invocations", fields: [invocateurId], references: [id])
+  invocations         CombatEntite[]   @relation("Invocations")
+  armeData            Json?
+  armeCooldownRestant Int              @default(0)
+  niveau              Int?
+  monstreTemplateId   Int?
+  monstreTemplate     MonstreTemplate? @relation(fields: [monstreTemplateId], references: [id])
 }
 
 model EffetActif {

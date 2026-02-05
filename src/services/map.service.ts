@@ -18,12 +18,6 @@ export class MapService {
       where: { id },
       include: {
         region: true,
-        ennemisActifs: {
-          where: { vaincu: false },
-          include: {
-            monstre: true,
-          },
-        },
         groupesEnnemis: {
           where: { vaincu: false },
           include: {
@@ -39,11 +33,6 @@ export class MapService {
             toMap: {
               select: { id: true, nom: true, type: true },
             },
-          },
-        },
-        spawns: {
-          include: {
-            monstre: true,
           },
         },
       },
@@ -93,24 +82,6 @@ export class MapService {
     });
   }
 
-  async addSpawn(data: {
-    mapId: number;
-    monstreId: number;
-    probabilite?: number;
-    quantiteMin?: number;
-    quantiteMax?: number;
-  }) {
-    return prisma.zoneSpawn.create({
-      data: {
-        mapId: data.mapId,
-        monstreId: data.monstreId,
-        probabilite: data.probabilite ?? 1.0,
-        quantiteMin: data.quantiteMin ?? 1,
-        quantiteMax: data.quantiteMax ?? 3,
-      },
-    });
-  }
-
   /**
    * Spawn enemy groups on a map (for MANUEL mode)
    * Creates 1-3 groups of 1-8 mixed monsters based on spawn configuration
@@ -119,10 +90,13 @@ export class MapService {
     const map = await prisma.map.findUnique({
       where: { id: mapId },
       include: {
-        spawns: {
-          include: { monstre: true },
+        region: {
+          include: {
+            monstres: {
+              include: { monstre: true },
+            },
+          },
         },
-        region: true,
         groupesEnnemis: {
           where: { vaincu: false },
         },
@@ -133,7 +107,8 @@ export class MapService {
       throw new Error('Map not found');
     }
 
-    if (map.spawns.length === 0) {
+    const regionMonstres = map.region.monstres;
+    if (regionMonstres.length === 0) {
       return [];
     }
 
@@ -157,7 +132,7 @@ export class MapService {
         attempts++;
       } while (usedPositions.has(`${posX},${posY}`) && attempts < 100);
 
-      if (attempts >= 100) continue; // Skip if can't find unique position
+      if (attempts >= 100) continue;
       usedPositions.add(`${posX},${posY}`);
 
       // Create the group
@@ -166,7 +141,7 @@ export class MapService {
           mapId,
           positionX: posX,
           positionY: posY,
-          respawnTime: 300, // 5 minutes default
+          respawnTime: 300,
         },
       });
 
@@ -174,40 +149,39 @@ export class MapService {
       const totalMonstres = randomInt(1, 8);
 
       // Calculate total probability weight
-      const totalWeight = map.spawns.reduce((sum, s) => sum + s.probabilite, 0);
+      const totalWeight = regionMonstres.reduce((sum, rm) => sum + rm.probabilite, 0);
 
       // Select 1-4 monster types for the group
-      const numTypes = Math.min(randomInt(1, 4), map.spawns.length);
-      const selectedSpawns: { spawn: typeof map.spawns[0]; count: number }[] = [];
+      const numTypes = Math.min(randomInt(1, 4), regionMonstres.length);
+      const selectedMonstres: { rm: typeof regionMonstres[0]; count: number }[] = [];
       let remaining = totalMonstres;
 
       // Weighted random selection of monster types
       for (let i = 0; i < numTypes && remaining > 0; i++) {
         let roll = Math.random() * totalWeight;
-        let selectedSpawn = map.spawns[0];
+        let selected = regionMonstres[0];
 
-        for (const spawn of map.spawns) {
-          roll -= spawn.probabilite;
+        for (const rm of regionMonstres) {
+          roll -= rm.probabilite;
           if (roll <= 0) {
-            selectedSpawn = spawn;
+            selected = rm;
             break;
           }
         }
 
-        // Determine count for this type
         const count = i === numTypes - 1 ? remaining : randomInt(1, remaining);
-        selectedSpawns.push({ spawn: selectedSpawn, count });
+        selectedMonstres.push({ rm: selected, count });
         remaining -= count;
       }
 
       // Create group members
-      for (const { spawn, count } of selectedSpawns) {
+      for (const { rm, count } of selectedMonstres) {
         const niveau = randomInt(map.region.niveauMin, map.region.niveauMax);
 
         await prisma.groupeEnnemiMembre.create({
           data: {
             groupeEnnemiId: groupe.id,
-            monstreId: spawn.monstreId,
+            monstreId: rm.monstreId,
             quantite: count,
             niveau,
           },
@@ -341,130 +315,6 @@ export class MapService {
   }
 
   /**
-   * @deprecated Use spawnEnemyGroups instead
-   * Spawn enemies on a map (for MANUEL mode)
-   * Creates visible enemies based on spawn configuration
-   */
-  async spawnEnemies(mapId: number) {
-    const map = await prisma.map.findUnique({
-      where: { id: mapId },
-      include: {
-        spawns: {
-          include: { monstre: true },
-        },
-        region: true,
-      },
-    });
-
-    if (!map) {
-      throw new Error('Map not found');
-    }
-
-    // Clear existing non-defeated enemies
-    await prisma.mapEnnemi.deleteMany({
-      where: { mapId, vaincu: false },
-    });
-
-    const createdEnemies = [];
-
-    for (const spawn of map.spawns) {
-      // Determine quantity
-      const quantity = randomInt(spawn.quantiteMin, spawn.quantiteMax);
-
-      for (let i = 0; i < quantity; i++) {
-        // Random position on map
-        const posX = randomInt(0, map.largeur - 1);
-        const posY = randomInt(0, map.hauteur - 1);
-
-        // Random level within region range
-        const niveau = randomInt(map.region.niveauMin, map.region.niveauMax);
-
-        const enemy = await prisma.mapEnnemi.create({
-          data: {
-            mapId,
-            monstreId: spawn.monstreId,
-            positionX: posX,
-            positionY: posY,
-            quantite: 1,
-            niveau,
-            respawnTime: 300, // 5 minutes default
-          },
-          include: { monstre: true },
-        });
-
-        createdEnemies.push(enemy);
-      }
-    }
-
-    return createdEnemies;
-  }
-
-  /**
-   * Engage an enemy on the map (MANUEL mode)
-   * Creates a combat with the enemy group
-   */
-  async engageEnemy(mapId: number, ennemiId: number, groupeId: number) {
-    const map = await this.findById(mapId);
-    if (!map) {
-      throw new Error('Map not found');
-    }
-
-    if (map.combatMode !== CombatMode.MANUEL) {
-      throw new Error('Cannot manually engage enemies in AUTO mode');
-    }
-
-    const ennemi = await prisma.mapEnnemi.findUnique({
-      where: { id: ennemiId },
-      include: { monstre: true },
-    });
-
-    if (!ennemi || ennemi.mapId !== mapId) {
-      throw new Error('Enemy not found on this map');
-    }
-
-    if (ennemi.vaincu) {
-      throw new Error('Enemy already defeated');
-    }
-
-    // Get group
-    const groupe = await prisma.groupe.findUnique({
-      where: { id: groupeId },
-      include: {
-        personnages: {
-          include: {
-            personnage: true,
-          },
-        },
-      },
-    });
-
-    if (!groupe) {
-      throw new Error('Group not found');
-    }
-
-    // Create monsters array for combat
-    const monstres = this.createMonstersFromTemplate(ennemi.monstre, ennemi.quantite, ennemi.niveau);
-
-    // Create the combat
-    const combat = await combatService.create({
-      groupeId,
-      monstres,
-      mapId,
-    });
-
-    // Mark enemy as engaged (will be marked defeated after combat)
-    await prisma.mapEnnemi.update({
-      where: { id: ennemiId },
-      data: {
-        vaincu: true,
-        vainquuAt: new Date(),
-      },
-    });
-
-    return combat;
-  }
-
-  /**
    * Check for random encounter (AUTO mode)
    * Returns combat state if encounter triggered, null otherwise
    * Creates a group of 1-8 mixed monsters
@@ -473,10 +323,13 @@ export class MapService {
     const map = await prisma.map.findUnique({
       where: { id: mapId },
       include: {
-        spawns: {
-          include: { monstre: true },
+        region: {
+          include: {
+            monstres: {
+              include: { monstre: true },
+            },
+          },
         },
-        region: true,
       },
     });
 
@@ -485,30 +338,30 @@ export class MapService {
     }
 
     if (map.combatMode !== CombatMode.AUTO) {
-      return null; // No random encounters in MANUEL mode
+      return null;
     }
 
     if (map.type === MapType.SAFE || map.type === MapType.VILLE) {
-      return null; // No encounters in safe zones
+      return null;
     }
 
-    // Check encounter probability
     if (!checkProbability(map.tauxRencontre)) {
-      return null; // No encounter this time
+      return null;
     }
 
-    if (map.spawns.length === 0) {
-      return null; // No spawns configured
+    const regionMonstres = map.region.monstres;
+    if (regionMonstres.length === 0) {
+      return null;
     }
 
     // Calculate total probability weight
-    const totalWeight = map.spawns.reduce((sum, s) => sum + s.probabilite, 0);
+    const totalWeight = regionMonstres.reduce((sum, rm) => sum + rm.probabilite, 0);
 
     // Determine total monsters for this encounter (1-8)
     const totalMonstres = randomInt(1, 8);
 
     // Select 1-4 monster types for the group
-    const numTypes = Math.min(randomInt(1, 4), map.spawns.length);
+    const numTypes = Math.min(randomInt(1, 4), regionMonstres.length);
     const monstres: {
       nom: string;
       force: number;
@@ -520,34 +373,32 @@ export class MapService {
       pvMax: number;
       paMax: number;
       pmMax: number;
+      monstreTemplateId?: number;
+      niveau?: number;
     }[] = [];
     let remaining = totalMonstres;
 
-    // Weighted random selection of monster types
     for (let i = 0; i < numTypes && remaining > 0; i++) {
       let roll = Math.random() * totalWeight;
-      let selectedSpawn = map.spawns[0];
+      let selected = regionMonstres[0];
 
-      for (const spawn of map.spawns) {
-        roll -= spawn.probabilite;
+      for (const rm of regionMonstres) {
+        roll -= rm.probabilite;
         if (roll <= 0) {
-          selectedSpawn = spawn;
+          selected = rm;
           break;
         }
       }
 
-      // Determine count for this type
       const count = i === numTypes - 1 ? remaining : randomInt(1, remaining);
       const niveau = randomInt(map.region.niveauMin, map.region.niveauMax);
 
-      // Create monsters from template
-      const typeMonstres = this.createMonstersFromTemplate(selectedSpawn.monstre, count, niveau);
+      const typeMonstres = this.createMonstersFromTemplate(selected.monstre, count, niveau);
       monstres.push(...typeMonstres);
 
       remaining -= count;
     }
 
-    // Create combat
     const combat = await combatService.create({
       groupeId,
       monstres,
@@ -562,6 +413,7 @@ export class MapService {
    */
   private createMonstersFromTemplate(
     template: {
+      id: number;
       nom: string;
       force: number;
       intelligence: number;
@@ -595,57 +447,12 @@ export class MapService {
         pvMax: Math.floor(template.pvBase * scaleFactor),
         paMax: template.paBase,
         pmMax: template.pmBase,
+        monstreTemplateId: template.id,
+        niveau,
       });
     }
 
     return monstres;
-  }
-
-  /**
-   * Respawn defeated enemies that have passed their respawn time
-   */
-  async processRespawns(mapId: number) {
-    const now = new Date();
-
-    const toRespawn = await prisma.mapEnnemi.findMany({
-      where: {
-        mapId,
-        vaincu: true,
-        respawnTime: { not: null },
-        vainquuAt: { not: null },
-      },
-      include: { monstre: true },
-    });
-
-    const respawned = [];
-
-    for (const enemy of toRespawn) {
-      if (enemy.vainquuAt && enemy.respawnTime) {
-        const respawnAt = new Date(enemy.vainquuAt.getTime() + enemy.respawnTime * 1000);
-
-        if (now >= respawnAt) {
-          // Respawn: reset vaincu status and randomize position
-          const map = await prisma.map.findUnique({ where: { id: mapId } });
-
-          if (map) {
-            const updated = await prisma.mapEnnemi.update({
-              where: { id: enemy.id },
-              data: {
-                vaincu: false,
-                vainquuAt: null,
-                positionX: randomInt(0, map.largeur - 1),
-                positionY: randomInt(0, map.hauteur - 1),
-              },
-              include: { monstre: true },
-            });
-
-            respawned.push(updated);
-          }
-        }
-      }
-    }
-
-    return respawned;
   }
 
   /**

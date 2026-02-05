@@ -11,12 +11,18 @@ export class MonstreService {
     return prisma.monstreTemplate.findUnique({
       where: { id },
       include: {
-        spawns: {
+        regions: {
           include: {
-            map: {
+            region: {
               select: { id: true, nom: true },
             },
           },
+        },
+        sorts: {
+          include: {
+            sort: true,
+          },
+          orderBy: { priorite: 'asc' },
         },
       },
     });
@@ -75,13 +81,13 @@ export class MonstreService {
   }
 
   async delete(id: number) {
-    // First delete related spawns
-    await prisma.zoneSpawn.deleteMany({
+    // Delete related region-monster links
+    await prisma.regionMonstre.deleteMany({
       where: { monstreId: id },
     });
 
-    // Then delete related map enemies
-    await prisma.mapEnnemi.deleteMany({
+    // Delete related monster-spell links
+    await prisma.monstreSort.deleteMany({
       where: { monstreId: id },
     });
 

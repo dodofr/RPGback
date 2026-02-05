@@ -159,7 +159,6 @@ Request → Routes → Controller → Service → Prisma → PostgreSQL
 | GET | `/` | Lister toutes les maps |
 | GET | `/:id` | Détails map + groupes ennemis + connexions |
 | POST | `/` | Créer une map |
-| POST | `/:id/spawns` | Configurer spawn |
 | POST | `/:id/connections` | Ajouter connexion |
 | POST | `/:id/spawn-enemies` | Spawn groupes ennemis (MANUEL) |
 | POST | `/:id/engage` | Engager un groupe ennemi |
@@ -220,7 +219,7 @@ Request → Routes → Controller → Service → Prisma → PostgreSQL
 - `Groupe` - Équipes de personnages (max 6), position sur map
 - `GroupePersonnage` - Relation many-to-many groupe/personnage
 - `Combat` - Instances de combat
-- `CombatEntite` - Entités dans un combat (snapshot des stats + armeData JSON pour l'arme équipée)
+- `CombatEntite` - Entités dans un combat (snapshot des stats + armeData JSON pour l'arme équipée + monstreTemplateId/niveau pour XP scaling et IA)
 - `CombatCase` - Obstacles sur la grille
 - `EffetActif` - Buffs/debuffs actifs
 - `SortCooldown` - Cooldowns des sorts en combat
@@ -230,10 +229,10 @@ Request → Routes → Controller → Service → Prisma → PostgreSQL
 - `Map` - Cartes dans une région (WILDERNESS, DONJON, VILLE, SAFE)
 - `MapConnection` - Liens/portails entre maps
 - `MonstreTemplate` - Définitions de monstres réutilisables
-- `ZoneSpawn` - Configuration des spawns par zone
+- `RegionMonstre` - Liaison many-to-many monstres ↔ régions avec probabilité
+- `MonstreSort` - Sorts spécifiques par monstre avec priorité (1 = plus haute)
 - `GroupeEnnemi` - Groupes d'ennemis sur une map (position unique, 1-3 groupes par map)
 - `GroupeEnnemiMembre` - Composition des groupes (types de monstres mixtes, 1-8 monstres)
-- `MapEnnemi` - (Legacy) Ennemis individuels sur une map
 
 ### Tables grilles de combat
 - `GrilleCombat` - Templates de grilles de combat (nom, mapId, dimensions)
@@ -276,6 +275,8 @@ pointsParNiveau = 10
 ### Distribution d'XP
 - XP distribuée uniquement si le groupe gagne le combat
 - XP partagée entre les personnages survivants
+- XP proportionnelle au niveau du monstre : `XP = xpRecompense × (niveau / niveauBase)`
+- Utilise `monstreTemplateId` et `niveau` stockés dans CombatEntite (fallback par nom si absent)
 - Level-up automatique si XP suffisant
 - Nouveaux sorts appris automatiquement au level-up
 
@@ -409,16 +410,18 @@ statFinale = floor(statBase × scaleFactor)
 ## IA des monstres
 
 ### Comportement automatique
-L'IA joue automatiquement le tour des monstres:
-1. Cherche l'ennemi le plus proche
-2. Vérifie si un sort peut atteindre la cible
-3. Si oui: utilise le sort
-4. Sinon: se déplace vers la cible
-5. Fin du tour
+L'IA joue automatiquement le tour des monstres avec une boucle attaque/déplacement/attaque:
+1. Récupère les sorts du monstre via `MonstreSort` (ORDER BY priorité ASC)
+2. Cherche l'ennemi le plus proche
+3. Boucle (max 10 itérations) :
+   a. Teste chaque sort par priorité → si utilisable → lance le sort → RESTART boucle
+   b. Si aucun sort utilisable ET PM restants → avance vers la cible → RESTART boucle
+   c. Si rien possible → passer le tour
 
 ### Sélection de sort
-- Priorise les sorts utilisables (PA, cooldown, portée, LOS)
-- Choisit le premier sort valide
+- Sorts récupérés via `MonstreSort` triés par `priorite` (1 = plus haute)
+- Utilise `entity.monstreTemplateId` pour le lookup
+- Fallback : si `monstreTemplateId` est null, utilise les sorts raceId=null
 
 ## Système d'invocations
 
@@ -471,12 +474,13 @@ GroupeEnnemiMembre {
 
 #### Mode MANUEL (WILDERNESS)
 - **Groupes ennemis visibles** sur la map (`GroupeEnnemi`)
-- **Spawn automatique** : 1-3 groupes créés à l'entrée sur la map si aucun groupe actif
+- **Spawn automatique** : 1-3 groupes créés à l'entrée sur la map via `RegionMonstre` (monstres de la région)
 - **Engagement automatique** : se déplacer sur la case d'un groupe déclenche le combat
 - **Engagement manuel** : `POST /maps/:id/engage { groupeId, groupeEnnemiId }`
 
 #### Mode AUTO (DONJON)
 - **Rencontres aléatoires** basées sur `tauxRencontre` (0.0-1.0)
+- **Monstres issus de la région** via `RegionMonstre` (sélection pondérée par probabilité)
 - **Groupes mixtes** : chaque rencontre génère 1-8 monstres de 1-4 types différents
 - Combat déclenché automatiquement lors du déplacement
 
@@ -500,9 +504,9 @@ GroupeEnnemiMembre {
    POST /maps/:id/engage { groupeId, groupeEnnemiId }
    → Crée le combat avec tous les monstres du groupe
 
-5. Spawner manuellement des groupes
+5. Spawner manuellement des groupes (via régions)
    POST /maps/:id/spawn-enemies
-   → Crée 1-3 groupes de monstres mixtes
+   → Crée 1-3 groupes de monstres issus de la région (RegionMonstre)
 
 6. Respawn des groupes vaincus
    POST /maps/:id/respawn
@@ -597,7 +601,7 @@ curl -X POST http://localhost:3000/api/maps/1/engage \
   -H "Content-Type: application/json" \
   -d '{"groupeId": 1, "groupeEnnemiId": 1}'
 
-# Spawn manuel de groupes ennemis
+# Spawn manuel de groupes ennemis (utilise les monstres de la région)
 curl -X POST http://localhost:3000/api/maps/1/spawn-enemies
 
 # Respawn des groupes vaincus
@@ -629,13 +633,13 @@ curl -X POST http://localhost:3000/api/combats/1/end-turn \
 - Humain (+5 partout) - 4 sorts (niveaux 1, 4, 7, 10)
 - Elfe (INT +15, DEX +10, AGI +10, VIE -5) - 4 sorts (niveaux 1, 4, 7, 10)
 
-### Sorts (24)
+### Sorts (30)
 - Humain: 4 sorts SORT (niveaux 1, 4, 7, 10) - polyvalent
 - Elfe: 4 sorts SORT (niveaux 1, 4, 7, 10) - magie
 - Nain: 4 sorts SORT (niveaux 1, 4, 7, 10) - physique
 - Orc: 4 sorts SORT (niveaux 1, 4, 7, 10) - brutal
 - Halfelin: 4 sorts SORT (niveaux 1, 4, 7, 10) - agile
-- 4 sorts ARME génériques pour monstres (sans race)
+- 10 sorts spécifiques pour monstres (Morsure du loup, Griffure du loup, Coup de dague, Coup d'épée, Tir d'arbalète, Morsure venimeuse, Jet de toile, Coup d'os, Écrasement, Lancer de rocher)
 - Tous les sorts ont degatsCritMin/degatsCritMax (range de critique)
 
 ### Équipements (12)
@@ -670,6 +674,19 @@ curl -X POST http://localhost:3000/api/combats/1/end-turn \
 - Orée de la forêt : Meute de 3 Loups, Groupe mixte (2 Gobelins + 1 Loup)
 - Sentier forestier : 4 Araignées Géantes, Groupe mixte (2 Loups + 2 Araignées)
 - Route commerciale : 3 Bandits, Groupe mixte (2 Bandits + 2 Loups)
+
+### RegionMonstre (8)
+- Forêt de Vertbois : Gobelin (0.30), Loup (0.35), Araignée (0.25), Troll (0.10)
+- Plaines du Sud : Bandit (0.60), Loup (0.40)
+- Montagne Grise : Squelette (0.50), Troll (0.50)
+
+### MonstreSort (10)
+- Loup : Morsure du loup (prio 1), Griffure du loup (prio 2)
+- Gobelin : Coup de dague (prio 1)
+- Bandit : Coup d'épée (prio 1), Tir d'arbalète (prio 2)
+- Araignée : Morsure venimeuse (prio 1), Jet de toile (prio 2)
+- Squelette : Coup d'os (prio 1)
+- Troll : Écrasement (prio 1), Lancer de rocher (prio 2, cd:1)
 
 ### Connexions (10)
 - Réseau de portails entre les maps
@@ -769,6 +786,11 @@ Les fonctionnalités suivantes ont été testées et validées:
 | Critique en range (degatsCritMin/degatsCritMax) | OK |
 | Attaque d'arme physique (useArme) | OK |
 | Snapshot arme dans CombatEntite (armeData) | OK |
+| RegionMonstre (monstres liés aux régions) | OK |
+| MonstreSort (sorts spécifiques par monstre avec priorité) | OK |
+| IA améliorée (sorts par priorité, boucle attaque/déplacement) | OK |
+| XP scaling proportionnel au niveau du monstre | OK |
+| Donjons : rooms au niveauMax, boss surlevelé | OK |
 
 ## Variables d'environnement
 

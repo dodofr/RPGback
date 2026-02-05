@@ -87,6 +87,8 @@ export interface CombatEntityState {
   invocateurId?: number | null;
   armeData?: ArmeData | null;
   armeCooldownRestant?: number;
+  monstreTemplateId?: number | null;
+  niveau?: number | null;
 }
 
 export interface ActiveEffectState {
@@ -157,6 +159,8 @@ export interface MonsterDefinition {
   pvMax: number;
   paMax: number;
   pmMax: number;
+  monstreTemplateId?: number;
+  niveau?: number;
 }
 
 // Stats calculation

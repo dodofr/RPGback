@@ -40,7 +40,7 @@ export class DonjonService {
       throw new Error('Group already has an active dungeon run');
     }
 
-    // Check if dungeon exists
+    // Check if dungeon exists (include region for monster spawning)
     const donjon = await prisma.donjon.findUnique({
       where: { id: donjonId },
       include: {
@@ -229,8 +229,9 @@ export class DonjonService {
   }
 
   /**
-   * Spawn enemies for a dungeon combat
-   * Returns array of monster definitions
+   * Spawn enemies for a dungeon combat using region monsters
+   * Rooms 1-3: monsters at region niveauMax
+   * Room 4 (boss): 1 boss surlevelé + regular monsters
    */
   private async spawnDungeonEnemies(
     donjon: {
@@ -251,34 +252,13 @@ export class DonjonService {
         niveauBase: number;
         xpRecompense: number;
       };
-      salles: Array<{
-        mapId: number;
-        map: {
-          spawns?: Array<{
-            monstreId: number;
-            monstre: {
-              id: number;
-              nom: string;
-              force: number;
-              intelligence: number;
-              dexterite: number;
-              agilite: number;
-              vie: number;
-              chance: number;
-              pvBase: number;
-              paBase: number;
-              pmBase: number;
-              niveauBase: number;
-              xpRecompense: number;
-            };
-            probabilite: number;
-          }>;
-        };
-      }>;
+      region: {
+        id: number;
+        niveauMax: number;
+      };
     },
     difficulte: number,
-    isBoss: boolean,
-    mapId: number
+    isBoss: boolean
   ) {
     const monstres: {
       nom: string;
@@ -291,15 +271,29 @@ export class DonjonService {
       pvMax: number;
       paMax: number;
       pmMax: number;
+      monstreTemplateId: number;
+      niveau: number;
     }[] = [];
 
+    // Get region monsters
+    const regionMonstres = await prisma.regionMonstre.findMany({
+      where: { regionId: donjon.region.id },
+      include: { monstre: true },
+    });
+
+    if (regionMonstres.length === 0) {
+      throw new Error('No monsters configured for this region');
+    }
+
+    const totalWeight = regionMonstres.reduce((sum, rm) => sum + rm.probabilite, 0);
+
     if (isBoss) {
-      // Spawn the boss with boosted stats (+50%) and XP (×3)
+      // Boss room: 1 boss at niveauMax + random(5,10), boosted 1.5x
       const boss = donjon.boss;
-      const niveau = donjon.niveauMax;
-      const levelDiff = niveau - boss.niveauBase;
+      const bossNiveau = donjon.region.niveauMax + randomInt(5, 10);
+      const levelDiff = bossNiveau - boss.niveauBase;
       const scaleFactor = 1 + levelDiff * 0.1;
-      const bossBoost = 1.5; // +50% stats for boss
+      const bossBoost = 1.5;
 
       monstres.push({
         nom: `${boss.nom} (Boss)`,
@@ -312,58 +306,65 @@ export class DonjonService {
         pvMax: Math.floor(boss.pvBase * scaleFactor * bossBoost),
         paMax: boss.paBase,
         pmMax: boss.pmBase,
-      });
-    } else {
-      // Get spawn configuration from the map
-      const mapWithSpawns = await prisma.map.findUnique({
-        where: { id: mapId },
-        include: {
-          spawns: {
-            include: { monstre: true },
-          },
-        },
+        monstreTemplateId: boss.id,
+        niveau: bossNiveau,
       });
 
-      if (!mapWithSpawns || mapWithSpawns.spawns.length === 0) {
-        // Fallback: use spawns from any room in the dungeon
-        const anyRoomWithSpawns = donjon.salles.find(
-          s => s.map.spawns && s.map.spawns.length > 0
-        );
-        if (!anyRoomWithSpawns?.map.spawns) {
-          throw new Error('No spawn configuration found for dungeon');
+      // Add (difficulte - 1) regular monsters at niveauMax
+      const regularCount = difficulte - 1;
+      if (regularCount > 0) {
+        const numTypes = Math.min(randomInt(1, 4), regionMonstres.length);
+        let remaining = regularCount;
+
+        for (let i = 0; i < numTypes && remaining > 0; i++) {
+          let roll = Math.random() * totalWeight;
+          let selected = regionMonstres[0];
+          for (const rm of regionMonstres) {
+            roll -= rm.probabilite;
+            if (roll <= 0) { selected = rm; break; }
+          }
+
+          const count = i === numTypes - 1 ? remaining : randomInt(1, remaining);
+          const template = selected.monstre;
+          const niveau = donjon.region.niveauMax;
+          const ld = niveau - template.niveauBase;
+          const sf = 1 + ld * 0.1;
+
+          for (let j = 0; j < count; j++) {
+            monstres.push({
+              nom: count > 1 ? `${template.nom} ${monstres.length + 1}` : template.nom,
+              force: Math.floor(template.force * sf),
+              intelligence: Math.floor(template.intelligence * sf),
+              dexterite: Math.floor(template.dexterite * sf),
+              agilite: Math.floor(template.agilite * sf),
+              vie: Math.floor(template.vie * sf),
+              chance: Math.floor(template.chance * sf),
+              pvMax: Math.floor(template.pvBase * sf),
+              paMax: template.paBase,
+              pmMax: template.pmBase,
+              monstreTemplateId: template.id,
+              niveau,
+            });
+          }
+          remaining -= count;
         }
       }
-
-      const spawns = mapWithSpawns?.spawns || [];
-      if (spawns.length === 0) {
-        throw new Error('No spawn configuration found for this room');
-      }
-
-      // Calculate total probability weight
-      const totalWeight = spawns.reduce((sum, s) => sum + s.probabilite, 0);
-
-      // Generate exactly 'difficulte' number of monsters
+    } else {
+      // Regular rooms: monsters at region niveauMax
+      const niveau = donjon.region.niveauMax;
       let remaining = difficulte;
-      const numTypes = Math.min(randomInt(1, 4), spawns.length);
+      const numTypes = Math.min(randomInt(1, 4), regionMonstres.length);
 
       for (let i = 0; i < numTypes && remaining > 0; i++) {
-        // Weighted random selection
         let roll = Math.random() * totalWeight;
-        let selectedSpawn = spawns[0];
-
-        for (const spawn of spawns) {
-          roll -= spawn.probabilite;
-          if (roll <= 0) {
-            selectedSpawn = spawn;
-            break;
-          }
+        let selected = regionMonstres[0];
+        for (const rm of regionMonstres) {
+          roll -= rm.probabilite;
+          if (roll <= 0) { selected = rm; break; }
         }
 
         const count = i === numTypes - 1 ? remaining : randomInt(1, remaining);
-        const niveau = randomInt(donjon.niveauMin, donjon.niveauMax);
-
-        // Create monsters from template
-        const template = selectedSpawn.monstre;
+        const template = selected.monstre;
         const levelDiff = niveau - template.niveauBase;
         const scaleFactor = 1 + levelDiff * 0.1;
 
@@ -379,9 +380,10 @@ export class DonjonService {
             pvMax: Math.floor(template.pvBase * scaleFactor),
             paMax: template.paBase,
             pmMax: template.pmBase,
+            monstreTemplateId: template.id,
+            niveau,
           });
         }
-
         remaining -= count;
       }
     }
@@ -400,17 +402,10 @@ export class DonjonService {
           include: {
             salles: {
               orderBy: { ordre: 'asc' },
-              include: {
-                map: {
-                  include: {
-                    spawns: {
-                      include: { monstre: true },
-                    },
-                  },
-                },
-              },
+              include: { map: true },
             },
             boss: true,
+            region: true,
           },
         },
         groupe: {
@@ -439,10 +434,9 @@ export class DonjonService {
 
     // Spawn enemies
     const monstres = await this.spawnDungeonEnemies(
-      run.donjon as any,
+      run.donjon,
       run.difficulte,
-      isBoss,
-      currentRoom.mapId
+      isBoss
     );
 
     // Create combat

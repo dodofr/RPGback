@@ -40,13 +40,26 @@ export class ProgressionService {
     // Calculate total XP from defeated enemies
     const defeatedEnemies = combat.entites.filter((e) => e.equipe === 1);
 
-    // Get XP from MonstreTemplate if available (via name matching)
+    // Calculate XP with level scaling
     let totalXP = 0;
     for (const enemy of defeatedEnemies) {
-      const template = await prisma.monstreTemplate.findFirst({
-        where: { nom: enemy.nom },
-      });
-      totalXP += template?.xpRecompense ?? 10; // Default 10 XP if no template found
+      if (enemy.monstreTemplateId && enemy.niveau) {
+        const template = await prisma.monstreTemplate.findUnique({
+          where: { id: enemy.monstreTemplateId },
+        });
+        if (template) {
+          // XP scales proportionally with level: xpRecompense × (niveau / niveauBase)
+          totalXP += Math.floor(template.xpRecompense * (enemy.niveau / template.niveauBase));
+        } else {
+          totalXP += 10;
+        }
+      } else {
+        // Fallback: lookup by name
+        const template = await prisma.monstreTemplate.findFirst({
+          where: { nom: enemy.nom },
+        });
+        totalXP += template?.xpRecompense ?? 10;
+      }
     }
 
     // Distribute XP equally among surviving characters

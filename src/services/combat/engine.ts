@@ -68,6 +68,8 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       invocateurId: e.invocateurId,
       armeData: e.armeData as unknown as ArmeData | null,
       armeCooldownRestant: e.armeCooldownRestant,
+      monstreTemplateId: e.monstreTemplateId,
+      niveau: e.niveau,
     })),
     effetsActifs: combat.effetsActifs.map((e) => ({
       id: e.id,

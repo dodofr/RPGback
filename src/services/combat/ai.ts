@@ -19,6 +19,7 @@ interface EntityState {
   intelligence: number;
   dexterite: number;
   agilite: number;
+  monstreTemplateId?: number | null;
 }
 
 interface SpellInfo {
@@ -35,6 +36,8 @@ interface SpellInfo {
 
 /**
  * Execute a complete AI turn for an enemy entity
+ * Uses MonstreSort (priority-based) if monstreTemplateId is set,
+ * falls back to generic raceId=null spells otherwise.
  */
 export async function executeAITurn(combatId: number, entiteId: number): Promise<void> {
   const combat = await prisma.combat.findUnique({
@@ -69,24 +72,24 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
     bloqueLigneDeVue: c.bloqueLigneDeVue,
   }));
 
-  // Get available spells for monsters (generic spells with raceId = null)
-  const monsterSpells = await prisma.sort.findMany({
-    where: { raceId: null },
-  });
-
-  // Find closest enemy
-  const target = findClosestEnemy(entity, enemies);
-  if (!target) {
-    await endTurn(combatId, entiteId);
-    return;
+  // Get spells for this monster, ordered by priority
+  let monsterSpells: SpellInfo[];
+  if (entity.monstreTemplateId) {
+    const monstreSorts = await prisma.monstreSort.findMany({
+      where: { monstreId: entity.monstreTemplateId },
+      include: { sort: true },
+      orderBy: { priorite: 'asc' },
+    });
+    monsterSpells = monstreSorts.map((ms) => ms.sort);
+  } else {
+    // Fallback: generic spells with raceId = null
+    monsterSpells = await prisma.sort.findMany({
+      where: { raceId: null },
+    });
   }
 
-  // AI loop: try to attack or move while we have PA/PM
-  let currentPA = entity.paActuels;
-  let currentPM = entity.pmActuels;
-  let currentX = entity.positionX;
-  let currentY = entity.positionY;
-  let maxIterations = 10; // Safety limit
+  // AI loop: attack → move → attack, repeat while possible
+  let maxIterations = 10;
 
   while (maxIterations > 0) {
     maxIterations--;
@@ -100,46 +103,41 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
       break;
     }
 
-    currentPA = updatedEntity.paActuels;
-    currentPM = updatedEntity.pmActuels;
-    currentX = updatedEntity.positionX;
-    currentY = updatedEntity.positionY;
-
-    // Refresh target state
-    const updatedTarget = await prisma.combatEntite.findUnique({
-      where: { id: target.id },
+    // Refresh alive enemies
+    const currentCombat = await prisma.combat.findUnique({
+      where: { id: combatId },
+      include: { entites: true },
     });
+    if (!currentCombat || currentCombat.status !== CombatStatus.EN_COURS) break;
 
-    if (!updatedTarget || updatedTarget.pvActuels <= 0) {
-      // Target is dead, find new target
-      const newCombat = await prisma.combat.findUnique({
-        where: { id: combatId },
-        include: { entites: true },
-      });
-      if (!newCombat) break;
+    const aliveEnemies = currentCombat.entites.filter(
+      (e) => e.equipe !== entity.equipe && e.pvActuels > 0
+    );
+    if (aliveEnemies.length === 0) break;
 
-      const newEnemies = newCombat.entites.filter((e) => e.equipe !== entity.equipe && e.pvActuels > 0);
-      if (newEnemies.length === 0) break;
+    // Find closest enemy
+    const target = findClosestEnemy(updatedEntity, aliveEnemies);
+    if (!target) break;
 
-      // Continue with new closest enemy
-      break;
-    }
+    const currentPA = updatedEntity.paActuels;
+    const currentPM = updatedEntity.pmActuels;
+    const currentX = updatedEntity.positionX;
+    const currentY = updatedEntity.positionY;
 
-    // Try to find a usable spell
+    // Try to find a usable spell (by priority order)
     const usableSpell = await findUsableSpell(
       combatId,
       entiteId,
       monsterSpells,
       { x: currentX, y: currentY },
-      { x: updatedTarget.positionX, y: updatedTarget.positionY },
+      { x: target.positionX, y: target.positionY },
       currentPA,
-      combat.entites,
+      currentCombat.entites,
       blockedCases
     );
 
     if (usableSpell) {
-      // Attack!
-      await executeAction(combatId, entiteId, usableSpell.id, updatedTarget.positionX, updatedTarget.positionY);
+      await executeAction(combatId, entiteId, usableSpell.id, target.positionX, target.positionY);
       continue;
     }
 
@@ -149,10 +147,10 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
         combatId,
         entiteId,
         { x: currentX, y: currentY },
-        { x: updatedTarget.positionX, y: updatedTarget.positionY },
+        { x: target.positionX, y: target.positionY },
         currentPM,
-        { width: combat.grilleLargeur, height: combat.grilleHauteur },
-        combat.entites,
+        { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
+        currentCombat.entites,
         blockedCases
       );
 
@@ -189,7 +187,7 @@ function findClosestEnemy(entity: EntityState, enemies: EntityState[]): EntitySt
 }
 
 /**
- * Find a spell that can be used on the target
+ * Find a spell that can be used on the target (priority order)
  */
 async function findUsableSpell(
   combatId: number,
@@ -204,17 +202,12 @@ async function findUsableSpell(
   const distance = manhattanDistance(from.x, from.y, to.x, to.y);
 
   for (const spell of spells) {
-    // Check PA cost
     if (spell.coutPA > availablePA) continue;
-
-    // Check range
     if (distance < spell.porteeMin || distance > spell.porteeMax) continue;
 
-    // Check cooldown
     const cooldownCheck = await spellService.canUseSpell(combatId, entiteId, spell.id);
     if (!cooldownCheck.canUse) continue;
 
-    // Check LOS if required
     if (spell.ligneDeVue) {
       if (!hasLineOfSight(from, to, entities, blockedCases)) continue;
     }
@@ -238,28 +231,23 @@ async function moveTowardsTarget(
   entities: EntityState[],
   blockedCases: CombatCaseState[]
 ): Promise<boolean> {
-  // Determine best direction to move
   const dx = to.x - from.x;
   const dy = to.y - from.y;
 
-  // Prioritize the larger distance
   const possibleMoves: Position[] = [];
 
   if (Math.abs(dx) >= Math.abs(dy)) {
-    // Prioritize horizontal movement
     if (dx > 0) possibleMoves.push({ x: from.x + 1, y: from.y });
     else if (dx < 0) possibleMoves.push({ x: from.x - 1, y: from.y });
     if (dy > 0) possibleMoves.push({ x: from.x, y: from.y + 1 });
     else if (dy < 0) possibleMoves.push({ x: from.x, y: from.y - 1 });
   } else {
-    // Prioritize vertical movement
     if (dy > 0) possibleMoves.push({ x: from.x, y: from.y + 1 });
     else if (dy < 0) possibleMoves.push({ x: from.x, y: from.y - 1 });
     if (dx > 0) possibleMoves.push({ x: from.x + 1, y: from.y });
     else if (dx < 0) possibleMoves.push({ x: from.x - 1, y: from.y });
   }
 
-  // Try each possible move
   for (const move of possibleMoves) {
     const moveCheck = canMove(from, move, availablePM, grid, entities, blockedCases);
     if (moveCheck.valid) {

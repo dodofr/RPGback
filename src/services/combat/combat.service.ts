@@ -148,6 +148,8 @@ export class CombatService {
           agilite: monster.agilite,
           vie: monster.vie,
           chance: monster.chance,
+          monstreTemplateId: monster.monstreTemplateId ?? null,
+          niveau: monster.niveau ?? null,
         },
       });
     }

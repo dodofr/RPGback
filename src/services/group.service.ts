@@ -271,10 +271,6 @@ export class GroupService {
         map: {
           include: {
             region: true,
-            ennemisActifs: {
-              where: { vaincu: false },
-              include: { monstre: true },
-            },
             groupesEnnemis: {
               where: { vaincu: false },
               include: {

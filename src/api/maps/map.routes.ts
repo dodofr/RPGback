@@ -25,9 +25,6 @@ mapsRouter.get('/:id', (req, res, next) => mapController.getMapById(req, res, ne
 // POST /api/maps - Create a map
 mapsRouter.post('/', (req, res, next) => mapController.createMap(req, res, next));
 
-// POST /api/maps/:id/spawns - Add spawn configuration
-mapsRouter.post('/:id/spawns', (req, res, next) => mapController.addSpawn(req, res, next));
-
 // POST /api/maps/:id/connections - Add connection to another map
 mapsRouter.post('/:id/connections', (req, res, next) => mapController.addConnection(req, res, next));
 

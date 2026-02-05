@@ -589,23 +589,24 @@ async function main() {
     },
   });
 
-  // --- SORTS GENERIQUES POUR MONSTRES (sans race) ---
+  // --- SORTS SPECIFIQUES PAR MONSTRE (sans race) ---
+  // Loup: Morsure du loup (prio 1), Griffure du loup (prio 2)
   await prisma.sort.upsert({
     where: { id: 21 },
     update: {},
     create: {
-      nom: 'Attaque basique',
-      type: SortType.ARME,
+      nom: 'Morsure du loup',
+      type: SortType.SORT,
       statUtilisee: StatType.FORCE,
-      coutPA: 3,
+      coutPA: 4,
       porteeMin: 1,
       porteeMax: 1,
       ligneDeVue: true,
-      degatsMin: 10,
-      degatsMax: 18,
-      degatsCritMin: 25,
-      degatsCritMax: 35,
-      chanceCritBase: 0.05,
+      degatsMin: 15,
+      degatsMax: 25,
+      degatsCritMin: 35,
+      degatsCritMax: 45,
+      chanceCritBase: 0.08,
       cooldown: 0,
       niveauApprentissage: 1,
       raceId: null,
@@ -617,15 +618,110 @@ async function main() {
     where: { id: 22 },
     update: {},
     create: {
-      nom: 'Morsure',
-      type: SortType.ARME,
+      nom: 'Griffure du loup',
+      type: SortType.SORT,
+      statUtilisee: StatType.AGILITE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 2,
+      ligneDeVue: true,
+      degatsMin: 8,
+      degatsMax: 14,
+      degatsCritMin: 18,
+      degatsCritMax: 28,
+      chanceCritBase: 0.10,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Gobelin: Coup de dague (prio 1)
+  await prisma.sort.upsert({
+    where: { id: 23 },
+    update: {},
+    create: {
+      nom: 'Coup de dague',
+      type: SortType.SORT,
+      statUtilisee: StatType.DEXTERITE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 1,
+      ligneDeVue: true,
+      degatsMin: 10,
+      degatsMax: 18,
+      degatsCritMin: 25,
+      degatsCritMax: 35,
+      chanceCritBase: 0.10,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Bandit: Coup d'épée (prio 1), Tir d'arbalète (prio 2)
+  await prisma.sort.upsert({
+    where: { id: 24 },
+    update: {},
+    create: {
+      nom: "Coup d'épée",
+      type: SortType.SORT,
       statUtilisee: StatType.FORCE,
       coutPA: 3,
       porteeMin: 1,
       porteeMax: 1,
       ligneDeVue: true,
+      degatsMin: 14,
+      degatsMax: 22,
+      degatsCritMin: 30,
+      degatsCritMax: 40,
+      chanceCritBase: 0.05,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  await prisma.sort.upsert({
+    where: { id: 25 },
+    update: {},
+    create: {
+      nom: "Tir d'arbalète",
+      type: SortType.SORT,
+      statUtilisee: StatType.DEXTERITE,
+      coutPA: 4,
+      porteeMin: 3,
+      porteeMax: 5,
+      ligneDeVue: true,
       degatsMin: 12,
       degatsMax: 20,
+      degatsCritMin: 28,
+      degatsCritMax: 38,
+      chanceCritBase: 0.08,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Araignée: Morsure venimeuse (prio 1), Jet de toile (prio 2)
+  await prisma.sort.upsert({
+    where: { id: 26 },
+    update: {},
+    create: {
+      nom: 'Morsure venimeuse',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 4,
+      porteeMin: 1,
+      porteeMax: 1,
+      ligneDeVue: true,
+      degatsMin: 12,
+      degatsMax: 22,
       degatsCritMin: 30,
       degatsCritMax: 40,
       chanceCritBase: 0.08,
@@ -637,21 +733,69 @@ async function main() {
   });
 
   await prisma.sort.upsert({
-    where: { id: 23 },
+    where: { id: 27 },
     update: {},
     create: {
-      nom: 'Griffe',
-      type: SortType.ARME,
-      statUtilisee: StatType.AGILITE,
-      coutPA: 2,
+      nom: 'Jet de toile',
+      type: SortType.SORT,
+      statUtilisee: StatType.DEXTERITE,
+      coutPA: 3,
+      porteeMin: 2,
+      porteeMax: 4,
+      ligneDeVue: true,
+      degatsMin: 8,
+      degatsMax: 16,
+      degatsCritMin: 20,
+      degatsCritMax: 30,
+      chanceCritBase: 0.05,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Squelette: Coup d'os (prio 1)
+  await prisma.sort.upsert({
+    where: { id: 28 },
+    update: {},
+    create: {
+      nom: "Coup d'os",
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 3,
       porteeMin: 1,
       porteeMax: 1,
       ligneDeVue: true,
-      degatsMin: 8,
-      degatsMax: 14,
-      degatsCritMin: 20,
-      degatsCritMax: 30,
-      chanceCritBase: 0.10,
+      degatsMin: 12,
+      degatsMax: 20,
+      degatsCritMin: 28,
+      degatsCritMax: 38,
+      chanceCritBase: 0.05,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Troll: Écrasement (prio 1), Lancer de rocher (prio 2, cd:1)
+  await prisma.sort.upsert({
+    where: { id: 29 },
+    update: {},
+    create: {
+      nom: 'Écrasement',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 4,
+      porteeMin: 1,
+      porteeMax: 1,
+      ligneDeVue: true,
+      degatsMin: 25,
+      degatsMax: 40,
+      degatsCritMin: 55,
+      degatsCritMax: 70,
+      chanceCritBase: 0.05,
       cooldown: 0,
       niveauApprentissage: 1,
       raceId: null,
@@ -660,29 +804,29 @@ async function main() {
   });
 
   await prisma.sort.upsert({
-    where: { id: 24 },
+    where: { id: 30 },
     update: {},
     create: {
-      nom: 'Venin',
+      nom: 'Lancer de rocher',
       type: SortType.SORT,
-      statUtilisee: StatType.INTELLIGENCE,
+      statUtilisee: StatType.FORCE,
       coutPA: 4,
-      porteeMin: 1,
-      porteeMax: 2,
+      porteeMin: 2,
+      porteeMax: 4,
       ligneDeVue: true,
-      degatsMin: 15,
-      degatsMax: 25,
-      degatsCritMin: 35,
-      degatsCritMax: 45,
+      degatsMin: 18,
+      degatsMax: 30,
+      degatsCritMin: 40,
+      degatsCritMax: 55,
       chanceCritBase: 0.05,
-      cooldown: 2,
+      cooldown: 1,
       niveauApprentissage: 1,
       raceId: null,
       zoneId: zoneCase.id,
     },
   });
 
-  console.log('Created 24 spells (20 for races, 4 generic for monsters)');
+  console.log('Created 30 spells (20 for races, 10 specific for monsters)');
 
   // ==================== EQUIPEMENTS ====================
   await prisma.equipement.upsert({
@@ -1203,16 +1347,31 @@ async function main() {
 
   console.log('Created 10 map connections');
 
-  // ==================== ZONE SPAWNS ====================
-  await prisma.zoneSpawn.upsert({ where: { id: 1 }, update: {}, create: { mapId: oreeForet.id, monstreId: loup.id, probabilite: 1.0, quantiteMin: 1, quantiteMax: 2 } });
-  await prisma.zoneSpawn.upsert({ where: { id: 2 }, update: {}, create: { mapId: sentierForestier.id, monstreId: loup.id, probabilite: 0.6, quantiteMin: 1, quantiteMax: 3 } });
-  await prisma.zoneSpawn.upsert({ where: { id: 3 }, update: {}, create: { mapId: sentierForestier.id, monstreId: araigneeGeante.id, probabilite: 0.4, quantiteMin: 1, quantiteMax: 2 } });
-  await prisma.zoneSpawn.upsert({ where: { id: 4 }, update: {}, create: { mapId: grotteAuxGobelins.id, monstreId: gobelin.id, probabilite: 0.7, quantiteMin: 2, quantiteMax: 4 } });
-  await prisma.zoneSpawn.upsert({ where: { id: 5 }, update: {}, create: { mapId: grotteAuxGobelins.id, monstreId: araigneeGeante.id, probabilite: 0.3, quantiteMin: 1, quantiteMax: 2 } });
-  await prisma.zoneSpawn.upsert({ where: { id: 6 }, update: {}, create: { mapId: routeCommerciale.id, monstreId: bandit.id, probabilite: 0.7, quantiteMin: 1, quantiteMax: 3 } });
-  await prisma.zoneSpawn.upsert({ where: { id: 7 }, update: {}, create: { mapId: routeCommerciale.id, monstreId: loup.id, probabilite: 0.3, quantiteMin: 1, quantiteMax: 2 } });
+  // ==================== REGION MONSTRES ====================
+  await prisma.regionMonstre.upsert({ where: { id: 1 }, update: {}, create: { regionId: foretVertbois.id, monstreId: gobelin.id, probabilite: 0.30 } });
+  await prisma.regionMonstre.upsert({ where: { id: 2 }, update: {}, create: { regionId: foretVertbois.id, monstreId: loup.id, probabilite: 0.35 } });
+  await prisma.regionMonstre.upsert({ where: { id: 3 }, update: {}, create: { regionId: foretVertbois.id, monstreId: araigneeGeante.id, probabilite: 0.25 } });
+  await prisma.regionMonstre.upsert({ where: { id: 4 }, update: {}, create: { regionId: foretVertbois.id, monstreId: trollDesForets.id, probabilite: 0.10 } });
+  await prisma.regionMonstre.upsert({ where: { id: 5 }, update: {}, create: { regionId: plainesDuSud.id, monstreId: bandit.id, probabilite: 0.60 } });
+  await prisma.regionMonstre.upsert({ where: { id: 6 }, update: {}, create: { regionId: plainesDuSud.id, monstreId: loup.id, probabilite: 0.40 } });
+  await prisma.regionMonstre.upsert({ where: { id: 7 }, update: {}, create: { regionId: montagneGrise.id, monstreId: squelette.id, probabilite: 0.50 } });
+  await prisma.regionMonstre.upsert({ where: { id: 8 }, update: {}, create: { regionId: montagneGrise.id, monstreId: trollDesForets.id, probabilite: 0.50 } });
 
-  console.log('Created 7 zone spawns');
+  console.log('Created 8 region-monster links');
+
+  // ==================== MONSTRE SORTS ====================
+  await prisma.monstreSort.upsert({ where: { id: 1 }, update: {}, create: { monstreId: loup.id, sortId: 21, priorite: 1 } });        // Morsure du loup
+  await prisma.monstreSort.upsert({ where: { id: 2 }, update: {}, create: { monstreId: loup.id, sortId: 22, priorite: 2 } });        // Griffure du loup
+  await prisma.monstreSort.upsert({ where: { id: 3 }, update: {}, create: { monstreId: gobelin.id, sortId: 23, priorite: 1 } });     // Coup de dague
+  await prisma.monstreSort.upsert({ where: { id: 4 }, update: {}, create: { monstreId: bandit.id, sortId: 24, priorite: 1 } });      // Coup d'épée
+  await prisma.monstreSort.upsert({ where: { id: 5 }, update: {}, create: { monstreId: bandit.id, sortId: 25, priorite: 2 } });      // Tir d'arbalète
+  await prisma.monstreSort.upsert({ where: { id: 6 }, update: {}, create: { monstreId: araigneeGeante.id, sortId: 26, priorite: 1 } }); // Morsure venimeuse
+  await prisma.monstreSort.upsert({ where: { id: 7 }, update: {}, create: { monstreId: araigneeGeante.id, sortId: 27, priorite: 2 } }); // Jet de toile
+  await prisma.monstreSort.upsert({ where: { id: 8 }, update: {}, create: { monstreId: squelette.id, sortId: 28, priorite: 1 } });   // Coup d'os
+  await prisma.monstreSort.upsert({ where: { id: 9 }, update: {}, create: { monstreId: trollDesForets.id, sortId: 29, priorite: 1 } }); // Écrasement
+  await prisma.monstreSort.upsert({ where: { id: 10 }, update: {}, create: { monstreId: trollDesForets.id, sortId: 30, priorite: 2 } }); // Lancer de rocher
+
+  console.log('Created 10 monster-spell links');
 
   // ==================== GROUPES ENNEMIS ====================
   // Groupe 1: Orée de la forêt - Meute de loups
@@ -1438,81 +1597,6 @@ async function main() {
   });
 
   console.log('Created 4 dungeon room maps');
-
-  // Add spawns to dungeon rooms
-  await prisma.zoneSpawn.upsert({
-    where: { id: 8 },
-    update: {},
-    create: {
-      mapId: donjonSalle1.id,
-      monstreId: gobelin.id,
-      probabilite: 0.7,
-      quantiteMin: 2,
-      quantiteMax: 4,
-    },
-  });
-
-  await prisma.zoneSpawn.upsert({
-    where: { id: 9 },
-    update: {},
-    create: {
-      mapId: donjonSalle1.id,
-      monstreId: loup.id,
-      probabilite: 0.3,
-      quantiteMin: 1,
-      quantiteMax: 2,
-    },
-  });
-
-  await prisma.zoneSpawn.upsert({
-    where: { id: 10 },
-    update: {},
-    create: {
-      mapId: donjonSalle2.id,
-      monstreId: gobelin.id,
-      probabilite: 0.6,
-      quantiteMin: 2,
-      quantiteMax: 4,
-    },
-  });
-
-  await prisma.zoneSpawn.upsert({
-    where: { id: 11 },
-    update: {},
-    create: {
-      mapId: donjonSalle2.id,
-      monstreId: squelette.id,
-      probabilite: 0.4,
-      quantiteMin: 1,
-      quantiteMax: 3,
-    },
-  });
-
-  await prisma.zoneSpawn.upsert({
-    where: { id: 12 },
-    update: {},
-    create: {
-      mapId: donjonSalle3.id,
-      monstreId: araigneeGeante.id,
-      probabilite: 0.7,
-      quantiteMin: 2,
-      quantiteMax: 5,
-    },
-  });
-
-  await prisma.zoneSpawn.upsert({
-    where: { id: 13 },
-    update: {},
-    create: {
-      mapId: donjonSalle3.id,
-      monstreId: gobelin.id,
-      probabilite: 0.3,
-      quantiteMin: 1,
-      quantiteMax: 3,
-    },
-  });
-
-  console.log('Created 6 dungeon room spawns');
 
   // Create the dungeon
   const grotteGobelinsDonjon = await prisma.donjon.upsert({

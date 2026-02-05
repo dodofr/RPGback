@@ -38,13 +38,6 @@ const createMonstreSchema = z.object({
   xpRecompense: z.number().int().min(0).optional(),
 });
 
-const addSpawnSchema = z.object({
-  monstreId: z.number().int().positive(),
-  probabilite: z.number().min(0).optional(),
-  quantiteMin: z.number().int().min(1).optional(),
-  quantiteMax: z.number().int().min(1).optional(),
-});
-
 const addConnectionSchema = z.object({
   toMapId: z.number().int().positive(),
   positionX: z.number().int().min(0),
@@ -54,12 +47,8 @@ const addConnectionSchema = z.object({
 
 const engageSchema = z.object({
   groupeId: z.number().int().positive(),
-  ennemiId: z.number().int().positive().optional(),
-  groupeEnnemiId: z.number().int().positive().optional(),
-}).refine(
-  data => data.ennemiId !== undefined || data.groupeEnnemiId !== undefined,
-  { message: 'Either ennemiId or groupeEnnemiId must be provided' }
-);
+  groupeEnnemiId: z.number().int().positive(),
+});
 
 export class MapController {
   // ==================== REGIONS ====================
@@ -152,26 +141,6 @@ export class MapController {
     }
   }
 
-  async addSpawn(req: Request, res: Response, next: NextFunction) {
-    try {
-      const mapId = parseInt(req.params.id, 10);
-      if (isNaN(mapId)) {
-        res.status(400).json({ error: 'Invalid map ID' });
-        return;
-      }
-
-      const data = addSpawnSchema.parse(req.body);
-      const spawn = await mapService.addSpawn({ mapId, ...data });
-      res.status(201).json(spawn);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Validation error', details: error.errors });
-        return;
-      }
-      next(error);
-    }
-  }
-
   async addConnection(req: Request, res: Response, next: NextFunction) {
     try {
       const fromMapId = parseInt(req.params.id, 10);
@@ -221,14 +190,7 @@ export class MapController {
 
       const data = engageSchema.parse(req.body);
 
-      let combat;
-      if (data.groupeEnnemiId) {
-        // New system: engage enemy group
-        combat = await mapService.engageEnemyGroup(mapId, data.groupeEnnemiId, data.groupeId);
-      } else if (data.ennemiId) {
-        // Legacy system: engage single enemy (deprecated)
-        combat = await mapService.engageEnemy(mapId, data.ennemiId, data.groupeId);
-      }
+      const combat = await mapService.engageEnemyGroup(mapId, data.groupeEnnemiId, data.groupeId);
 
       res.status(201).json(combat);
     } catch (error) {
@@ -237,12 +199,12 @@ export class MapController {
         return;
       }
       if (error instanceof Error) {
-        const notFoundErrors = ['Map not found', 'Enemy not found on this map', 'Enemy group not found on this map', 'Group not found'];
+        const notFoundErrors = ['Map not found', 'Enemy group not found on this map', 'Group not found'];
         if (notFoundErrors.includes(error.message)) {
           res.status(404).json({ error: error.message });
           return;
         }
-        const badRequestErrors = ['Cannot manually engage enemies in AUTO mode', 'Enemy already defeated', 'Enemy group already defeated'];
+        const badRequestErrors = ['Cannot manually engage enemies in AUTO mode', 'Enemy group already defeated'];
         if (badRequestErrors.includes(error.message)) {
           res.status(400).json({ error: error.message });
           return;
@@ -260,15 +222,10 @@ export class MapController {
         return;
       }
 
-      // Process both legacy enemies and new enemy groups
-      const [respawnedEnemies, respawnedGroups] = await Promise.all([
-        mapService.processRespawns(mapId),
-        mapService.processGroupRespawns(mapId),
-      ]);
+      const respawnedGroups = await mapService.processGroupRespawns(mapId);
 
       res.json({
-        message: `Respawned ${respawnedEnemies.length} enemies and ${respawnedGroups.length} enemy groups`,
-        enemies: respawnedEnemies,
+        message: `Respawned ${respawnedGroups.length} enemy groups`,
         groupesEnnemis: respawnedGroups,
       });
     } catch (error) {
