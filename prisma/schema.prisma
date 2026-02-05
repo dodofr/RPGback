@@ -1,0 +1,505 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum StatType {
+  FORCE
+  INTELLIGENCE
+  DEXTERITE
+  AGILITE
+  VIE
+  CHANCE
+}
+
+enum ZoneType {
+  CASE
+  CROIX
+  LIGNE
+  CONE
+  CERCLE
+}
+
+enum SortType {
+  ARME
+  SORT
+}
+
+enum SlotType {
+  ARME
+  COIFFE
+  AMULETTE
+  BOUCLIER
+  HAUT
+  BAS
+  ANNEAU1
+  ANNEAU2
+  FAMILIER
+}
+
+enum EffetType {
+  BUFF
+  DEBUFF
+}
+
+enum CombatStatus {
+  EN_COURS
+  TERMINE
+  ABANDONNE
+}
+
+enum RegionType {
+  FORET
+  PLAINE
+  DESERT
+  MONTAGNE
+  MARAIS
+  CAVERNE
+  CITE
+}
+
+enum MapType {
+  WILDERNESS
+  VILLE
+  DONJON
+  BOSS
+  SAFE
+}
+
+enum CombatMode {
+  MANUEL
+  AUTO
+}
+
+// ==================== TABLES STATIQUES ====================
+
+model Race {
+  id                Int          @id @default(autoincrement())
+  nom               String       @unique
+  bonusForce        Int          @default(0)
+  bonusIntelligence Int          @default(0)
+  bonusDexterite    Int          @default(0)
+  bonusAgilite      Int          @default(0)
+  bonusVie          Int          @default(0)
+  bonusChance       Int          @default(0)
+  personnages       Personnage[]
+  sorts             Sort[]
+}
+
+model Zone {
+  id          Int           @id @default(autoincrement())
+  nom         String
+  type        ZoneType
+  taille      Int
+  sorts       Sort[]
+  equipements Equipement[]
+}
+
+model Sort {
+  id                  Int              @id @default(autoincrement())
+  nom                 String
+  type                SortType
+  statUtilisee        StatType
+  coutPA              Int
+  porteeMin           Int
+  porteeMax           Int
+  ligneDeVue          Boolean          @default(true)
+  degatsMin           Int
+  degatsMax           Int
+  degatsCritMin       Int
+  degatsCritMax       Int
+  chanceCritBase      Float            @default(0.01)
+  cooldown            Int              @default(0)
+  niveauApprentissage Int              @default(1)
+  zoneId              Int?
+  zone                Zone?            @relation(fields: [zoneId], references: [id])
+  raceId              Int?
+  race                Race?            @relation(fields: [raceId], references: [id])
+  personnages         PersonnageSort[]
+  cooldowns           SortCooldown[]
+}
+
+model Equipement {
+  id                Int       @id @default(autoincrement())
+  nom               String
+  slot              SlotType
+  niveauMinimum     Int       @default(1)
+  bonusForce        Int       @default(0)
+  bonusIntelligence Int       @default(0)
+  bonusDexterite    Int       @default(0)
+  bonusAgilite      Int       @default(0)
+  bonusVie          Int       @default(0)
+  bonusChance       Int       @default(0)
+  bonusPA           Int       @default(0)
+  bonusPM           Int       @default(0)
+  bonusPO           Int       @default(0)
+  // Champs d'attaque (pour armes uniquement)
+  degatsMin         Int?
+  degatsMax         Int?
+  degatsCritMin     Int?
+  degatsCritMax     Int?
+  chanceCritBase    Float?
+  coutPA            Int?
+  porteeMin         Int?
+  porteeMax         Int?
+  ligneDeVue        Boolean?
+  zoneId            Int?
+  zone              Zone?     @relation(fields: [zoneId], references: [id])
+  statUtilisee      StatType?
+  cooldown          Int?
+}
+
+model Effet {
+  id         Int       @id @default(autoincrement())
+  nom        String
+  type       EffetType
+  statCiblee StatType
+  valeur     Int
+  duree      Int
+}
+
+// ==================== MONDE & MAPS ====================
+
+model Region {
+  id          Int        @id @default(autoincrement())
+  nom         String     @unique
+  description String?
+  type        RegionType
+  niveauMin   Int        @default(1)
+  niveauMax   Int        @default(10)
+  maps        Map[]
+  donjons     Donjon[]
+}
+
+model Map {
+  id              Int             @id @default(autoincrement())
+  nom             String
+  regionId        Int
+  region          Region          @relation(fields: [regionId], references: [id])
+  type            MapType
+  combatMode      CombatMode
+  largeur         Int
+  hauteur         Int
+  tauxRencontre   Float           @default(0.2)
+  spawns          ZoneSpawn[]
+  ennemisActifs   MapEnnemi[]
+  groupesEnnemis  GroupeEnnemi[]
+  connectionsFrom MapConnection[] @relation("FromMap")
+  connectionsTo   MapConnection[] @relation("ToMap")
+  groupes         Groupe[]
+  donjonSalles    DonjonSalle[]
+  grilles         GrilleCombat[]
+}
+
+model MapConnection {
+  id        Int    @id @default(autoincrement())
+  fromMapId Int
+  fromMap   Map    @relation("FromMap", fields: [fromMapId], references: [id])
+  toMapId   Int
+  toMap     Map    @relation("ToMap", fields: [toMapId], references: [id])
+  positionX Int
+  positionY Int
+  nom       String
+}
+
+model MonstreTemplate {
+  id           Int         @id @default(autoincrement())
+  nom          String
+  force        Int
+  intelligence Int
+  dexterite    Int
+  agilite      Int
+  vie          Int
+  chance       Int
+  pvBase       Int
+  paBase       Int         @default(6)
+  pmBase       Int         @default(3)
+  niveauBase   Int         @default(1)
+  xpRecompense Int         @default(10)
+  spawns       ZoneSpawn[]
+  ennemisActifs MapEnnemi[]
+  groupesMembres GroupeEnnemiMembre[]
+  donjonsBoss  Donjon[]
+}
+
+model ZoneSpawn {
+  id          Int             @id @default(autoincrement())
+  mapId       Int
+  map         Map             @relation(fields: [mapId], references: [id])
+  monstreId   Int
+  monstre     MonstreTemplate @relation(fields: [monstreId], references: [id])
+  probabilite Float           @default(1.0)
+  quantiteMin Int             @default(1)
+  quantiteMax Int             @default(3)
+}
+
+model MapEnnemi {
+  id          Int             @id @default(autoincrement())
+  mapId       Int
+  map         Map             @relation(fields: [mapId], references: [id])
+  monstreId   Int
+  monstre     MonstreTemplate @relation(fields: [monstreId], references: [id])
+  positionX   Int
+  positionY   Int
+  quantite    Int             @default(1)
+  niveau      Int             @default(1)
+  respawnTime Int?
+  vaincu      Boolean         @default(false)
+  vainquuAt   DateTime?
+}
+
+model GroupeEnnemi {
+  id          Int                    @id @default(autoincrement())
+  mapId       Int
+  map         Map                    @relation(fields: [mapId], references: [id])
+  positionX   Int
+  positionY   Int
+  vaincu      Boolean                @default(false)
+  vainquuAt   DateTime?
+  respawnTime Int?
+  membres     GroupeEnnemiMembre[]
+
+  @@index([mapId, vaincu])
+}
+
+model GroupeEnnemiMembre {
+  id             Int             @id @default(autoincrement())
+  groupeEnnemiId Int
+  groupeEnnemi   GroupeEnnemi    @relation(fields: [groupeEnnemiId], references: [id], onDelete: Cascade)
+  monstreId      Int
+  monstre        MonstreTemplate @relation(fields: [monstreId], references: [id])
+  quantite       Int             @default(1)
+  niveau         Int             @default(1)
+
+  @@index([groupeEnnemiId])
+}
+
+// ==================== TABLES DYNAMIQUES ====================
+
+model Joueur {
+  id          Int          @id @default(autoincrement())
+  nom         String       @unique
+  createdAt   DateTime     @default(now())
+  personnages Personnage[]
+  groupes     Groupe[]
+}
+
+model Personnage {
+  id                     Int                @id @default(autoincrement())
+  nom                    String
+  niveau                 Int                @default(1)
+  experience             Int                @default(0)
+  pointsStatsDisponibles Int                @default(0)
+  force                  Int
+  intelligence           Int
+  dexterite              Int
+  agilite                Int
+  vie                    Int
+  chance                 Int
+  joueurId               Int
+  joueur                 Joueur             @relation(fields: [joueurId], references: [id])
+  raceId                 Int
+  race                   Race               @relation(fields: [raceId], references: [id])
+  groupes                GroupePersonnage[]
+  equipements            Json               @default("{}")
+  sortsAppris            PersonnageSort[]
+}
+
+model PersonnageSort {
+  id           Int        @id @default(autoincrement())
+  personnageId Int
+  personnage   Personnage @relation(fields: [personnageId], references: [id], onDelete: Cascade)
+  sortId       Int
+  sort         Sort       @relation(fields: [sortId], references: [id])
+
+  @@unique([personnageId, sortId])
+}
+
+model Groupe {
+  id          Int                @id @default(autoincrement())
+  nom         String
+  positionX   Int                @default(0)
+  positionY   Int                @default(0)
+  mapId       Int?
+  map         Map?               @relation(fields: [mapId], references: [id])
+  joueurId    Int
+  joueur      Joueur             @relation(fields: [joueurId], references: [id])
+  personnages GroupePersonnage[]
+  donjonRun   DonjonRun?
+}
+
+model GroupePersonnage {
+  groupeId     Int
+  personnageId Int
+  groupe       Groupe     @relation(fields: [groupeId], references: [id])
+  personnage   Personnage @relation(fields: [personnageId], references: [id])
+
+  @@id([groupeId, personnageId])
+}
+
+model Combat {
+  id            Int            @id @default(autoincrement())
+  status        CombatStatus   @default(EN_COURS)
+  tourActuel    Int            @default(1)
+  grilleLargeur Int
+  grilleHauteur Int
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  entites       CombatEntite[]
+  effetsActifs  EffetActif[]
+  cases         CombatCase[]
+  cooldowns     SortCooldown[]
+}
+
+model SortCooldown {
+  id            Int    @id @default(autoincrement())
+  combatId      Int
+  combat        Combat @relation(fields: [combatId], references: [id], onDelete: Cascade)
+  entiteId      Int
+  sortId        Int
+  sort          Sort   @relation(fields: [sortId], references: [id])
+  toursRestants Int
+
+  @@unique([combatId, entiteId, sortId])
+}
+
+model CombatCase {
+  id                Int     @id @default(autoincrement())
+  combatId          Int
+  combat            Combat  @relation(fields: [combatId], references: [id], onDelete: Cascade)
+  x                 Int
+  y                 Int
+  bloqueDeplacement Boolean @default(false)
+  bloqueLigneDeVue  Boolean @default(false)
+
+  @@unique([combatId, x, y])
+}
+
+model CombatEntite {
+  id           Int             @id @default(autoincrement())
+  combatId     Int
+  combat       Combat          @relation(fields: [combatId], references: [id])
+  personnageId Int?
+  nom          String
+  equipe       Int
+  positionX    Int
+  positionY    Int
+  initiative   Int
+  ordreJeu     Int
+  pvMax        Int
+  pvActuels    Int
+  paMax        Int
+  paActuels    Int
+  pmMax        Int
+  pmActuels    Int
+  force        Int
+  intelligence Int
+  dexterite    Int
+  agilite      Int
+  vie          Int
+  chance       Int
+  invocateurId       Int?
+  invocateur         CombatEntite?   @relation("Invocations", fields: [invocateurId], references: [id])
+  invocations        CombatEntite[]  @relation("Invocations")
+  armeData           Json?
+  armeCooldownRestant Int            @default(0)
+}
+
+model EffetActif {
+  id            Int    @id @default(autoincrement())
+  combatId      Int
+  combat        Combat @relation(fields: [combatId], references: [id])
+  entiteId      Int
+  effetId       Int
+  toursRestants Int
+}
+
+// ==================== GRILLES DE COMBAT ====================
+
+model GrilleCombat {
+  id        Int            @id @default(autoincrement())
+  nom       String
+  mapId     Int
+  map       Map            @relation(fields: [mapId], references: [id])
+  largeur   Int
+  hauteur   Int
+  cases     GrilleCase[]
+  spawns    GrilleSpawn[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model GrilleCase {
+  id                Int           @id @default(autoincrement())
+  grilleId          Int
+  grille            GrilleCombat  @relation(fields: [grilleId], references: [id], onDelete: Cascade)
+  x                 Int
+  y                 Int
+  bloqueDeplacement Boolean       @default(false)
+  bloqueLigneDeVue  Boolean       @default(false)
+
+  @@unique([grilleId, x, y])
+}
+
+model GrilleSpawn {
+  id        Int           @id @default(autoincrement())
+  grilleId  Int
+  grille    GrilleCombat  @relation(fields: [grilleId], references: [id], onDelete: Cascade)
+  x         Int
+  y         Int
+  equipe    Int           // 0 = joueurs, 1 = ennemis
+  ordre     Int           // 1-8
+
+  @@unique([grilleId, equipe, ordre])
+  @@unique([grilleId, x, y])
+}
+
+// ==================== DONJONS ====================
+
+model Donjon {
+  id          Int           @id @default(autoincrement())
+  nom         String
+  description String?
+  regionId    Int
+  region      Region        @relation(fields: [regionId], references: [id])
+  niveauMin   Int           @default(1)
+  niveauMax   Int           @default(5)
+  bossId      Int
+  boss        MonstreTemplate @relation(fields: [bossId], references: [id])
+  salles      DonjonSalle[]
+  runs        DonjonRun[]
+}
+
+model DonjonSalle {
+  id        Int     @id @default(autoincrement())
+  donjonId  Int
+  donjon    Donjon  @relation(fields: [donjonId], references: [id], onDelete: Cascade)
+  ordre     Int     // 1, 2, 3, 4
+  mapId     Int
+  map       Map     @relation(fields: [mapId], references: [id])
+
+  @@unique([donjonId, ordre])
+  @@index([donjonId])
+}
+
+model DonjonRun {
+  id            Int       @id @default(autoincrement())
+  donjonId      Int
+  donjon        Donjon    @relation(fields: [donjonId], references: [id])
+  groupeId      Int       @unique  // Un seul run actif par groupe
+  groupe        Groupe    @relation(fields: [groupeId], references: [id])
+  salleActuelle Int       @default(1)  // 1-4
+  difficulte    Int       // 4, 6 ou 8 ennemis par salle
+  termine       Boolean   @default(false)
+  victoire      Boolean?  // null = en cours, true = gagné, false = perdu
+  combatActuel  Int?      // ID du combat en cours (null si aucun)
+  createdAt     DateTime  @default(now())
+
+  @@index([groupeId])
+}

@@ -1,0 +1,33 @@
+import { Router } from 'express';
+import { characterController } from './character.controller';
+
+const router = Router();
+
+// POST /api/characters - Create a character
+router.post('/', (req, res, next) => characterController.create(req, res, next));
+
+// GET /api/characters - List all characters
+router.get('/', (req, res, next) => characterController.getAll(req, res, next));
+
+// GET /api/characters/:id - Get a character by ID
+router.get('/:id', (req, res, next) => characterController.getById(req, res, next));
+
+// PATCH /api/characters/:id - Update a character
+router.patch('/:id', (req, res, next) => characterController.update(req, res, next));
+
+// PUT /api/characters/:id/equipment - Equip an item
+router.put('/:id/equipment', (req, res, next) => characterController.equipItem(req, res, next));
+
+// GET /api/characters/:id/spells - Get character's available spells
+router.get('/:id/spells', (req, res, next) => characterController.getSpells(req, res, next));
+
+// POST /api/characters/:id/allocate-stats - Allocate stat points
+router.post('/:id/allocate-stats', (req, res, next) => characterController.allocateStats(req, res, next));
+
+// GET /api/characters/:id/progression - Get progression info (XP, level, etc.)
+router.get('/:id/progression', (req, res, next) => characterController.getProgression(req, res, next));
+
+// DELETE /api/characters/:id - Delete a character
+router.delete('/:id', (req, res, next) => characterController.delete(req, res, next));
+
+export default router;

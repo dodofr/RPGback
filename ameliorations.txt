@@ -1,0 +1,160 @@
+Ameliorations 
+
+Améliorations & évolutions – RPG tactique
+1️⃣ Effets (buffs / debuffs)
+
+Principe général :
+
+Tout ce qui modifie une stat, PA, PM, PO, dégâts ou état est un effet.
+
+Un effet peut être immédiat (appliqué instantanément) ou temporaire (durée X tours de jeu).
+
+Application :
+
+Les effets temporaires sont stockés avec :
+
+cible (personnage, ennemi, invocation)
+
+type d’effet (buff/debuff)
+
+stat modifiée (force, agilité, etc.)
+
+valeur de modification
+
+durée restante en tours
+
+À chaque tour, l’effet s’applique, puis sa durée diminue de 1.
+
+Quand la durée = 0 → effet supprimé.
+
+Objectif :
+
+Permettre d’appliquer dynamiquement les buffs/debuffs sur les stats et actions du combat.
+
+Supporter les effets cumulatifs ou exclusifs (ex : un buff de force ne se cumule pas avec le même buff).
+
+2️⃣ Respawn des ennemis
+
+Principe général :
+
+Chaque zone a un taux de respawn défini par type de monstre.
+
+Exemple :
+
+Zone : Forêt
+
+Monstre : Gobelin
+
+Respawn toutes les 5 minutes (ou après X tours si en combat)
+
+Implementation MVP :
+
+Stocker le timer de respawn pour chaque type de monstre dans la zone.
+
+Lorsqu’un monstre meurt, son horodatage de respawn est enregistré.
+
+Le backend peut vérifier à chaque interaction de la map si le monstre doit réapparaître.
+
+Objectif :
+
+Automatiser le respawn, pas besoin de le faire manuellement via l’API.
+
+Maintenir un monde dynamique et vivant.
+
+3️⃣ Inventaire & équipement
+
+Inventaire global :
+
+Chaque personnage possède un inventaire global contenant :
+
+
+Équipements non portés
+
+Ressources
+
+Or
+
+Limite de poids ou de slots à définir.
+
+Actions possibles : ajouter, retirer, détruire, vendre/échanger.
+
+Équipement équipé :
+
+Slots fixes : Arme, Coiffe, Haut, Bas, Bouclier, Amulette, 2 Anneaux, Familier
+
+Les objets équipés modifient dynamiquement les stats du personnage.
+
+Vérification du niveau minimum requis avant d’équiper.
+
+Équiper → retire de l’inventaire global et place dans le slot, Déséquiper → retourne dans l’inventaire global.
+
+Interaction inventaire ↔ équipement :
+
+Déplacer ou échanger entre inventaire global et slots.
+
+Appliquer dynamiquement les effets de l’équipement sur les stats.
+
+4️⃣ Drop et loot
+
+Principe général :
+
+Les ennemis peuvent dropper des objets ou ressources à la fin du combat.
+
+Chaque drop a :
+
+chance de drop (%)
+
+type (objet, ressource, or)
+
+poids ou volume
+
+
+Objectif :
+
+Générer dynamiquement les items ou ressources à loot.
+
+Ajouter de la stratégie : l’inventaire a une limite → le joueur doit gérer l’espace.
+
+Possibilité de détruire des items pour libérer de la place.
+
+Idées complémentaires :
+
+Certaines ressources pourraient être liées à des quêtes ou crafting futur.
+
+L’or peut être ajouté comme une ressource spéciale, cumulable sans poids
+
+A voir plus tard 
+-Actuellement : Effets (buffs/debuffs) stockés mais non appliqués aux stats. Objectif : voir comment appliquer
+-Actuellement:  Respawn des ennemis: timer stocké mais `POST /maps/:id/respawn` manuel. Objectif : voir pour un respawn automatique
+-Actuellement : je ne suis pas sur qu'un personnage ai un inventaire. Objectif : creer un inventaire 
+-Actuellement : pas de systheme de drop en fin de combats Objetif : plusieurs ici, ajouté un systheme de drop sur les monstres avec des % de chance de drop des items ou ressource. 
+Voir comment on peut gerer et généré les items dropable ou ressource. ajouter un poids a ces items et ressource. Rendre possible de détruire un items ou ressource pour que le personnage libere de la place.
+Ajouter de l'or.
+
+
+-differente IA. Fuyar, attaquante, soignante
+-Penser a un sytheme de quete et creer des pnj
+
+
+  changement des ennemies. 
+
+il faudra lier les ennemies a des zones. et qu'ils aient le niveau de la zones. Un ennemie liée a plusieurs zone et plusieurs zone peuvent avoir l'ennemie
+
+# Plan : Monstres par région + XP dynamique par niveau
+
+Objectif
+  - Lier les types de monstres aux régions (many-to-many) au lieu des maps individuelles
+  - Le spawn d'ennemis utilise les monstres de la région de la map actuelle
+  - Le niveau des monstres est aléatoire dans la tranche de la région (niveauMin-niveauMax)      
+  - L'XP gagnée scale avec le niveau du monstre
+  - Les donjons :4 maps dont la map final qui serait la map du boss.3 maps avec monstres normaux au niveauMax de la région,Map du boss avec un boss unique au niveauMax+5 à niveauMax+10 et des monstres de la région au niveau max
+  - le niveau des monstre doit influer sur les stats du monstres. meilleur lvl donc meilleur stats. Exemple un LOUP niveau 1 a de moins bonne stat qu'un LOUP niveau 10
+  - les monstres auraient seulement des sorts sur le meme modele que les sorts des personnages
+- Monstre liée a des attaques propre. Par exemple, un LOUP aurait morsure du loup et griffure du loup. Morsure qui taperait a 1po et griffure entre 1po et 2po avec morsure plus puissant que griffure et avec plus de PA également.
+certains monstre aurait une seul attaque, d'autres deux. on peut se laisse des possibilités mais je ne veux pas complexifié d'avantage pour l'instant
+Un monstre peut avoir plusieurs sorts et un sort peut étre sur plusieurs monstres. LOUP GEANT pourrait avoir également morsure de loup. La difference se ferait au niveau des stats des monstres, LOUP GEANT aurait de meilleur stats et donc taperait plus fort avec la meme attaque que le LOUP
+-voir la possibilité de modifier l'ia pour le choix des attaques. priorisation des attaques ? exemple :
+    si la premiere attaque ok alors attaque, retente la premiere ko, teste la deuxieme ko, avance, test la premiere ko, test la deuxieme ko, passe
+
+  
+
