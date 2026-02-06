@@ -72,7 +72,8 @@ backend/
 │   │       ├── grid.ts             # Chargement grille template, obstacles
 │   │       ├── aoe.ts              # Zones d'effet (5 types)
 │   │       ├── ai.ts               # IA des monstres
-│   │       └── invocation.ts       # Système d'invocations
+│   │       ├── invocation.ts       # Système d'invocations
+│   │       └── effects.ts          # Buffs/debuffs (application, calcul stats modifiées)
 │   ├── utils/
 │   │   ├── random.ts              # Fonctions aléatoires
 │   │   └── formulas.ts            # Formules de jeu (PV, stats, XP...)
@@ -139,6 +140,7 @@ Request → Routes → Controller → Service → Prisma → PostgreSQL
 | PATCH | `/:id/move` | Déplacer le groupe |
 | POST | `/:id/enter-map` | Entrer sur une map |
 | POST | `/:id/use-connection` | Utiliser une connexion |
+| POST | `/:id/move-direction` | Naviguer par direction (NORD/SUD/EST/OUEST) |
 | POST | `/:id/leave-map` | Quitter la map |
 | DELETE | `/:id` | Supprimer un groupe |
 
@@ -226,8 +228,8 @@ Request → Routes → Controller → Service → Prisma → PostgreSQL
 
 ### Tables Monde & Maps
 - `Region` - Zones du monde (Forêt, Plaine, Montagne...)
-- `Map` - Cartes dans une région (WILDERNESS, DONJON, VILLE, SAFE)
-- `MapConnection` - Liens/portails entre maps
+- `Map` - Cartes dans une région avec **voisins directionnels** (`nordMapId`, `sudMapId`, `estMapId`, `ouestMapId`)
+- `MapConnection` - Portails nommés avec position (x, y) pour navigation positionnelle (sans direction)
 - `MonstreTemplate` - Définitions de monstres réutilisables
 - `RegionMonstre` - Liaison many-to-many monstres ↔ régions avec probabilité
 - `MonstreSort` - Sorts spécifiques par monstre avec priorité (1 = plus haute)
@@ -242,11 +244,12 @@ Request → Routes → Controller → Service → Prisma → PostgreSQL
 ### Tables référentielles
 - `Race` - Races avec bonus de stats
 - `Sort` - Sorts/attaques avec niveau requis (degatsCritMin/degatsCritMax pour range de critique)
+- `SortEffet` - Liaison sort → effet (chanceDeclenchement, surCible/surLanceur)
 - `Zone` - Types de zones d'effet
 - `Equipement` - Items équipables avec bonus stats. Les armes ont aussi des données d'attaque (degats, portee, PA, zone, etc.)
 - `Effet` - Buffs/debuffs
 
-### Enums
+### Enums (Prisma)
 ```prisma
 enum StatType { FORCE, INTELLIGENCE, DEXTERITE, AGILITE, VIE, CHANCE }
 enum SortType { ARME, SORT }
@@ -257,6 +260,11 @@ enum CombatStatus { EN_COURS, TERMINE, ABANDONNE }
 enum RegionType { FORET, PLAINE, DESERT, MONTAGNE, MARAIS, CAVERNE, CITE }
 enum MapType { WILDERNESS, VILLE, DONJON, BOSS, SAFE }
 enum CombatMode { MANUEL, AUTO }
+```
+
+### Types TypeScript (src/types/index.ts)
+```typescript
+type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST'  // Pour navigation entre maps
 ```
 
 ## Système de progression
@@ -434,6 +442,74 @@ L'IA joue automatiquement le tour des monstres avec une boucle attaque/déplacem
 - Toutes ses invocations meurent automatiquement
 - Réordonnancement de l'initiative
 
+## Système de buffs/debuffs
+
+### Fonctionnement
+Les effets (buffs/debuffs) modifient les stats des entités en combat :
+
+1. **Liaison Sort → Effet** via la table `SortEffet`
+   - `chanceDeclenchement` : probabilité d'application (0.0-1.0)
+   - `surCible` : true = appliqué aux cibles, false = appliqué au lanceur
+
+2. **Application automatique** : après chaque sort, les effets liés sont appliqués selon leur probabilité
+
+3. **Modification des stats** : les dégâts sont calculés avec les stats modifiées par les effets actifs
+   ```typescript
+   statModifiée = statBase + somme(effets.valeur)
+   // Exemple: Force 15 + Rage(+20) = 35
+   ```
+
+4. **Durée** : décrémentée à chaque nouveau round, supprimé quand `toursRestants <= 0`
+
+### Types d'effets
+| Effet | Type | Stat | Valeur | Durée |
+|-------|------|------|--------|-------|
+| Rage | BUFF | FORCE | +20 | 3 tours |
+| Concentration | BUFF | INTELLIGENCE | +15 | 2 tours |
+| Agilité accrue | BUFF | AGILITE | +25 | 2 tours |
+| Affaiblissement | DEBUFF | FORCE | -15 | 2 tours |
+| Ralentissement | DEBUFF | AGILITE | -20 | 2 tours |
+
+### Sorts avec effets (seed)
+- **Cri de rage** (Humain) → Rage sur lanceur (100%)
+- **Méditation** (Elfe) → Concentration sur lanceur (100%)
+- **Malédiction** (Orc) → Affaiblissement sur cible (100%)
+- **Entrave** (Halfelin) → Ralentissement sur cible (100%)
+- **Pas lourd** (Nain) → Agilité accrue sur lanceur (100%)
+- **Coup brutal** (Orc) → 25% Affaiblissement sur cible
+- **Morsure venimeuse** (Araignée) → 30% Ralentissement
+- **Jet de toile** (Araignée) → 50% Ralentissement
+
+### Réponse API avec effets
+```json
+{
+  "success": true,
+  "message": "Spell hit 1 target(s). Applied effects: Ralentissement",
+  "damages": [...],
+  "appliedEffects": [
+    { "entiteId": 5, "effetId": 5, "effetNom": "Ralentissement", "duree": 2 }
+  ]
+}
+```
+
+### État du combat avec effets
+```json
+{
+  "effetsActifs": [
+    {
+      "id": 1,
+      "entiteId": 6,
+      "effetId": 1,
+      "toursRestants": 2,
+      "nom": "Rage",
+      "type": "BUFF",
+      "statCiblee": "FORCE",
+      "valeur": 20
+    }
+  ]
+}
+```
+
 ## Système de monde & maps
 
 ### Types de maps
@@ -496,22 +572,60 @@ GroupeEnnemiMembre {
    → Mode MANUEL: combat si groupe ennemi à (x, y)
    → Mode AUTO: combat aléatoire possible
 
-3. Utiliser une connexion
+3. Naviguer par direction (téléportation vers map adjacente)
+   POST /groups/:id/move-direction { direction: "NORD"|"SUD"|"EST"|"OUEST" }
+   → Lit directement map.nordMapId/sudMapId/estMapId/ouestMapId
+   → Téléporte vers la map destination (spawn auto des ennemis)
+   → Erreur si aucune sortie dans cette direction (champ null)
+
+4. Utiliser une connexion (par ID)
    POST /groups/:id/use-connection { connectionId }
    → Téléporte vers map destination
 
-4. Engagement manuel (optionnel, mode MANUEL)
+5. Engagement manuel (optionnel, mode MANUEL)
    POST /maps/:id/engage { groupeId, groupeEnnemiId }
    → Crée le combat avec tous les monstres du groupe
 
-5. Spawner manuellement des groupes (via régions)
+6. Spawner manuellement des groupes (via régions)
    POST /maps/:id/spawn-enemies
    → Crée 1-3 groupes de monstres issus de la région (RegionMonstre)
 
-6. Respawn des groupes vaincus
+7. Respawn des groupes vaincus
    POST /maps/:id/respawn
    → Réactive les groupes dont le respawnTime est écoulé
 ```
+
+### Navigation par direction
+Chaque map a 4 champs optionnels pour ses voisins : `nordMapId`, `sudMapId`, `estMapId`, `ouestMapId`.
+
+**Avantages de ce système :**
+- Lecture directe : `map.estMapId` au lieu de chercher dans MapConnection
+- Une seule source de vérité (pas de duplication bidirectionnelle)
+- Requête simplifiée dans le service
+
+```typescript
+// Exemple: depuis "Orée de la forêt" (map.estMapId = 2, map.ouestMapId = 5)
+POST /groups/1/move-direction { direction: "EST" }
+// → Téléporte vers "Sentier forestier" (map 2)
+
+POST /groups/1/move-direction { direction: "OUEST" }
+// → Téléporte vers "Route commerciale" (map 5)
+
+POST /groups/1/move-direction { direction: "NORD" }
+// → Erreur: "No exit in direction NORD" (map.nordMapId = null)
+```
+
+**Voisins configurés dans le seed :**
+| Map | Nord | Sud | Est | Ouest |
+|-----|------|-----|-----|-------|
+| Orée de la forêt | - | - | Sentier | Route |
+| Sentier forestier | Grotte | Clairière | - | Orée |
+| Grotte aux Gobelins | - | Sentier | - | - |
+| Clairière paisible | Sentier | - | - | - |
+| Route commerciale | - | - | Orée | Village |
+| Village de Piedmont | - | - | Route | - |
+
+**Note :** `MapConnection` reste disponible pour les portails nommés avec position (ex: "Entrée de la grotte" à x=20, y=3).
 
 ## Conventions de code
 
@@ -622,6 +736,21 @@ curl -X POST http://localhost:3000/api/combats/1/action \
 curl -X POST http://localhost:3000/api/combats/1/end-turn \
   -H "Content-Type: application/json" \
   -d '{"entiteId": 1}'
+
+# Navigation par direction
+curl -X POST http://localhost:3000/api/groups/1/move-direction \
+  -H "Content-Type: application/json" \
+  -d '{"direction": "EST"}'
+
+# Lancer un sort de buff (Cri de rage applique Rage sur soi)
+curl -X POST http://localhost:3000/api/combats/1/action \
+  -H "Content-Type: application/json" \
+  -d '{"entiteId": 1, "sortId": 31, "targetX": 0, "targetY": 2}'
+# Réponse: appliedEffects: [{ effetNom: "Rage", duree: 3 }]
+
+# Voir les effets actifs
+curl http://localhost:3000/api/combats/1
+# Réponse inclut: effetsActifs: [{ nom: "Rage", valeur: 20, toursRestants: 3 }]
 ```
 
 ## Données de seed
@@ -633,12 +762,12 @@ curl -X POST http://localhost:3000/api/combats/1/end-turn \
 - Humain (+5 partout) - 4 sorts (niveaux 1, 4, 7, 10)
 - Elfe (INT +15, DEX +10, AGI +10, VIE -5) - 4 sorts (niveaux 1, 4, 7, 10)
 
-### Sorts (30)
-- Humain: 4 sorts SORT (niveaux 1, 4, 7, 10) - polyvalent
-- Elfe: 4 sorts SORT (niveaux 1, 4, 7, 10) - magie
-- Nain: 4 sorts SORT (niveaux 1, 4, 7, 10) - physique
-- Orc: 4 sorts SORT (niveaux 1, 4, 7, 10) - brutal
-- Halfelin: 4 sorts SORT (niveaux 1, 4, 7, 10) - agile
+### Sorts (35)
+- Humain: 4 sorts SORT (niveaux 1, 4, 7, 10) - polyvalent + 1 sort buff (Cri de rage)
+- Elfe: 4 sorts SORT (niveaux 1, 4, 7, 10) - magie + 1 sort buff (Méditation)
+- Nain: 4 sorts SORT (niveaux 1, 4, 7, 10) - physique + 1 sort buff (Pas lourd)
+- Orc: 4 sorts SORT (niveaux 1, 4, 7, 10) - brutal + 1 sort debuff (Malédiction)
+- Halfelin: 4 sorts SORT (niveaux 1, 4, 7, 10) - agile + 1 sort debuff (Entrave)
 - 10 sorts spécifiques pour monstres (Morsure du loup, Griffure du loup, Coup de dague, Coup d'épée, Tir d'arbalète, Morsure venimeuse, Jet de toile, Coup d'os, Écrasement, Lancer de rocher)
 - Tous les sorts ont degatsCritMin/degatsCritMax (range de critique)
 
@@ -689,7 +818,13 @@ curl -X POST http://localhost:3000/api/combats/1/end-turn \
 - Troll : Écrasement (prio 1), Lancer de rocher (prio 2, cd:1)
 
 ### Connexions (10)
-- Réseau de portails entre les maps
+- Portails nommés avec positions (x, y) pour navigation positionnelle
+- Directions stockées directement sur les maps (`nordMapId`, `sudMapId`, etc.)
+
+### SortEffet (8)
+- Sorts de buff sur lanceur : Cri de rage → Rage, Méditation → Concentration, Pas lourd → Agilité
+- Sorts de debuff sur cible : Malédiction → Affaiblissement, Entrave → Ralentissement
+- Effets secondaires : Coup brutal (25% Affaiblissement), Morsure venimeuse (30% Ralentissement), Jet de toile (50% Ralentissement)
 
 ### Grilles de combat (8)
 - 1 par map pouvant héberger un combat (wilderness, donjon, boss)
@@ -711,7 +846,6 @@ curl -X POST http://localhost:3000/api/combats/1/end-turn \
 - Pas de données sensibles exposées
 
 ### Limitations actuelles
-- Effets (buffs/debuffs) stockés mais non appliqués aux stats en combat
 - Respawn des groupes ennemis : timer stocké (300s), `POST /maps/:id/respawn` manuel
 - Pas de système de mort permanente
 - Pas de boutique/économie
@@ -791,6 +925,11 @@ Les fonctionnalités suivantes ont été testées et validées:
 | IA améliorée (sorts par priorité, boucle attaque/déplacement) | OK |
 | XP scaling proportionnel au niveau du monstre | OK |
 | Donjons : rooms au niveauMax, boss surlevelé | OK |
+| Navigation par direction (champs map.nordMapId etc.) | OK |
+| Buffs/debuffs appliqués aux stats en combat | OK |
+| Effets secondaires de sorts (probabilité) | OK |
+| Self-buffs (effets sur lanceur sans cible) | OK |
+| Durée des effets décrémentée par round | OK |
 
 ## Variables d'environnement
 

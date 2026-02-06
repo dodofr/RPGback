@@ -1088,6 +1088,129 @@ async function main() {
 
   console.log('Created 5 effects');
 
+  // ==================== SORTS AVEC EFFETS (buff/debuff) ====================
+  // Sort 31: Cri de rage (Humain) - applique Rage sur lanceur
+  await prisma.sort.upsert({
+    where: { id: 31 },
+    update: {},
+    create: {
+      nom: 'Cri de rage',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 2,
+      porteeMin: 0,
+      porteeMax: 0,
+      ligneDeVue: false,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 3,
+      niveauApprentissage: 3,
+      raceId: humain.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Sort 32: Méditation (Elfe) - applique Concentration sur lanceur
+  await prisma.sort.upsert({
+    where: { id: 32 },
+    update: {},
+    create: {
+      nom: 'Méditation',
+      type: SortType.SORT,
+      statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 2,
+      porteeMin: 0,
+      porteeMax: 0,
+      ligneDeVue: false,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 3,
+      niveauApprentissage: 3,
+      raceId: elfe.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Sort 33: Malédiction (Orc) - applique Affaiblissement sur cible
+  await prisma.sort.upsert({
+    where: { id: 33 },
+    update: {},
+    create: {
+      nom: 'Malédiction',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 4,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 2,
+      niveauApprentissage: 3,
+      raceId: orc.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Sort 34: Entrave (Halfelin) - applique Ralentissement sur cible
+  await prisma.sort.upsert({
+    where: { id: 34 },
+    update: {},
+    create: {
+      nom: 'Entrave',
+      type: SortType.SORT,
+      statUtilisee: StatType.DEXTERITE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 5,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 2,
+      niveauApprentissage: 3,
+      raceId: halfelin.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Sort 35: Boost d'agilité (Nain) - applique Agilité accrue sur lanceur
+  await prisma.sort.upsert({
+    where: { id: 35 },
+    update: {},
+    create: {
+      nom: "Pas lourd",
+      type: SortType.SORT,
+      statUtilisee: StatType.VIE,
+      coutPA: 2,
+      porteeMin: 0,
+      porteeMax: 0,
+      ligneDeVue: false,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 3,
+      niveauApprentissage: 3,
+      raceId: nain.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  console.log('Created 5 buff/debuff spells');
+
   // ==================== REGIONS ====================
   const foretVertbois = await prisma.region.upsert({
     where: { nom: 'Forêt de Vertbois' },
@@ -1333,7 +1456,7 @@ async function main() {
 
   console.log('Created 6 maps');
 
-  // ==================== MAP CONNECTIONS ====================
+  // ==================== MAP CONNECTIONS (portails positionnés) ====================
   await prisma.mapConnection.upsert({ where: { id: 1 }, update: {}, create: { fromMapId: oreeForet.id, toMapId: sentierForestier.id, positionX: 19, positionY: 7, nom: 'Vers le sentier forestier' } });
   await prisma.mapConnection.upsert({ where: { id: 2 }, update: {}, create: { fromMapId: sentierForestier.id, toMapId: oreeForet.id, positionX: 0, positionY: 6, nom: "Retour à l'orée" } });
   await prisma.mapConnection.upsert({ where: { id: 3 }, update: {}, create: { fromMapId: sentierForestier.id, toMapId: grotteAuxGobelins.id, positionX: 20, positionY: 3, nom: 'Entrée de la grotte' } });
@@ -1346,6 +1469,17 @@ async function main() {
   await prisma.mapConnection.upsert({ where: { id: 10 }, update: {}, create: { fromMapId: oreeForet.id, toMapId: routeCommerciale.id, positionX: 0, positionY: 7, nom: 'Vers les Plaines du Sud' } });
 
   console.log('Created 10 map connections');
+
+  // ==================== MAP DIRECTIONAL NEIGHBORS ====================
+  // Set directional links on each map (simpler than connections for navigation)
+  await prisma.map.update({ where: { id: oreeForet.id }, data: { estMapId: sentierForestier.id, ouestMapId: routeCommerciale.id } });
+  await prisma.map.update({ where: { id: sentierForestier.id }, data: { ouestMapId: oreeForet.id, nordMapId: grotteAuxGobelins.id, sudMapId: clairiere.id } });
+  await prisma.map.update({ where: { id: grotteAuxGobelins.id }, data: { sudMapId: sentierForestier.id } });
+  await prisma.map.update({ where: { id: clairiere.id }, data: { nordMapId: sentierForestier.id } });
+  await prisma.map.update({ where: { id: routeCommerciale.id }, data: { ouestMapId: villageDepart.id, estMapId: oreeForet.id } });
+  await prisma.map.update({ where: { id: villageDepart.id }, data: { estMapId: routeCommerciale.id } });
+
+  console.log('Set directional neighbors for 6 maps');
 
   // ==================== REGION MONSTRES ====================
   await prisma.regionMonstre.upsert({ where: { id: 1 }, update: {}, create: { regionId: foretVertbois.id, monstreId: gobelin.id, probabilite: 0.30 } });
@@ -1904,6 +2038,105 @@ async function main() {
   });
 
   console.log('Created 8 combat grid templates');
+
+  // ==================== SORT EFFETS (liens sort → effet) ====================
+  // Cri de rage (sort 31) → Rage (effet 1) sur lanceur (100%)
+  await prisma.sortEffet.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      sortId: 31,
+      effetId: 1, // Rage (+20 FORCE)
+      chanceDeclenchement: 1.0,
+      surCible: false, // sur lanceur
+    },
+  });
+
+  // Méditation (sort 32) → Concentration (effet 2) sur lanceur (100%)
+  await prisma.sortEffet.upsert({
+    where: { id: 2 },
+    update: {},
+    create: {
+      sortId: 32,
+      effetId: 2, // Concentration (+15 INT)
+      chanceDeclenchement: 1.0,
+      surCible: false,
+    },
+  });
+
+  // Malédiction (sort 33) → Affaiblissement (effet 4) sur cible (100%)
+  await prisma.sortEffet.upsert({
+    where: { id: 3 },
+    update: {},
+    create: {
+      sortId: 33,
+      effetId: 4, // Affaiblissement (-15 FORCE)
+      chanceDeclenchement: 1.0,
+      surCible: true,
+    },
+  });
+
+  // Entrave (sort 34) → Ralentissement (effet 5) sur cible (100%)
+  await prisma.sortEffet.upsert({
+    where: { id: 4 },
+    update: {},
+    create: {
+      sortId: 34,
+      effetId: 5, // Ralentissement (-20 AGI)
+      chanceDeclenchement: 1.0,
+      surCible: true,
+    },
+  });
+
+  // Pas lourd (sort 35) → Agilité accrue (effet 3) sur lanceur (100%)
+  await prisma.sortEffet.upsert({
+    where: { id: 5 },
+    update: {},
+    create: {
+      sortId: 35,
+      effetId: 3, // Agilité accrue (+25 AGI)
+      chanceDeclenchement: 1.0,
+      surCible: false,
+    },
+  });
+
+  // Coup brutal (sort 13, Orc) → 25% chance d'Affaiblissement sur cible
+  await prisma.sortEffet.upsert({
+    where: { id: 6 },
+    update: {},
+    create: {
+      sortId: 13, // Coup brutal
+      effetId: 4, // Affaiblissement
+      chanceDeclenchement: 0.25,
+      surCible: true,
+    },
+  });
+
+  // Morsure venimeuse (sort 26, Araignée) → 30% chance de Ralentissement
+  await prisma.sortEffet.upsert({
+    where: { id: 7 },
+    update: {},
+    create: {
+      sortId: 26, // Morsure venimeuse
+      effetId: 5, // Ralentissement
+      chanceDeclenchement: 0.30,
+      surCible: true,
+    },
+  });
+
+  // Jet de toile (sort 27, Araignée) → 50% chance de Ralentissement
+  await prisma.sortEffet.upsert({
+    where: { id: 8 },
+    update: {},
+    create: {
+      sortId: 27, // Jet de toile
+      effetId: 5, // Ralentissement
+      chanceDeclenchement: 0.50,
+      surCible: true,
+    },
+  });
+
+  console.log('Created 8 spell-effect links');
 
   console.log('Seeding completed!');
 }

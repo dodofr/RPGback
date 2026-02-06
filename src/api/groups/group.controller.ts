@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { groupService } from '../../services/group.service';
+import { Direction } from '../../types';
 
 const createGroupSchema = z.object({
   nom: z.string().min(2).max(50),
@@ -24,6 +25,10 @@ const enterMapSchema = z.object({
 
 const useConnectionSchema = z.object({
   connectionId: z.number().int().positive(),
+});
+
+const moveDirectionSchema = z.object({
+  direction: z.enum(['NORD', 'SUD', 'EST', 'OUEST']),
 });
 
 export class GroupController {
@@ -229,6 +234,37 @@ export class GroupController {
       if (error instanceof Error && error.message === 'Group not found') {
         res.status(404).json({ error: error.message });
         return;
+      }
+      next(error);
+    }
+  }
+
+  async moveByDirection(req: Request, res: Response, next: NextFunction) {
+    try {
+      const groupId = parseInt(req.params.id, 10);
+      if (isNaN(groupId)) {
+        res.status(400).json({ error: 'Invalid group ID' });
+        return;
+      }
+
+      const data = moveDirectionSchema.parse(req.body);
+      const group = await groupService.moveByDirection(groupId, data.direction as Direction);
+      res.json(group);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      if (error instanceof Error) {
+        if (error.message === 'Group not found') {
+          res.status(404).json({ error: error.message });
+          return;
+        }
+        if (error.message === 'Group is not on any map' ||
+            error.message.startsWith('No exit in direction')) {
+          res.status(400).json({ error: error.message });
+          return;
+        }
       }
       next(error);
     }

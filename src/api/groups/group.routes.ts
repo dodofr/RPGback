@@ -32,6 +32,9 @@ router.post('/:id/use-connection', (req, res, next) => groupController.useConnec
 // POST /api/groups/:id/leave-map - Leave current map
 router.post('/:id/leave-map', (req, res, next) => groupController.leaveMap(req, res, next));
 
+// POST /api/groups/:id/move-direction - Move to another map by direction
+router.post('/:id/move-direction', (req, res, next) => groupController.moveByDirection(req, res, next));
+
 // DELETE /api/groups/:id - Delete a group
 router.delete('/:id', (req, res, next) => groupController.delete(req, res, next));
 

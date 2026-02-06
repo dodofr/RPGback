@@ -3,6 +3,9 @@ import { StatType, ZoneType, SortType, SlotType, EffetType, CombatStatus } from 
 // Re-export Prisma enums
 export { StatType, ZoneType, SortType, SlotType, EffetType, CombatStatus };
 
+// Direction enum (used for map navigation, not stored in DB)
+export type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST';
+
 // Combat types
 export interface Position {
   x: number;
@@ -40,6 +43,12 @@ export interface ActionResult {
     pvRestants: number;
   }[];
   entiteMorte?: number[];
+  appliedEffects?: {
+    entiteId: number;
+    effetId: number;
+    effetNom: string;
+    duree: number;
+  }[];
 }
 
 export interface CombatCaseState {
@@ -59,7 +68,7 @@ export interface CombatState {
     hauteur: number;
   };
   entites: CombatEntityState[];
-  effetsActifs: ActiveEffectState[];
+  effetsActifs: ActiveEffectStateWithDetails[];
   cases: CombatCaseState[];
 }
 
@@ -96,6 +105,13 @@ export interface ActiveEffectState {
   entiteId: number;
   effetId: number;
   toursRestants: number;
+}
+
+export interface ActiveEffectStateWithDetails extends ActiveEffectState {
+  nom: string;
+  type: EffetType;
+  statCiblee: StatType;
+  valeur: number;
 }
 
 // Weapon attack data (snapshot in CombatEntite)

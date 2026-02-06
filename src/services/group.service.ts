@@ -1,6 +1,6 @@
 import prisma from '../config/database';
 import { CombatMode, MapType } from '@prisma/client';
-import { CreateGroupRequest } from '../types';
+import { CreateGroupRequest, Direction } from '../types';
 import { mapService } from './map.service';
 
 export class GroupService {
@@ -357,6 +357,41 @@ export class GroupService {
         },
       },
     });
+  }
+
+  /**
+   * Move to another map by direction (NORD, SUD, EST, OUEST)
+   */
+  async moveByDirection(groupId: number, direction: Direction) {
+    const group = await prisma.groupe.findUnique({
+      where: { id: groupId },
+      include: { map: true },
+    });
+
+    if (!group) {
+      throw new Error('Group not found');
+    }
+
+    if (!group.map) {
+      throw new Error('Group is not on any map');
+    }
+
+    // Get destination map ID from the direction field
+    const directionFieldMap: Record<Direction, 'nordMapId' | 'sudMapId' | 'estMapId' | 'ouestMapId'> = {
+      NORD: 'nordMapId',
+      SUD: 'sudMapId',
+      EST: 'estMapId',
+      OUEST: 'ouestMapId',
+    };
+
+    const destinationMapId = group.map[directionFieldMap[direction]];
+
+    if (!destinationMapId) {
+      throw new Error(`No exit in direction ${direction}`);
+    }
+
+    // Enter the destination map
+    return this.enterMap(groupId, destinationMapId);
   }
 
   async delete(id: number) {

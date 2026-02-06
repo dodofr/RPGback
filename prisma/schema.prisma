@@ -124,6 +124,7 @@ model Sort {
   personnages         PersonnageSort[]
   cooldowns           SortCooldown[]
   monstres            MonstreSort[]
+  effets              SortEffet[]
 }
 
 model Equipement {
@@ -157,12 +158,26 @@ model Equipement {
 }
 
 model Effet {
-  id         Int       @id @default(autoincrement())
-  nom        String
-  type       EffetType
-  statCiblee StatType
-  valeur     Int
-  duree      Int
+  id           Int          @id @default(autoincrement())
+  nom          String
+  type         EffetType
+  statCiblee   StatType
+  valeur       Int
+  duree        Int
+  sorts        SortEffet[]
+  effetsActifs EffetActif[]
+}
+
+model SortEffet {
+  id                  Int     @id @default(autoincrement())
+  sortId              Int
+  sort                Sort    @relation(fields: [sortId], references: [id])
+  effetId             Int
+  effet               Effet   @relation(fields: [effetId], references: [id])
+  chanceDeclenchement Float   @default(1.0)
+  surCible            Boolean @default(true)
+
+  @@unique([sortId, effetId])
 }
 
 // ==================== MONDE & MAPS ====================
@@ -189,6 +204,20 @@ model Map {
   largeur         Int
   hauteur         Int
   tauxRencontre   Float           @default(0.2)
+  // Directional neighbors (self-referential)
+  nordMapId       Int?
+  nordMap         Map?            @relation("NordNeighbor", fields: [nordMapId], references: [id])
+  nordOf          Map[]           @relation("NordNeighbor")
+  sudMapId        Int?
+  sudMap          Map?            @relation("SudNeighbor", fields: [sudMapId], references: [id])
+  sudOf           Map[]           @relation("SudNeighbor")
+  estMapId        Int?
+  estMap          Map?            @relation("EstNeighbor", fields: [estMapId], references: [id])
+  estOf           Map[]           @relation("EstNeighbor")
+  ouestMapId      Int?
+  ouestMap        Map?            @relation("OuestNeighbor", fields: [ouestMapId], references: [id])
+  ouestOf         Map[]           @relation("OuestNeighbor")
+  // Relations
   groupesEnnemis  GroupeEnnemi[]
   connectionsFrom MapConnection[] @relation("FromMap")
   connectionsTo   MapConnection[] @relation("ToMap")
@@ -419,6 +448,7 @@ model EffetActif {
   combat        Combat @relation(fields: [combatId], references: [id])
   entiteId      Int
   effetId       Int
+  effet         Effet  @relation(fields: [effetId], references: [id])
   toursRestants Int
 }
 

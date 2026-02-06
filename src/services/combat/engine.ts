@@ -1,6 +1,6 @@
 import { CombatStatus, Sort, ZoneType } from '@prisma/client';
 import prisma from '../../config/database';
-import { CombatState, ActionResult, Position, CombatCaseState, ArmeData } from '../../types';
+import { CombatState, ActionResult, Position, CombatCaseState, ArmeData, ActiveEffectStateWithDetails } from '../../types';
 import { calculateAlternatingInitiativeOrder, getNextEntity } from './initiative';
 import { calculateDamage, applyDamage, isDead } from './damage';
 import { canMove, calculateMovementCost, hasLineOfSight } from './movement';
@@ -12,6 +12,7 @@ import { spellService } from '../spell.service';
 import { executeAITurn } from './ai';
 import { killInvocationsOf } from './invocation';
 import { donjonService } from '../donjon.service';
+import { getStatsWithEffects, applySpellEffects, getAllActiveEffectsWithDetails } from './effects';
 
 /**
  * Get the current state of a combat
@@ -21,7 +22,11 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
     where: { id: combatId },
     include: {
       entites: true,
-      effetsActifs: true,
+      effetsActifs: {
+        include: {
+          effet: true,
+        },
+      },
       cases: true,
     },
   });
@@ -76,6 +81,10 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       entiteId: e.entiteId,
       effetId: e.effetId,
       toursRestants: e.toursRestants,
+      nom: e.effet.nom,
+      type: e.effet.type,
+      statCiblee: e.effet.statCiblee,
+      valeur: e.effet.valeur,
     })),
     cases: combat.cases.map((c) => ({
       x: c.x,
@@ -298,9 +307,37 @@ export async function executeAction(
   // Filter out friendly entities (can't damage own team)
   const validTargets = targetsInArea.filter((t) => t.equipe !== attacker.equipe);
 
-  if (validTargets.length === 0) {
-    return { success: true, message: 'No enemies in target area', actionType, damages: [] };
+  // Apply spell effects (buffs/debuffs) - BEFORE checking for targets
+  // This allows self-buffs to work even when no enemies are targeted
+  const targetIds = validTargets.map(t => t.id);
+  let appliedEffects: { entiteId: number; effetId: number; effetNom: string; duree: number }[] = [];
+  if (!useArme && sortId) {
+    appliedEffects = await applySpellEffects(combatId, sortId, entiteId, targetIds);
   }
+
+  if (validTargets.length === 0) {
+    const effectsMessage = appliedEffects.length > 0
+      ? `Applied effects: ${appliedEffects.map(e => e.effetNom).join(', ')}`
+      : 'No enemies in target area';
+    return {
+      success: true,
+      message: effectsMessage,
+      actionType,
+      damages: [],
+      appliedEffects: appliedEffects.length > 0 ? appliedEffects : undefined,
+    };
+  }
+
+  // Get attacker stats with active effects applied
+  const attackerBaseStats = {
+    force: attacker.force,
+    intelligence: attacker.intelligence,
+    dexterite: attacker.dexterite,
+    agilite: attacker.agilite,
+    vie: attacker.vie,
+    chance: attacker.chance,
+  };
+  const attackerModifiedStats = await getStatsWithEffects(combatId, entiteId, attackerBaseStats);
 
   // Calculate and apply damage to each target
   const damages: ActionResult['damages'] = [];
@@ -316,14 +353,7 @@ export async function executeAction(
   };
 
   for (const target of validTargets) {
-    const damageResult = calculateDamage(spellData, {
-      force: attacker.force,
-      intelligence: attacker.intelligence,
-      dexterite: attacker.dexterite,
-      agilite: attacker.agilite,
-      vie: attacker.vie,
-      chance: attacker.chance,
-    });
+    const damageResult = calculateDamage(spellData, attackerModifiedStats);
 
     const newPV = applyDamage(target.pvActuels, damageResult.finalDamage);
 
@@ -351,12 +381,17 @@ export async function executeAction(
   // Check if combat should end
   await checkCombatEnd(combatId);
 
+  const effectsMessage = appliedEffects.length > 0
+    ? ` Applied effects: ${appliedEffects.map(e => e.effetNom).join(', ')}`
+    : '';
+
   return {
     success: true,
-    message: `${actionType === 'ARME' ? 'Weapon attack' : 'Spell'} hit ${damages.length} target(s)`,
+    message: `${actionType === 'ARME' ? 'Weapon attack' : 'Spell'} hit ${damages.length} target(s).${effectsMessage}`,
     actionType,
     damages,
     entiteMorte: entitesMortes.length > 0 ? entitesMortes : undefined,
+    appliedEffects: appliedEffects.length > 0 ? appliedEffects : undefined,
   };
 }
 
