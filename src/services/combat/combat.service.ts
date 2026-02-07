@@ -90,6 +90,7 @@ export class CombatService {
             zoneId: arme.zoneId,
             statUtilisee: arme.statUtilisee ?? 'FORCE',
             cooldown: arme.cooldown ?? 0,
+            tauxEchec: arme.tauxEchec ?? 0,
           };
         }
       }
@@ -150,6 +151,7 @@ export class CombatService {
           chance: monster.chance,
           monstreTemplateId: monster.monstreTemplateId ?? null,
           niveau: monster.niveau ?? null,
+          iaType: (monster.iaType as any) ?? null,
         },
       });
     }

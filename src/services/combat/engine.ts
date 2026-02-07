@@ -1,4 +1,4 @@
-import { CombatStatus, Sort, ZoneType } from '@prisma/client';
+import { CombatStatus, Sort, ZoneType, IAType } from '@prisma/client';
 import prisma from '../../config/database';
 import { CombatState, ActionResult, Position, CombatCaseState, ArmeData, ActiveEffectStateWithDetails } from '../../types';
 import { calculateAlternatingInitiativeOrder, getNextEntity } from './initiative';
@@ -10,9 +10,10 @@ import { progressionService } from '../progression.service';
 import { getCombatCases } from './grid';
 import { spellService } from '../spell.service';
 import { executeAITurn } from './ai';
-import { killInvocationsOf } from './invocation';
+import { createInvocation, killInvocationsOf } from './invocation';
 import { donjonService } from '../donjon.service';
-import { getStatsWithEffects, applySpellEffects, getAllActiveEffectsWithDetails } from './effects';
+import { getStatsWithEffects, applySpellEffects, getAllActiveEffectsWithDetails, dispelEffects } from './effects';
+import { checkProbability } from '../../utils/random';
 
 /**
  * Get the current state of a combat
@@ -35,16 +36,11 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
     return null;
   }
 
-  // Find current entity (lowest ordreJeu among alive entities that haven't acted this turn)
-  const aliveEntities = combat.entites.filter((e) => e.pvActuels > 0);
-  const sortedEntities = [...aliveEntities].sort((a, b) => a.ordreJeu - b.ordreJeu);
-  const currentEntity = sortedEntities[0];
-
   return {
     id: combat.id,
     status: combat.status,
     tourActuel: combat.tourActuel,
-    entiteActuelle: currentEntity?.id ?? 0,
+    entiteActuelle: combat.entiteActuelleId ?? 0,
     grille: {
       largeur: combat.grilleLargeur,
       hauteur: combat.grilleHauteur,
@@ -75,6 +71,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       armeCooldownRestant: e.armeCooldownRestant,
       monstreTemplateId: e.monstreTemplateId,
       niveau: e.niveau,
+      iaType: e.iaType,
     })),
     effetsActifs: combat.effetsActifs.map((e) => ({
       id: e.id,
@@ -118,6 +115,15 @@ export async function initializeInitiative(combatId: number): Promise<void> {
       },
     });
   }
+
+  // Set the first entity as the current turn entity
+  const firstEntity = initiativeResults.find((r) => r.ordreJeu === 1);
+  if (firstEntity) {
+    await prisma.combat.update({
+      where: { id: combatId },
+      data: { entiteActuelleId: firstEntity.id },
+    });
+  }
 }
 
 /**
@@ -148,6 +154,11 @@ export async function executeAction(
   const attacker = combat.entites.find((e) => e.id === entiteId);
   if (!attacker || attacker.pvActuels <= 0) {
     return { success: false, message: 'Attacker not found or dead' };
+  }
+
+  // Verify it's this entity's turn
+  if (combat.entiteActuelleId !== entiteId) {
+    return { success: false, message: "Not this entity's turn" };
   }
 
   // Build common attack data from either weapon or spell
@@ -215,6 +226,23 @@ export async function executeAction(
 
     if (!spell) {
       return { success: false, message: 'Spell not found' };
+    }
+
+    // Verify spell ownership
+    if (attacker.personnageId) {
+      const learned = await prisma.personnageSort.findFirst({
+        where: { personnageId: attacker.personnageId, sortId },
+      });
+      if (!learned) {
+        return { success: false, message: 'Spell not learned' };
+      }
+    } else if (attacker.monstreTemplateId) {
+      const monsterSpell = await prisma.monstreSort.findFirst({
+        where: { monstreId: attacker.monstreTemplateId, sortId },
+      });
+      if (!monsterSpell) {
+        return { success: false, message: 'Spell not available' };
+      }
     }
 
     // Check cooldown
@@ -293,6 +321,112 @@ export async function executeAction(
     await spellService.applyCooldown(combatId, entiteId, sortId);
   }
 
+  // Miss check (tauxEchec)
+  const tauxEchec = useArme
+    ? (attacker.armeData as unknown as ArmeData).tauxEchec ?? 0
+    : spell?.tauxEchec ?? 0;
+
+  if (tauxEchec > 0 && checkProbability(tauxEchec)) {
+    if (useArme) {
+      // Weapon miss: PA lost + end turn
+      await endTurn(combatId, entiteId);
+      return {
+        success: true,
+        message: 'Weapon attack missed! Turn lost.',
+        actionType,
+        damages: [],
+        missed: true,
+      };
+    }
+    // Spell miss: PA lost only
+    return {
+      success: true,
+      message: 'Spell missed!',
+      actionType,
+      damages: [],
+      missed: true,
+    };
+  }
+
+  // ===== INVOCATION BRANCH =====
+  if (spell?.estInvocation && spell.invocationTemplateId) {
+    const invocTemplate = await prisma.monstreTemplate.findUnique({
+      where: { id: spell.invocationTemplateId },
+    });
+
+    if (!invocTemplate) {
+      return { success: false, message: 'Invocation template not found' };
+    }
+
+    // Check position is valid (not occupied, not blocked)
+    const isOccupied = combat.entites.some(
+      (e) => e.positionX === targetX && e.positionY === targetY && e.pvActuels > 0
+    );
+    if (isOccupied) {
+      return { success: false, message: 'Target position is occupied' };
+    }
+
+    const isBlocked = combat.cases.some(
+      (c) => c.x === targetX && c.y === targetY && c.bloqueDeplacement
+    );
+    if (isBlocked) {
+      return { success: false, message: 'Target position is blocked' };
+    }
+
+    // Scale invocation stats: template base + 50% of caster's combat stats
+    const scaledForce = invocTemplate.force + Math.floor(attacker.force * 0.5);
+    const scaledIntelligence = invocTemplate.intelligence + Math.floor(attacker.intelligence * 0.5);
+    const scaledDexterite = invocTemplate.dexterite + Math.floor(attacker.dexterite * 0.5);
+    const scaledAgilite = invocTemplate.agilite + Math.floor(attacker.agilite * 0.5);
+    const scaledVie = invocTemplate.vie + Math.floor(attacker.vie * 0.5);
+    const scaledChance = invocTemplate.chance + Math.floor(attacker.chance * 0.5);
+
+    // PV: template base + (caster pvMax * pvScalingInvocation)
+    const pvScaling = invocTemplate.pvScalingInvocation ?? 0.10;
+    const scaledPvMax = invocTemplate.pvBase + Math.floor(attacker.pvMax * pvScaling);
+
+    // Create the invocation using the existing system
+    const invocationId = await createInvocation(
+      combatId,
+      entiteId,
+      {
+        nom: invocTemplate.nom,
+        force: scaledForce,
+        intelligence: scaledIntelligence,
+        dexterite: scaledDexterite,
+        agilite: scaledAgilite,
+        vie: scaledVie,
+        chance: scaledChance,
+        pvMax: scaledPvMax,
+        paMax: invocTemplate.paBase,
+        pmMax: invocTemplate.pmBase,
+      },
+      targetX,
+      targetY
+    );
+
+    // Update the created entity with monstreTemplateId and iaType for AI
+    await prisma.combatEntite.update({
+      where: { id: invocationId },
+      data: {
+        monstreTemplateId: invocTemplate.id,
+        iaType: invocTemplate.iaType,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Invoked ${invocTemplate.nom} at (${targetX}, ${targetY})`,
+      actionType,
+      damages: [],
+      invocation: {
+        entiteId: invocationId,
+        nom: invocTemplate.nom,
+        position: { x: targetX, y: targetY },
+      },
+    };
+  }
+
   // Get affected cells
   const affectedCells = getAffectedCells(
     { x: targetX, y: targetY },
@@ -301,24 +435,96 @@ export async function executeAction(
     { x: attacker.positionX, y: attacker.positionY }
   );
 
-  // Get entities in area
-  const targetsInArea = getEntitiesInArea(affectedCells, combat.entites);
-
-  // Filter out friendly entities (can't damage own team)
-  const validTargets = targetsInArea.filter((t) => t.equipe !== attacker.equipe);
+  // Get entities in area (free targeting: all entities, no team filter)
+  const validTargets = getEntitiesInArea(affectedCells, combat.entites);
 
   // Apply spell effects (buffs/debuffs) - BEFORE checking for targets
-  // This allows self-buffs to work even when no enemies are targeted
+  // This allows self-buffs to work even when no targets are in area
   const targetIds = validTargets.map(t => t.id);
   let appliedEffects: { entiteId: number; effetId: number; effetNom: string; duree: number }[] = [];
   if (!useArme && sortId) {
     appliedEffects = await applySpellEffects(combatId, sortId, entiteId, targetIds);
   }
 
+  // ===== DISPEL BRANCH =====
+  if (spell?.estDispel) {
+    const removedEffects: { entiteId: number; removedCount: number }[] = [];
+    for (const target of validTargets) {
+      const count = await dispelEffects(combatId, target.id);
+      if (count > 0) {
+        removedEffects.push({ entiteId: target.id, removedCount: count });
+      }
+    }
+    const totalRemoved = removedEffects.reduce((sum, r) => sum + r.removedCount, 0);
+    return {
+      success: true,
+      message: `Dispel removed ${totalRemoved} effect(s) from ${removedEffects.length} target(s).`,
+      actionType,
+      damages: [],
+      removedEffects: removedEffects.length > 0 ? removedEffects : undefined,
+      appliedEffects: appliedEffects.length > 0 ? appliedEffects : undefined,
+    };
+  }
+
+  // ===== HEAL BRANCH =====
+  if (spell?.estSoin) {
+    const attackerBaseStats = {
+      force: attacker.force,
+      intelligence: attacker.intelligence,
+      dexterite: attacker.dexterite,
+      agilite: attacker.agilite,
+      vie: attacker.vie,
+      chance: attacker.chance,
+    };
+    const attackerModifiedStats = await getStatsWithEffects(combatId, entiteId, attackerBaseStats);
+
+    const spellData = {
+      degatsMin: attackData.degatsMin,
+      degatsMax: attackData.degatsMax,
+      degatsCritMin: attackData.degatsCritMin,
+      degatsCritMax: attackData.degatsCritMax,
+      chanceCritBase: attackData.chanceCritBase,
+      statUtilisee: attackData.statUtilisee as any,
+    };
+
+    const heals: ActionResult['heals'] = [];
+    for (const target of validTargets) {
+      const healResult = calculateDamage(spellData, attackerModifiedStats);
+      const healAmount = healResult.finalDamage;
+      const newPV = Math.min(target.pvMax, target.pvActuels + healAmount);
+
+      await prisma.combatEntite.update({
+        where: { id: target.id },
+        data: { pvActuels: newPV },
+      });
+
+      heals.push({
+        entiteId: target.id,
+        healAmount: newPV - target.pvActuels,
+        isCritical: healResult.isCritical,
+        pvRestants: newPV,
+      });
+    }
+
+    const effectsMessage = appliedEffects.length > 0
+      ? ` Applied effects: ${appliedEffects.map(e => e.effetNom).join(', ')}`
+      : '';
+
+    return {
+      success: true,
+      message: `Heal hit ${heals.length} target(s).${effectsMessage}`,
+      actionType,
+      damages: [],
+      heals,
+      appliedEffects: appliedEffects.length > 0 ? appliedEffects : undefined,
+    };
+  }
+
+  // ===== DAMAGE BRANCH (default) =====
   if (validTargets.length === 0) {
     const effectsMessage = appliedEffects.length > 0
       ? `Applied effects: ${appliedEffects.map(e => e.effetNom).join(', ')}`
-      : 'No enemies in target area';
+      : 'No targets in area';
     return {
       success: true,
       message: effectsMessage,
@@ -375,6 +581,12 @@ export async function executeAction(
       // Kill invocations of the dead entity
       const killedInvocations = await killInvocationsOf(combatId, target.id);
       entitesMortes.push(...killedInvocations);
+
+      // Remove active effects on dead entities
+      const allDeadIds = [target.id, ...killedInvocations];
+      await prisma.effetActif.deleteMany({
+        where: { combatId, entiteId: { in: allDeadIds } },
+      });
     }
   }
 
@@ -416,6 +628,11 @@ export async function moveEntity(
   const entity = combat.entites.find((e) => e.id === entiteId);
   if (!entity || entity.pvActuels <= 0) {
     return { success: false, message: 'Entity not found or dead' };
+  }
+
+  // Verify it's this entity's turn
+  if (combat.entiteActuelleId !== entiteId) {
+    return { success: false, message: "Not this entity's turn" };
   }
 
   // Convert cases to CombatCaseState format
@@ -473,6 +690,11 @@ export async function endTurn(combatId: number, entiteId: number): Promise<Actio
     return { success: false, message: 'Entity not found' };
   }
 
+  // Verify it's this entity's turn
+  if (combat.entiteActuelleId !== entiteId) {
+    return { success: false, message: "Not this entity's turn" };
+  }
+
   // Get next entity in turn order
   const aliveEntities = combat.entites.filter((e) => e.pvActuels > 0);
   const nextEntity = getNextEntity(aliveEntities, entity.ordreJeu);
@@ -496,31 +718,31 @@ export async function endTurn(combatId: number, entiteId: number): Promise<Actio
       });
     }
 
-    // Increment turn counter
+    // Increment turn counter and update current entity
     await prisma.combat.update({
       where: { id: combatId },
-      data: { tourActuel: combat.tourActuel + 1 },
+      data: { tourActuel: combat.tourActuel + 1, entiteActuelleId: nextEntity.id },
     });
-
-    // Decrement active effects
-    await decrementEffects(combatId);
-
-    // Decrement spell cooldowns
-    await spellService.decrementCooldowns(combatId);
-
-    // Decrement weapon cooldowns for all alive entities
-    for (const e of aliveEntities) {
-      if (e.armeCooldownRestant > 0) {
-        await prisma.combatEntite.update({
-          where: { id: e.id },
-          data: { armeCooldownRestant: Math.max(0, e.armeCooldownRestant - 1) },
-        });
-      }
-    }
+  } else {
+    // Update current entity for the next turn
+    await prisma.combat.update({
+      where: { id: combatId },
+      data: { entiteActuelleId: nextEntity.id },
+    });
   }
 
-  // Check if next entity is an enemy (team 1) and auto-play their turn
-  if (nextEntity.equipe === 1) {
+  // Decrement effects, cooldowns and weapon cooldown for the next entity at the start of their turn
+  await decrementEffects(combatId, nextEntity.id);
+  await spellService.decrementCooldownsForEntity(combatId, nextEntity.id);
+  if (nextEntity.armeCooldownRestant > 0) {
+    await prisma.combatEntite.update({
+      where: { id: nextEntity.id },
+      data: { armeCooldownRestant: Math.max(0, nextEntity.armeCooldownRestant - 1) },
+    });
+  }
+
+  // Auto-play AI turn for enemies (team 1) and player invocations (have invocateurId)
+  if (nextEntity.equipe === 1 || nextEntity.invocateurId !== null) {
     // Execute AI turn asynchronously (don't block the response)
     setImmediate(async () => {
       try {
@@ -562,6 +784,14 @@ export async function fleeCombat(combatId: number): Promise<ActionResult> {
     data: { status: CombatStatus.ABANDONNE },
   });
 
+  // Clean up combat effects, cooldowns and surviving invocations
+  await prisma.effetActif.deleteMany({ where: { combatId } });
+  await prisma.sortCooldown.deleteMany({ where: { combatId } });
+  await prisma.combatEntite.updateMany({
+    where: { combatId, invocateurId: { not: null }, pvActuels: { gt: 0 } },
+    data: { pvActuels: 0 },
+  });
+
   return { success: true, message: 'Fled from combat' };
 }
 
@@ -581,6 +811,16 @@ async function checkCombatEnd(combatId: number): Promise<void> {
     await prisma.combat.update({
       where: { id: combatId },
       data: { status: CombatStatus.TERMINE },
+    });
+
+    // Clean up combat effects and cooldowns
+    await prisma.effetActif.deleteMany({ where: { combatId } });
+    await prisma.sortCooldown.deleteMany({ where: { combatId } });
+
+    // Kill surviving invocations (they don't persist beyond combat)
+    await prisma.combatEntite.updateMany({
+      where: { combatId, invocateurId: { not: null }, pvActuels: { gt: 0 } },
+      data: { pvActuels: 0 },
     });
 
     // Check if this is a dungeon combat
@@ -622,18 +862,18 @@ async function checkCombatEnd(combatId: number): Promise<void> {
 /**
  * Decrement effect durations and remove expired effects
  */
-async function decrementEffects(combatId: number): Promise<void> {
-  // Decrement all active effects
+async function decrementEffects(combatId: number, entiteId?: number): Promise<void> {
+  const where: { combatId: number; entiteId?: number } = { combatId };
+  if (entiteId !== undefined) where.entiteId = entiteId;
+
+  // Decrement active effects
   await prisma.effetActif.updateMany({
-    where: { combatId },
+    where,
     data: { toursRestants: { decrement: 1 } },
   });
 
   // Remove expired effects
   await prisma.effetActif.deleteMany({
-    where: {
-      combatId,
-      toursRestants: { lte: 0 },
-    },
+    where: { ...where, toursRestants: { lte: 0 } },
   });
 }

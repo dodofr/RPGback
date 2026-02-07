@@ -181,6 +181,17 @@ export async function applySpellEffects(
 }
 
 /**
+ * Remove all active effects from an entity (dispel)
+ * Returns the number of effects removed
+ */
+export async function dispelEffects(combatId: number, entiteId: number): Promise<number> {
+  const result = await prisma.effetActif.deleteMany({
+    where: { combatId, entiteId },
+  });
+  return result.count;
+}
+
+/**
  * Get all active effects in a combat with full details
  */
 export async function getAllActiveEffectsWithDetails(

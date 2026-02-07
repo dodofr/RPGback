@@ -220,17 +220,17 @@ Request → Routes → Controller → Service → Prisma → PostgreSQL
 - `PersonnageSort` - Sorts appris par personnage
 - `Groupe` - Équipes de personnages (max 6), position sur map
 - `GroupePersonnage` - Relation many-to-many groupe/personnage
-- `Combat` - Instances de combat
-- `CombatEntite` - Entités dans un combat (snapshot des stats + armeData JSON pour l'arme équipée + monstreTemplateId/niveau pour XP scaling et IA)
+- `Combat` - Instances de combat (`entiteActuelleId` tracke le tour actif)
+- `CombatEntite` - Entités dans un combat (snapshot des stats + armeData JSON pour l'arme équipée + monstreTemplateId/niveau pour XP scaling et IA + iaType pour stratégie IA + invocateurId pour invocations)
 - `CombatCase` - Obstacles sur la grille
-- `EffetActif` - Buffs/debuffs actifs
-- `SortCooldown` - Cooldowns des sorts en combat
+- `EffetActif` - Buffs/debuffs actifs (`onDelete: Cascade` via Combat)
+- `SortCooldown` - Cooldowns des sorts en combat (`onDelete: Cascade` via Combat)
 
 ### Tables Monde & Maps
 - `Region` - Zones du monde (Forêt, Plaine, Montagne...)
 - `Map` - Cartes dans une région avec **voisins directionnels** (`nordMapId`, `sudMapId`, `estMapId`, `ouestMapId`)
 - `MapConnection` - Portails nommés avec position (x, y) pour navigation positionnelle (sans direction)
-- `MonstreTemplate` - Définitions de monstres réutilisables
+- `MonstreTemplate` - Définitions de monstres réutilisables (+ `iaType` pour stratégie IA, `pvScalingInvocation` pour scaling PV invocations)
 - `RegionMonstre` - Liaison many-to-many monstres ↔ régions avec probabilité
 - `MonstreSort` - Sorts spécifiques par monstre avec priorité (1 = plus haute)
 - `GroupeEnnemi` - Groupes d'ennemis sur une map (position unique, 1-3 groupes par map)
@@ -243,10 +243,10 @@ Request → Routes → Controller → Service → Prisma → PostgreSQL
 
 ### Tables référentielles
 - `Race` - Races avec bonus de stats
-- `Sort` - Sorts/attaques avec niveau requis (degatsCritMin/degatsCritMax pour range de critique)
+- `Sort` - Sorts/attaques avec niveau requis (degatsCritMin/degatsCritMax pour range de critique, `estSoin`/`estDispel`/`estInvocation` pour type spécial, `tauxEchec` pour chance de rater, `invocationTemplateId` pour sorts d'invocation)
 - `SortEffet` - Liaison sort → effet (chanceDeclenchement, surCible/surLanceur)
 - `Zone` - Types de zones d'effet
-- `Equipement` - Items équipables avec bonus stats. Les armes ont aussi des données d'attaque (degats, portee, PA, zone, etc.)
+- `Equipement` - Items équipables avec bonus stats. Les armes ont aussi des données d'attaque (degats, portee, PA, zone, etc.) + `tauxEchec` optionnel
 - `Effet` - Buffs/debuffs
 
 ### Enums (Prisma)
@@ -260,6 +260,7 @@ enum CombatStatus { EN_COURS, TERMINE, ABANDONNE }
 enum RegionType { FORET, PLAINE, DESERT, MONTAGNE, MARAIS, CAVERNE, CITE }
 enum MapType { WILDERNESS, VILLE, DONJON, BOSS, SAFE }
 enum CombatMode { MANUEL, AUTO }
+enum IAType { EQUILIBRE, AGGRESSIF, SOUTIEN, DISTANCE }
 ```
 
 ### Types TypeScript (src/types/index.ts)
@@ -341,16 +342,58 @@ PUT /characters/:id/equipment
 5. Snapshot de l'arme équipée (armeData) pour chaque joueur
 6. Calcul initiative: `agilité + random(1-20)`
 7. **Alternance d'initiative par bloc équilibré** (voir ci-dessous)
-8. Chaque tour: déplacements (PM) + actions (PA) via sorts OU attaque d'arme
-9. IA joue automatiquement pour les monstres
-10. Fin de round: restauration PA/PM, décrémentation effets, cooldowns sorts et cooldown arme
-11. Fin combat: une équipe éliminée ou fuite
-12. Distribution XP si victoire
+8. `entiteActuelleId` est initialisé sur l'entité avec `ordreJeu === 1` et mis à jour à chaque `endTurn()`
+9. Chaque tour: déplacements (PM) + actions (PA) via sorts OU attaque d'arme
+10. **Vérification de tour** : `executeAction()`, `moveEntity()` et `endTurn()` refusent si `entiteId !== entiteActuelleId`
+11. **Vérification de sort** : `executeAction()` vérifie que le sort est appris (PersonnageSort pour joueurs, MonstreSort pour monstres)
+12. IA joue automatiquement pour les monstres ET les invocations des joueurs (entités avec `invocateurId`)
+13. Fin de round: restauration PA/PM
+14. Début de tour de chaque entité: décrémentation de ses effets, cooldowns sorts et cooldown arme
+15. Fin combat: une équipe éliminée ou fuite → nettoyage effets/cooldowns + suppression invocations survivantes
+16. Distribution XP si victoire
 
 ### Actions de combat
 - **Sort** : `POST /combats/:id/action { entiteId, sortId, targetX, targetY }` — utilise un sort appris
 - **Arme** : `POST /combats/:id/action { entiteId, useArme: true, targetX, targetY }` — attaque avec l'arme équipée (nécessite une arme avec données d'attaque)
 - Sans arme équipée, `useArme: true` retourne une erreur
+
+### Vérification de tour (entiteActuelleId)
+- Le champ `Combat.entiteActuelleId` persiste l'ID de l'entité dont c'est le tour
+- Initialisé dans `initializeInitiative()` sur l'entité avec `ordreJeu === 1`
+- Mis à jour dans `endTurn()` vers l'entité suivante
+- `executeAction()`, `moveEntity()` et `endTurn()` vérifient `combat.entiteActuelleId !== entiteId` → erreur `"Not this entity's turn"`
+- `getCombatState()` retourne `entiteActuelle` directement depuis ce champ (plus de calcul dynamique)
+
+### Vérification de sort (spell ownership)
+- `executeAction()` vérifie que l'entité connaît le sort avant de l'exécuter
+- **Joueur** (`personnageId` non null) : vérifie `PersonnageSort` → erreur `"Spell not learned"`
+- **Monstre** (`monstreTemplateId` non null) : vérifie `MonstreSort` → erreur `"Spell not available"`
+
+### Ciblage libre
+- Les sorts et armes touchent **toutes les entités** dans la zone d'effet, alliés ET ennemis
+- Aucun filtre par équipe : un sort d'attaque peut viser un allié, un soin peut viser un ennemi
+- Le joueur doit choisir ses cibles avec précaution (AoE dangereuse pour l'équipe)
+
+### Pourcentage d'échec (tauxEchec)
+- Chaque sort et arme peut avoir un `tauxEchec` (0.0-1.0)
+- Vérifié **après** déduction des PA et application du cooldown
+- **Sort raté** : les PA sont perdus, retour `missed: true`
+- **Arme ratée** : les PA sont perdus ET le tour est terminé automatiquement (`endTurn()`)
+- Sorts existants avec tauxEchec : Explosion arcanique (15%), Tempête arcanique (20%), Rage berserk (10%), Frappe dévastatrice (15%), Attaque éclair (10%)
+- Armes avec tauxEchec : Arc long (10%), Dagues jumelles (5%)
+
+### Sorts de soin (estSoin)
+- Les sorts avec `estSoin: true` rendent des PV au lieu de faire des dégâts
+- Utilisent `calculateDamage()` pour calculer le montant de soin (même formule que les dégâts)
+- Les PV sont plafonnés à `pvMax` (pas de sur-soin)
+- Réponse API contient `heals[]` au lieu de `damages[]`
+- Sorts de soin disponibles : Soin (Humain, niv 3), Soin de lumière (Elfe, niv 1), Second souffle (Nain, niv 4)
+
+### Sorts de désenvoutement (estDispel)
+- Les sorts avec `estDispel: true` retirent **tous les effets actifs** (buffs ET debuffs) de la cible
+- 0 dégâts, pas de calcul de damage
+- Réponse API contient `removedEffects[]` avec le nombre d'effets retirés par cible
+- Chaque race a un sort de dispel (niveau 1, 3 PA, portée 1-5, cooldown 2)
 
 ### Système d'initiative alternée
 
@@ -388,6 +431,13 @@ chanceCrit = chanceCritBase + (chance / 100)
 dégâts normaux = floor(random(degatsMin, degatsMax) × multiplicateur)
 dégâts critiques = floor(random(degatsCritMin, degatsCritMax) × multiplicateur)
 
+// Soin (même formule que dégâts, appliqué en +PV)
+soin = floor(random(degatsMin, degatsMax) × multiplicateur)
+pvFinal = min(pvActuels + soin, pvMax)
+
+// Échec
+missed = random() < tauxEchec  // PA perdus, arme = tour perdu
+
 // Distance (Manhattan, pas de diagonale)
 distance = |x2 - x1| + |y2 - y1|
 
@@ -406,41 +456,119 @@ statFinale = floor(statBase × scaleFactor)
 | CONE | Cône depuis lanceur vers direction |
 
 ### Ligne de vue (LOS)
-- Vérifiée avant chaque sort
-- Bloquée par obstacles avec `bloqueLOS: true`
-- Bloquée par entités sur le chemin
+- Vérifiée avant chaque sort/arme ayant `ligneDeVue: true`
+- Algorithme **Bresenham supercover** : trace une vraie ligne droite de cellule en cellule
+- **LDV stricte** sur les diagonales : quand la ligne passe par un coin entre 4 cellules, les 2 cellules adjacentes sont vérifiées (une seule entité/obstacle suffit à bloquer)
+- Bloquée par obstacles avec `bloqueLigneDeVue: true`
+- Bloquée par entités vivantes (`pvActuels > 0`) sur le chemin
+- Position du lanceur et de la cible exclues des vérifications
+- Implémentation dans `movement.ts` : `getLineOfSightCells()` + `hasLineOfSight()`
 
 ### Cooldowns
 - Certains sorts ont un cooldown (tours)
-- Décrémenté à chaque nouveau round
+- Décrémenté au début du tour de chaque entité (per-entity, pas global par round)
 - Vérifié avant utilisation du sort
+- Nettoyés automatiquement en fin de combat (victoire, défaite ou fuite)
 
 ## IA des monstres
 
-### Comportement automatique
-L'IA joue automatiquement le tour des monstres avec une boucle attaque/déplacement/attaque:
-1. Récupère les sorts du monstre via `MonstreSort` (ORDER BY priorité ASC)
-2. Cherche l'ennemi le plus proche
-3. Boucle (max 10 itérations) :
-   a. Teste chaque sort par priorité → si utilisable → lance le sort → RESTART boucle
-   b. Si aucun sort utilisable ET PM restants → avance vers la cible → RESTART boucle
-   c. Si rien possible → passer le tour
+### Types d'IA (IAType)
+Chaque monstre/invocation a un `iaType` qui détermine sa stratégie de combat :
+
+| IAType | Comportement | Utilisé par |
+|--------|-------------|-------------|
+| EQUILIBRE | Équilibré : heal → dispel → attack → move (défaut) | Bandit, Golem Arcanique |
+| AGGRESSIF | Fonce au combat, jamais de heal/dispel | Gobelin, Loup, Squelette, Troll, Gardien de Pierre, Loup Spectral |
+| SOUTIEN | Soigne en priorité (seuil 90%), attaque en dernier recours | Esprit de Lumière |
+| DISTANCE | Recule si ennemi adjacent, préfère sorts longue portée | Araignée Géante, Ombre Furtive |
+
+### Dispatch par iaType
+L'IA dispatche automatiquement vers la stratégie appropriée selon `entity.iaType` :
+- `executeEquilibreTurn()` — heal allié blessé (<70%) → dispel debuff → attaque → déplacement
+- `executeAggressifTurn()` — attaque uniquement, dépense tous les PM pour avancer, jamais heal/dispel
+- `executeSoutienTurn()` — heal allié blessé (<90%), avance vers alliés blessés, attaque en dernier recours
+- `executeDistanceTurn()` — recule si ennemi adjacent (`moveAwayFromTarget`), préfère sorts longue portée (tri par `porteeMax` DESC)
+
+### Auto-play
+L'IA joue automatiquement pour :
+- **Monstres** (equipe === 1)
+- **Invocations des joueurs** (entités avec `invocateurId !== null`, même equipe 0)
 
 ### Sélection de sort
 - Sorts récupérés via `MonstreSort` triés par `priorite` (1 = plus haute)
 - Utilise `entity.monstreTemplateId` pour le lookup
 - Fallback : si `monstreTemplateId` est null, utilise les sorts raceId=null
 
+### Helpers IA
+- `findMostInjuredAlly(allies, threshold)` : retourne l'allié le plus blessé sous le seuil (ratio PV/PVMax)
+- `findAllyWithDebuffs(allies, effetsActifs)` : retourne le premier allié ayant un debuff actif
+- `findClosestEnemy(entity, enemies)` : retourne l'ennemi le plus proche (Manhattan)
+- `moveAwayFromTarget(entity, target)` : recule l'entité à l'opposé de la cible (inverse de `moveTowardsTarget`)
+
 ## Système d'invocations
 
-### Création d'invocation
-- Un sort peut invoquer une entité
-- L'invocation joue juste après son invocateur
-- L'invocation appartient à la même équipe
+### Sorts d'invocation
+- Un sort avec `estInvocation: true` et `invocationTemplateId` invoque une entité
+- Le sort utilise des PA mais ne fait pas de dégâts (degats à 0)
+- La position cible doit être libre (pas occupée, pas bloquée)
+- Pas de limite de nombre d'invocations : seul le cooldown du sort empêche le spam
+- Chaque race a un sort d'invocation appris au niveau 5
+
+### Templates d'invocation (5)
+| Template | IAType | Race | Stats base | pvBase | pvScaling |
+|----------|--------|------|-----------|--------|-----------|
+| Gardien de Pierre | AGGRESSIF | Nain | FOR:15, VIE:20 | 60 | 25% |
+| Esprit de Lumière | SOUTIEN | Elfe | INT:18, AGI:12 | 30 | 10% |
+| Loup Spectral | AGGRESSIF | Orc | FOR:14, AGI:20 | 35 | 10% |
+| Ombre Furtive | DISTANCE | Halfelin | DEX:16, AGI:18 | 25 | 10% |
+| Golem Arcanique | EQUILIBRE | Humain | FOR:12, INT:12 | 50 | 25% |
+
+### Scaling des stats d'invocation
+Les invocations héritent d'une partie des stats du lanceur :
+```typescript
+// Stats (FOR, INT, DEX, AGI, VIE, CHANCE) : base template + 50% du lanceur
+statInvocation = template.stat + floor(caster.stat × 0.5)
+
+// PV : base template + % des PV max du lanceur (pvScalingInvocation par template)
+pvMax = template.pvBase + floor(caster.pvMax × pvScalingInvocation)
+
+// PA/PM : fixes depuis le template, pas de scaling
+```
+- `pvScalingInvocation` est stocké sur `MonstreTemplate` (Float nullable, défaut 0.10)
+- Les tanks (Gardien, Golem) ont 25% → plus résistants
+- Les fragiles (Esprit, Loup, Ombre) ont 10% → meurent vite
+
+### Comportement des invocations
+- L'invocation joue juste après son invocateur (initiative alternée)
+- L'invocation appartient à la même équipe que l'invocateur
+- L'invocation a son propre `iaType` (depuis le MonstreTemplate) et joue via l'IA automatiquement
+- Les invocations des joueurs (equipe 0) jouent aussi via l'IA (condition: `invocateurId !== null`)
+- Chaque invocation a ses propres sorts via `MonstreSort`
 
 ### Mort de l'invocateur
 - Toutes ses invocations meurent automatiquement
+- Les effets actifs sur les morts (invocateur + invocations) sont supprimés
 - Réordonnancement de l'initiative
+
+### Nettoyage en fin de combat
+- Toutes les invocations survivantes sont tuées (pvActuels → 0) en fin de combat
+- Appliqué dans `checkCombatEnd()` (victoire/défaite) et `fleeCombat()` (fuite)
+- Les invocations ont `xpRecompense: 0` → pas de XP en les tuant
+
+### Réponse API invocation
+```json
+{
+  "success": true,
+  "message": "Invoked Golem Arcanique at (3,4)",
+  "actionType": "SORT",
+  "damages": [],
+  "invocation": {
+    "entiteId": 15,
+    "nom": "Golem Arcanique",
+    "position": { "x": 3, "y": 4 }
+  }
+}
+```
 
 ## Système de buffs/debuffs
 
@@ -459,7 +587,12 @@ Les effets (buffs/debuffs) modifient les stats des entités en combat :
    // Exemple: Force 15 + Rage(+20) = 35
    ```
 
-4. **Durée** : décrémentée à chaque nouveau round, supprimé quand `toursRestants <= 0`
+4. **Durée** : décrémentée au début du tour de chaque entité (per-entity), supprimé quand `toursRestants <= 0`. Un buff durée 1 lancé par le dernier joueur du round persiste tout le round suivant.
+
+5. **Nettoyage automatique** :
+   - Mort d'une entité → ses effets actifs sont supprimés (+ ceux de ses invocations tuées)
+   - Fin de combat (victoire/défaite/fuite) → tous les effets et cooldowns sont supprimés
+   - `onDelete: Cascade` sur `EffetActif.combat` en BDD
 
 ### Types d'effets
 | Effet | Type | Stat | Valeur | Durée |
@@ -489,6 +622,43 @@ Les effets (buffs/debuffs) modifient les stats des entités en combat :
   "appliedEffects": [
     { "entiteId": 5, "effetId": 5, "effetNom": "Ralentissement", "duree": 2 }
   ]
+}
+```
+
+### Réponse API soin
+```json
+{
+  "success": true,
+  "message": "Heal hit 1 target(s).",
+  "actionType": "SORT",
+  "damages": [],
+  "heals": [
+    { "entiteId": 1, "healAmount": 25, "isCritical": false, "pvRestants": 75 }
+  ]
+}
+```
+
+### Réponse API dispel
+```json
+{
+  "success": true,
+  "message": "Dispel removed 2 effect(s) from 1 target(s).",
+  "actionType": "SORT",
+  "damages": [],
+  "removedEffects": [
+    { "entiteId": 5, "removedCount": 2 }
+  ]
+}
+```
+
+### Réponse API échec (miss)
+```json
+{
+  "success": true,
+  "message": "Spell missed!",
+  "actionType": "SORT",
+  "damages": [],
+  "missed": true
 }
 ```
 
@@ -751,6 +921,24 @@ curl -X POST http://localhost:3000/api/combats/1/action \
 # Voir les effets actifs
 curl http://localhost:3000/api/combats/1
 # Réponse inclut: effetsActifs: [{ nom: "Rage", valeur: 20, toursRestants: 3 }]
+
+# Lancer un sort de soin (Soin de lumière, Elfe)
+curl -X POST http://localhost:3000/api/combats/1/action \
+  -H "Content-Type: application/json" \
+  -d '{"entiteId": 1, "sortId": 42, "targetX": 0, "targetY": 3}'
+# Réponse: heals: [{ healAmount: 25, pvRestants: 75 }]
+
+# Lancer un désenvoutement (Purification, Humain)
+curl -X POST http://localhost:3000/api/combats/1/action \
+  -H "Content-Type: application/json" \
+  -d '{"entiteId": 1, "sortId": 36, "targetX": 5, "targetY": 5}'
+# Réponse: removedEffects: [{ entiteId: 5, removedCount: 2 }]
+
+# Sort avec tauxEchec (peut retourner missed: true)
+curl -X POST http://localhost:3000/api/combats/1/action \
+  -H "Content-Type: application/json" \
+  -d '{"entiteId": 1, "sortId": 4, "targetX": 5, "targetY": 5}'
+# Si raté: { missed: true, message: "Spell missed!" }
 ```
 
 ## Données de seed
@@ -762,20 +950,23 @@ curl http://localhost:3000/api/combats/1
 - Humain (+5 partout) - 4 sorts (niveaux 1, 4, 7, 10)
 - Elfe (INT +15, DEX +10, AGI +10, VIE -5) - 4 sorts (niveaux 1, 4, 7, 10)
 
-### Sorts (35)
-- Humain: 4 sorts SORT (niveaux 1, 4, 7, 10) - polyvalent + 1 sort buff (Cri de rage)
-- Elfe: 4 sorts SORT (niveaux 1, 4, 7, 10) - magie + 1 sort buff (Méditation)
-- Nain: 4 sorts SORT (niveaux 1, 4, 7, 10) - physique + 1 sort buff (Pas lourd)
-- Orc: 4 sorts SORT (niveaux 1, 4, 7, 10) - brutal + 1 sort debuff (Malédiction)
-- Halfelin: 4 sorts SORT (niveaux 1, 4, 7, 10) - agile + 1 sort debuff (Entrave)
+### Sorts (55)
+- Humain: 4 sorts SORT (niveaux 1, 4, 7, 10) - polyvalent + 1 buff (Cri de rage) + 1 dispel (Purification) + 1 soin (Soin, niv 3) + 1 invocation (Invoquer Golem, niv 5)
+- Elfe: 4 sorts SORT (niveaux 1, 4, 7, 10) - magie + 1 buff (Méditation) + 1 dispel (Dissipation) + 1 soin (Soin de lumière, niv 1) + 1 invocation (Invoquer Esprit, niv 5)
+- Nain: 4 sorts SORT (niveaux 1, 4, 7, 10) - physique + 1 buff (Pas lourd) + 1 dispel (Briseur de sorts) + 1 soin (Second souffle, niv 4) + 1 invocation (Invoquer Gardien, niv 5)
+- Orc: 4 sorts SORT (niveaux 1, 4, 7, 10) - brutal + 1 debuff (Malédiction) + 1 dispel (Annulation) + 1 invocation (Invoquer Loup Spectral, niv 5)
+- Halfelin: 4 sorts SORT (niveaux 1, 4, 7, 10) - agile + 1 debuff (Entrave) + 1 dispel (Désenvoûtement) + 1 invocation (Invoquer Ombre, niv 5)
 - 10 sorts spécifiques pour monstres (Morsure du loup, Griffure du loup, Coup de dague, Coup d'épée, Tir d'arbalète, Morsure venimeuse, Jet de toile, Coup d'os, Écrasement, Lancer de rocher)
+- 7 sorts pour invocations (Frappe de pierre, Rayon lumineux, Soin mineur, Morsure spectrale, Lancer d'ombre, Poing arcanique, Rayon arcanique)
 - Tous les sorts ont degatsCritMin/degatsCritMax (range de critique)
+- Certains sorts ont un `tauxEchec` > 0 (chance de rater)
 
 ### Équipements (12)
 - Répartis sur tous les slots
 - Bonus de stats variés
 - Niveaux requis différents
 - Les 4 armes (Épée, Bâton, Arc, Dagues) ont des données d'attaque (dégâts, portée, PA, zone, stat utilisée)
+- Arc long et Dagues jumelles ont un `tauxEchec` (10% et 5%)
 
 ### Effets (5)
 - Rage, Concentration, Agilité (buffs)
@@ -794,10 +985,11 @@ curl http://localhost:3000/api/combats/1
 - Route commerciale (WILDERNESS/MANUEL)
 - Village de Piedmont (VILLE)
 
-### Monstres (6)
-- Gobelin, Loup, Bandit (niveau 1-3)
-- Araignée Géante, Squelette (niveau 3-5)
-- Troll des Forêts (niveau 5-8)
+### Monstres (11)
+- Gobelin (AGGRESSIF), Loup (AGGRESSIF), Bandit (EQUILIBRE) — niveau 1-3
+- Araignée Géante (DISTANCE), Squelette (AGGRESSIF) — niveau 3-5
+- Troll des Forêts (AGGRESSIF) — niveau 5-8
+- Invocations (xpRecompense: 0) : Gardien de Pierre (AGGRESSIF), Esprit de Lumière (SOUTIEN), Loup Spectral (AGGRESSIF), Ombre Furtive (DISTANCE), Golem Arcanique (EQUILIBRE)
 
 ### Groupes d'ennemis (6)
 - Orée de la forêt : Meute de 3 Loups, Groupe mixte (2 Gobelins + 1 Loup)
@@ -809,13 +1001,18 @@ curl http://localhost:3000/api/combats/1
 - Plaines du Sud : Bandit (0.60), Loup (0.40)
 - Montagne Grise : Squelette (0.50), Troll (0.50)
 
-### MonstreSort (10)
+### MonstreSort (17)
 - Loup : Morsure du loup (prio 1), Griffure du loup (prio 2)
 - Gobelin : Coup de dague (prio 1)
 - Bandit : Coup d'épée (prio 1), Tir d'arbalète (prio 2)
 - Araignée : Morsure venimeuse (prio 1), Jet de toile (prio 2)
 - Squelette : Coup d'os (prio 1)
 - Troll : Écrasement (prio 1), Lancer de rocher (prio 2, cd:1)
+- Gardien de Pierre : Frappe de pierre (prio 1)
+- Esprit de Lumière : Soin mineur (prio 1, estSoin), Rayon lumineux (prio 2)
+- Loup Spectral : Morsure spectrale (prio 1)
+- Ombre Furtive : Lancer d'ombre (prio 1)
+- Golem Arcanique : Poing arcanique (prio 1), Rayon arcanique (prio 2)
 
 ### Connexions (10)
 - Portails nommés avec positions (x, y) pour navigation positionnelle
@@ -872,11 +1069,17 @@ curl http://localhost:3000/api/combats/1
 ### Ajouter un nouveau sort
 1. Ajouter dans `prisma/seed.ts`
 2. Spécifier: raceId, niveauRequis, coutPA, portee, zoneId, degatsMin/Max, cooldown
-3. `npx prisma db seed`
+3. Pour un soin : ajouter `estSoin: true` (les degatsMin/Max deviennent le montant de soin)
+4. Pour un dispel : ajouter `estDispel: true` (degatsMin/Max à 0)
+5. Pour un sort risqué : ajouter `tauxEchec: 0.xx` (0.0-1.0)
+6. Pour une invocation : ajouter `estInvocation: true`, `invocationTemplateId: N`, degats à 0
+7. `npx prisma db seed`
 
 ### Modifier l'IA des monstres
 - Fichier `src/services/combat/ai.ts`
-- Méthodes: `executeAITurn()`, `findClosestEnemy()`, `findUsableSpell()`
+- Dispatch: `executeAITurn()` → `executeEquilibreTurn()` / `executeAggressifTurn()` / `executeSoutienTurn()` / `executeDistanceTurn()`
+- Helpers: `findClosestEnemy()`, `findUsableSpell()`, `findMostInjuredAlly()`, `findAllyWithDebuffs()`, `moveAwayFromTarget()`
+- Pour ajouter un nouveau type d'IA : ajouter valeur à l'enum `IAType`, créer `executeXxxTurn()`, ajouter au switch dans `executeAITurn()`
 
 ### Modifier les formules
 - `src/utils/formulas.ts` pour calculs généraux
@@ -929,7 +1132,31 @@ Les fonctionnalités suivantes ont été testées et validées:
 | Buffs/debuffs appliqués aux stats en combat | OK |
 | Effets secondaires de sorts (probabilité) | OK |
 | Self-buffs (effets sur lanceur sans cible) | OK |
-| Durée des effets décrémentée par round | OK |
+| Durée des effets décrémentée per-entity (au début du tour) | OK |
+| Nettoyage effets sur entité morte (+ invocations) | OK |
+| Nettoyage effets/cooldowns en fin de combat (victoire/défaite/fuite) | OK |
+| Ciblage libre (sorts touchent alliés et ennemis) | OK |
+| Sorts de soin (estSoin, heal au lieu de dégâts) | OK |
+| Sorts de désenvoutement (estDispel, supprime tous effets) | OK |
+| Pourcentage d'échec sorts (tauxEchec, PA perdus) | OK |
+| Pourcentage d'échec arme (tauxEchec, tour perdu) | OK |
+| IA intelligente (heal allié blessé, dispel debuff, puis attaque) | OK |
+| Snapshot arme avec tauxEchec | OK |
+| Suivi du tour actif persistant (entiteActuelleId) | OK |
+| Vérification de tour (action/move/endTurn refusés hors tour) | OK |
+| Vérification de sort appris (PersonnageSort/MonstreSort) | OK |
+| Seed tauxEchec dans create + update (idempotent) | OK |
+| IAType enum (EQUILIBRE, AGGRESSIF, SOUTIEN, DISTANCE) | OK |
+| IA AGGRESSIF (rush, pas de heal/dispel) | OK |
+| IA SOUTIEN (heal 90%, avance vers alliés) | OK |
+| IA DISTANCE (recule si adjacent, sorts longue portée) | OK |
+| IA EQUILIBRE (heal → dispel → attack → move) | OK |
+| Sorts d'invocation (estInvocation, invocationTemplateId) | OK |
+| Invocations avec propre IA et sorts (MonstreSort) | OK |
+| Auto-play invocations joueur (invocateurId !== null) | OK |
+| Nettoyage invocations survivantes en fin de combat | OK |
+| Nettoyage invocations à la fuite | OK |
+| Templates invocation (xpRecompense: 0, pas d'XP) | OK |
 
 ## Variables d'environnement
 

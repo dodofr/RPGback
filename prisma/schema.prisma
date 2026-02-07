@@ -77,6 +77,13 @@ enum CombatMode {
   AUTO
 }
 
+enum IAType {
+  EQUILIBRE
+  AGGRESSIF
+  SOUTIEN
+  DISTANCE
+}
+
 // ==================== TABLES STATIQUES ====================
 
 model Race {
@@ -116,11 +123,17 @@ model Sort {
   degatsCritMax       Int
   chanceCritBase      Float            @default(0.01)
   cooldown            Int              @default(0)
+  estSoin             Boolean          @default(false)
+  estDispel           Boolean          @default(false)
+  tauxEchec           Float            @default(0)
   niveauApprentissage Int              @default(1)
   zoneId              Int?
   zone                Zone?            @relation(fields: [zoneId], references: [id])
   raceId              Int?
   race                Race?            @relation(fields: [raceId], references: [id])
+  estInvocation        Boolean          @default(false)
+  invocationTemplateId Int?
+  invocationTemplate   MonstreTemplate? @relation("InvocationSort", fields: [invocationTemplateId], references: [id])
   personnages         PersonnageSort[]
   cooldowns           SortCooldown[]
   monstres            MonstreSort[]
@@ -155,6 +168,7 @@ model Equipement {
   zone              Zone?     @relation(fields: [zoneId], references: [id])
   statUtilisee      StatType?
   cooldown          Int?
+  tauxEchec         Float?
 }
 
 model Effet {
@@ -251,11 +265,14 @@ model MonstreTemplate {
   pmBase         Int                  @default(3)
   niveauBase     Int                  @default(1)
   xpRecompense   Int                  @default(10)
+  iaType         IAType               @default(EQUILIBRE)
+  pvScalingInvocation Float?
   groupesMembres GroupeEnnemiMembre[]
   donjonsBoss    Donjon[]
   regions        RegionMonstre[]
   sorts          MonstreSort[]
   combatEntites  CombatEntite[]
+  invocationSorts Sort[]              @relation("InvocationSort")
 }
 
 model RegionMonstre {
@@ -372,17 +389,18 @@ model GroupePersonnage {
 }
 
 model Combat {
-  id            Int            @id @default(autoincrement())
-  status        CombatStatus   @default(EN_COURS)
-  tourActuel    Int            @default(1)
-  grilleLargeur Int
-  grilleHauteur Int
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  entites       CombatEntite[]
-  effetsActifs  EffetActif[]
-  cases         CombatCase[]
-  cooldowns     SortCooldown[]
+  id               Int            @id @default(autoincrement())
+  status           CombatStatus   @default(EN_COURS)
+  tourActuel       Int            @default(1)
+  entiteActuelleId Int?
+  grilleLargeur    Int
+  grilleHauteur    Int
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  entites          CombatEntite[]
+  effetsActifs     EffetActif[]
+  cases            CombatCase[]
+  cooldowns        SortCooldown[]
 }
 
 model SortCooldown {
@@ -440,12 +458,13 @@ model CombatEntite {
   niveau              Int?
   monstreTemplateId   Int?
   monstreTemplate     MonstreTemplate? @relation(fields: [monstreTemplateId], references: [id])
+  iaType              IAType?
 }
 
 model EffetActif {
   id            Int    @id @default(autoincrement())
   combatId      Int
-  combat        Combat @relation(fields: [combatId], references: [id])
+  combat        Combat @relation(fields: [combatId], references: [id], onDelete: Cascade)
   entiteId      Int
   effetId       Int
   effet         Effet  @relation(fields: [effetId], references: [id])

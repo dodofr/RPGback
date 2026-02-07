@@ -251,6 +251,7 @@ export class DonjonService {
         pmBase: number;
         niveauBase: number;
         xpRecompense: number;
+        iaType?: string;
       };
       region: {
         id: number;
@@ -273,6 +274,7 @@ export class DonjonService {
       pmMax: number;
       monstreTemplateId: number;
       niveau: number;
+      iaType?: string;
     }[] = [];
 
     // Get region monsters
@@ -308,6 +310,7 @@ export class DonjonService {
         pmMax: boss.pmBase,
         monstreTemplateId: boss.id,
         niveau: bossNiveau,
+        iaType: boss.iaType,
       });
 
       // Add (difficulte - 1) regular monsters at niveauMax
@@ -344,6 +347,7 @@ export class DonjonService {
               pmMax: template.pmBase,
               monstreTemplateId: template.id,
               niveau,
+              iaType: template.iaType,
             });
           }
           remaining -= count;
@@ -382,6 +386,7 @@ export class DonjonService {
             pmMax: template.pmBase,
             monstreTemplateId: template.id,
             niveau,
+            iaType: template.iaType,
           });
         }
         remaining -= count;

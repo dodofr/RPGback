@@ -1,4 +1,4 @@
-import { PrismaClient, StatType, ZoneType, SortType, SlotType, EffetType, RegionType, MapType, CombatMode } from '@prisma/client';
+import { PrismaClient, StatType, ZoneType, SortType, SlotType, EffetType, RegionType, MapType, CombatMode, IAType } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -196,7 +196,7 @@ async function main() {
 
   await prisma.sort.upsert({
     where: { id: 4 },
-    update: {},
+    update: { tauxEchec: 0.15 },
     create: {
       nom: 'Explosion arcanique',
       type: SortType.SORT,
@@ -211,6 +211,7 @@ async function main() {
       degatsCritMax: 60,
       chanceCritBase: 0.08,
       cooldown: 3,
+      tauxEchec: 0.15,
       niveauApprentissage: 10,
       raceId: humain.id,
       zoneId: zoneCercle.id,
@@ -289,7 +290,7 @@ async function main() {
 
   await prisma.sort.upsert({
     where: { id: 8 },
-    update: {},
+    update: { tauxEchec: 0.20 },
     create: {
       nom: 'Tempête arcanique',
       type: SortType.SORT,
@@ -304,6 +305,7 @@ async function main() {
       degatsCritMax: 75,
       chanceCritBase: 0.10,
       cooldown: 4,
+      tauxEchec: 0.20,
       niveauApprentissage: 10,
       raceId: elfe.id,
       zoneId: zoneCercle.id,
@@ -452,7 +454,7 @@ async function main() {
 
   await prisma.sort.upsert({
     where: { id: 15 },
-    update: {},
+    update: { tauxEchec: 0.10 },
     create: {
       nom: 'Rage berserk',
       type: SortType.SORT,
@@ -467,6 +469,7 @@ async function main() {
       degatsCritMax: 85,
       chanceCritBase: 0.15,
       cooldown: 3,
+      tauxEchec: 0.10,
       niveauApprentissage: 7,
       raceId: orc.id,
       zoneId: zoneCase.id,
@@ -475,7 +478,7 @@ async function main() {
 
   await prisma.sort.upsert({
     where: { id: 16 },
-    update: {},
+    update: { tauxEchec: 0.15 },
     create: {
       nom: 'Frappe dévastatrice',
       type: SortType.SORT,
@@ -490,6 +493,7 @@ async function main() {
       degatsCritMax: 95,
       chanceCritBase: 0.10,
       cooldown: 4,
+      tauxEchec: 0.15,
       niveauApprentissage: 10,
       raceId: orc.id,
       zoneId: zoneCroix.id,
@@ -568,7 +572,7 @@ async function main() {
 
   await prisma.sort.upsert({
     where: { id: 20 },
-    update: {},
+    update: { tauxEchec: 0.10 },
     create: {
       nom: 'Attaque éclair',
       type: SortType.SORT,
@@ -583,6 +587,7 @@ async function main() {
       degatsCritMax: 75,
       chanceCritBase: 0.25,
       cooldown: 3,
+      tauxEchec: 0.10,
       niveauApprentissage: 10,
       raceId: halfelin.id,
       zoneId: zoneCase.id,
@@ -881,7 +886,7 @@ async function main() {
 
   await prisma.equipement.upsert({
     where: { id: 3 },
-    update: {},
+    update: { tauxEchec: 0.10 },
     create: {
       nom: 'Arc long',
       slot: SlotType.ARME,
@@ -902,12 +907,13 @@ async function main() {
       zoneId: zoneCase.id,
       statUtilisee: StatType.DEXTERITE,
       cooldown: 0,
+      tauxEchec: 0.10,
     },
   });
 
   await prisma.equipement.upsert({
     where: { id: 4 },
-    update: {},
+    update: { tauxEchec: 0.05 },
     create: {
       nom: 'Dagues jumelles',
       slot: SlotType.ARME,
@@ -927,6 +933,7 @@ async function main() {
       zoneId: zoneCase.id,
       statUtilisee: StatType.AGILITE,
       cooldown: 0,
+      tauxEchec: 0.05,
     },
   });
 
@@ -1211,6 +1218,212 @@ async function main() {
 
   console.log('Created 5 buff/debuff spells');
 
+  // ==================== SORTS DE DESENVOUTEMENT (1 par race) ====================
+  // Sort 36: Purification (Humain)
+  await prisma.sort.upsert({
+    where: { id: 36 },
+    update: {},
+    create: {
+      nom: 'Purification',
+      type: SortType.SORT,
+      statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 5,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 2,
+      estDispel: true,
+      niveauApprentissage: 1,
+      raceId: humain.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Sort 37: Dissipation (Elfe)
+  await prisma.sort.upsert({
+    where: { id: 37 },
+    update: {},
+    create: {
+      nom: 'Dissipation',
+      type: SortType.SORT,
+      statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 5,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 2,
+      estDispel: true,
+      niveauApprentissage: 1,
+      raceId: elfe.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Sort 38: Briseur de sorts (Nain)
+  await prisma.sort.upsert({
+    where: { id: 38 },
+    update: {},
+    create: {
+      nom: 'Briseur de sorts',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 5,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 2,
+      estDispel: true,
+      niveauApprentissage: 1,
+      raceId: nain.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Sort 39: Annulation (Orc)
+  await prisma.sort.upsert({
+    where: { id: 39 },
+    update: {},
+    create: {
+      nom: 'Annulation',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 5,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 2,
+      estDispel: true,
+      niveauApprentissage: 1,
+      raceId: orc.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Sort 40: Désenvoûtement (Halfelin)
+  await prisma.sort.upsert({
+    where: { id: 40 },
+    update: {},
+    create: {
+      nom: 'Désenvoûtement',
+      type: SortType.SORT,
+      statUtilisee: StatType.DEXTERITE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 5,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 2,
+      estDispel: true,
+      niveauApprentissage: 1,
+      raceId: halfelin.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  console.log('Created 5 dispel spells');
+
+  // ==================== SORTS DE SOIN ====================
+  // Sort 41: Soin (Humain)
+  await prisma.sort.upsert({
+    where: { id: 41 },
+    update: {},
+    create: {
+      nom: 'Soin',
+      type: SortType.SORT,
+      statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 4,
+      porteeMin: 1,
+      porteeMax: 4,
+      ligneDeVue: true,
+      degatsMin: 15,
+      degatsMax: 25,
+      degatsCritMin: 30,
+      degatsCritMax: 40,
+      chanceCritBase: 0.05,
+      cooldown: 2,
+      estSoin: true,
+      niveauApprentissage: 3,
+      raceId: humain.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Sort 42: Soin de lumière (Elfe)
+  await prisma.sort.upsert({
+    where: { id: 42 },
+    update: {},
+    create: {
+      nom: 'Soin de lumière',
+      type: SortType.SORT,
+      statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 5,
+      ligneDeVue: true,
+      degatsMin: 18,
+      degatsMax: 30,
+      degatsCritMin: 35,
+      degatsCritMax: 50,
+      chanceCritBase: 0.08,
+      cooldown: 1,
+      estSoin: true,
+      niveauApprentissage: 1,
+      raceId: elfe.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Sort 43: Second souffle (Nain)
+  await prisma.sort.upsert({
+    where: { id: 43 },
+    update: {},
+    create: {
+      nom: 'Second souffle',
+      type: SortType.SORT,
+      statUtilisee: StatType.VIE,
+      coutPA: 4,
+      porteeMin: 0,
+      porteeMax: 1,
+      ligneDeVue: false,
+      degatsMin: 20,
+      degatsMax: 35,
+      degatsCritMin: 40,
+      degatsCritMax: 55,
+      chanceCritBase: 0.05,
+      cooldown: 3,
+      estSoin: true,
+      niveauApprentissage: 4,
+      raceId: nain.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  console.log('Created 3 heal spells');
+
   // ==================== REGIONS ====================
   const foretVertbois = await prisma.region.upsert({
     where: { nom: 'Forêt de Vertbois' },
@@ -1253,7 +1466,7 @@ async function main() {
   // ==================== MONSTER TEMPLATES ====================
   const gobelin = await prisma.monstreTemplate.upsert({
     where: { id: 1 },
-    update: {},
+    update: { iaType: IAType.AGGRESSIF },
     create: {
       nom: 'Gobelin',
       force: 8,
@@ -1267,12 +1480,13 @@ async function main() {
       pmBase: 4,
       niveauBase: 1,
       xpRecompense: 15,
+      iaType: IAType.AGGRESSIF,
     },
   });
 
   const loup = await prisma.monstreTemplate.upsert({
     where: { id: 2 },
-    update: {},
+    update: { iaType: IAType.AGGRESSIF },
     create: {
       nom: 'Loup',
       force: 12,
@@ -1286,12 +1500,13 @@ async function main() {
       pmBase: 5,
       niveauBase: 1,
       xpRecompense: 20,
+      iaType: IAType.AGGRESSIF,
     },
   });
 
   const bandit = await prisma.monstreTemplate.upsert({
     where: { id: 3 },
-    update: {},
+    update: { iaType: IAType.EQUILIBRE },
     create: {
       nom: 'Bandit',
       force: 14,
@@ -1305,12 +1520,13 @@ async function main() {
       pmBase: 3,
       niveauBase: 2,
       xpRecompense: 30,
+      iaType: IAType.EQUILIBRE,
     },
   });
 
   const araigneeGeante = await prisma.monstreTemplate.upsert({
     where: { id: 4 },
-    update: {},
+    update: { iaType: IAType.DISTANCE },
     create: {
       nom: 'Araignée Géante',
       force: 10,
@@ -1324,12 +1540,13 @@ async function main() {
       pmBase: 4,
       niveauBase: 2,
       xpRecompense: 25,
+      iaType: IAType.DISTANCE,
     },
   });
 
   const squelette = await prisma.monstreTemplate.upsert({
     where: { id: 5 },
-    update: {},
+    update: { iaType: IAType.AGGRESSIF },
     create: {
       nom: 'Squelette',
       force: 10,
@@ -1343,12 +1560,13 @@ async function main() {
       pmBase: 3,
       niveauBase: 3,
       xpRecompense: 35,
+      iaType: IAType.AGGRESSIF,
     },
   });
 
   const trollDesForets = await prisma.monstreTemplate.upsert({
     where: { id: 6 },
-    update: {},
+    update: { iaType: IAType.AGGRESSIF },
     create: {
       nom: 'Troll des Forêts',
       force: 25,
@@ -1362,10 +1580,117 @@ async function main() {
       pmBase: 2,
       niveauBase: 5,
       xpRecompense: 100,
+      iaType: IAType.AGGRESSIF,
     },
   });
 
-  console.log('Created 6 monster templates');
+  // ==================== INVOCATION TEMPLATES ====================
+  const gardienPierre = await prisma.monstreTemplate.upsert({
+    where: { id: 7 },
+    update: { iaType: IAType.AGGRESSIF, pvScalingInvocation: 0.25 },
+    create: {
+      nom: 'Gardien de Pierre',
+      force: 15,
+      intelligence: 3,
+      dexterite: 5,
+      agilite: 5,
+      vie: 20,
+      chance: 3,
+      pvBase: 60,
+      paBase: 6,
+      pmBase: 2,
+      niveauBase: 5,
+      xpRecompense: 0,
+      iaType: IAType.AGGRESSIF,
+      pvScalingInvocation: 0.25,
+    },
+  });
+
+  const espritLumiere = await prisma.monstreTemplate.upsert({
+    where: { id: 8 },
+    update: { iaType: IAType.SOUTIEN, pvScalingInvocation: 0.10 },
+    create: {
+      nom: 'Esprit de Lumière',
+      force: 3,
+      intelligence: 18,
+      dexterite: 8,
+      agilite: 12,
+      vie: 8,
+      chance: 5,
+      pvBase: 30,
+      paBase: 6,
+      pmBase: 3,
+      niveauBase: 5,
+      xpRecompense: 0,
+      iaType: IAType.SOUTIEN,
+      pvScalingInvocation: 0.10,
+    },
+  });
+
+  const loupSpectral = await prisma.monstreTemplate.upsert({
+    where: { id: 9 },
+    update: { iaType: IAType.AGGRESSIF, pvScalingInvocation: 0.10 },
+    create: {
+      nom: 'Loup Spectral',
+      force: 14,
+      intelligence: 3,
+      dexterite: 10,
+      agilite: 20,
+      vie: 8,
+      chance: 5,
+      pvBase: 35,
+      paBase: 6,
+      pmBase: 5,
+      niveauBase: 5,
+      xpRecompense: 0,
+      iaType: IAType.AGGRESSIF,
+      pvScalingInvocation: 0.10,
+    },
+  });
+
+  const ombreFurtive = await prisma.monstreTemplate.upsert({
+    where: { id: 10 },
+    update: { iaType: IAType.DISTANCE, pvScalingInvocation: 0.10 },
+    create: {
+      nom: 'Ombre Furtive',
+      force: 8,
+      intelligence: 8,
+      dexterite: 16,
+      agilite: 18,
+      vie: 6,
+      chance: 8,
+      pvBase: 25,
+      paBase: 6,
+      pmBase: 4,
+      niveauBase: 5,
+      xpRecompense: 0,
+      iaType: IAType.DISTANCE,
+      pvScalingInvocation: 0.10,
+    },
+  });
+
+  const golemArcanique = await prisma.monstreTemplate.upsert({
+    where: { id: 11 },
+    update: { iaType: IAType.EQUILIBRE, pvScalingInvocation: 0.25 },
+    create: {
+      nom: 'Golem Arcanique',
+      force: 12,
+      intelligence: 12,
+      dexterite: 6,
+      agilite: 6,
+      vie: 15,
+      chance: 5,
+      pvBase: 50,
+      paBase: 6,
+      pmBase: 3,
+      niveauBase: 5,
+      xpRecompense: 0,
+      iaType: IAType.EQUILIBRE,
+      pvScalingInvocation: 0.25,
+    },
+  });
+
+  console.log('Created 11 monster templates (6 enemies + 5 invocations)');
 
   // ==================== MAPS ====================
   // Forêt de Vertbois maps
@@ -2137,6 +2462,315 @@ async function main() {
   });
 
   console.log('Created 8 spell-effect links');
+
+  // ==================== SORTS POUR INVOCATIONS ====================
+  // Gardien de Pierre
+  await prisma.sort.upsert({
+    where: { id: 44 },
+    update: {},
+    create: {
+      nom: 'Frappe de pierre',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 1,
+      ligneDeVue: true,
+      degatsMin: 15,
+      degatsMax: 25,
+      degatsCritMin: 30,
+      degatsCritMax: 45,
+      chanceCritBase: 0.05,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Esprit de Lumière
+  await prisma.sort.upsert({
+    where: { id: 45 },
+    update: {},
+    create: {
+      nom: 'Rayon lumineux',
+      type: SortType.SORT,
+      statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 3,
+      porteeMin: 2,
+      porteeMax: 5,
+      ligneDeVue: true,
+      degatsMin: 10,
+      degatsMax: 18,
+      degatsCritMin: 22,
+      degatsCritMax: 32,
+      chanceCritBase: 0.08,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  await prisma.sort.upsert({
+    where: { id: 46 },
+    update: {},
+    create: {
+      nom: 'Soin mineur',
+      type: SortType.SORT,
+      statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 4,
+      ligneDeVue: true,
+      degatsMin: 10,
+      degatsMax: 18,
+      degatsCritMin: 20,
+      degatsCritMax: 30,
+      chanceCritBase: 0.05,
+      cooldown: 1,
+      estSoin: true,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Loup Spectral
+  await prisma.sort.upsert({
+    where: { id: 47 },
+    update: {},
+    create: {
+      nom: 'Morsure spectrale',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 1,
+      ligneDeVue: true,
+      degatsMin: 14,
+      degatsMax: 22,
+      degatsCritMin: 28,
+      degatsCritMax: 40,
+      chanceCritBase: 0.10,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Ombre Furtive
+  await prisma.sort.upsert({
+    where: { id: 48 },
+    update: {},
+    create: {
+      nom: "Lancer d'ombre",
+      type: SortType.SORT,
+      statUtilisee: StatType.DEXTERITE,
+      coutPA: 2,
+      porteeMin: 2,
+      porteeMax: 5,
+      ligneDeVue: true,
+      degatsMin: 8,
+      degatsMax: 14,
+      degatsCritMin: 18,
+      degatsCritMax: 28,
+      chanceCritBase: 0.12,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  // Golem Arcanique
+  await prisma.sort.upsert({
+    where: { id: 49 },
+    update: {},
+    create: {
+      nom: 'Poing arcanique',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 1,
+      ligneDeVue: true,
+      degatsMin: 12,
+      degatsMax: 20,
+      degatsCritMin: 25,
+      degatsCritMax: 38,
+      chanceCritBase: 0.05,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  await prisma.sort.upsert({
+    where: { id: 50 },
+    update: {},
+    create: {
+      nom: 'Rayon arcanique',
+      type: SortType.SORT,
+      statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 4,
+      porteeMin: 2,
+      porteeMax: 4,
+      ligneDeVue: true,
+      degatsMin: 10,
+      degatsMax: 18,
+      degatsCritMin: 22,
+      degatsCritMax: 32,
+      chanceCritBase: 0.08,
+      cooldown: 0,
+      niveauApprentissage: 1,
+      raceId: null,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  console.log('Created 7 invocation spells');
+
+  // ==================== SORTS D'INVOCATION (1 par race, niv 5) ====================
+  await prisma.sort.upsert({
+    where: { id: 51 },
+    update: {},
+    create: {
+      nom: 'Invoquer Golem',
+      type: SortType.SORT,
+      statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 5,
+      porteeMin: 1,
+      porteeMax: 3,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 5,
+      estInvocation: true,
+      invocationTemplateId: golemArcanique.id,
+      niveauApprentissage: 5,
+      raceId: humain.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  await prisma.sort.upsert({
+    where: { id: 52 },
+    update: {},
+    create: {
+      nom: 'Invoquer Esprit',
+      type: SortType.SORT,
+      statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 4,
+      porteeMin: 1,
+      porteeMax: 3,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 5,
+      estInvocation: true,
+      invocationTemplateId: espritLumiere.id,
+      niveauApprentissage: 5,
+      raceId: elfe.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  await prisma.sort.upsert({
+    where: { id: 53 },
+    update: {},
+    create: {
+      nom: 'Invoquer Gardien',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 5,
+      porteeMin: 1,
+      porteeMax: 2,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 5,
+      estInvocation: true,
+      invocationTemplateId: gardienPierre.id,
+      niveauApprentissage: 5,
+      raceId: nain.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  await prisma.sort.upsert({
+    where: { id: 54 },
+    update: {},
+    create: {
+      nom: 'Invoquer Loup Spectral',
+      type: SortType.SORT,
+      statUtilisee: StatType.FORCE,
+      coutPA: 4,
+      porteeMin: 1,
+      porteeMax: 2,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 4,
+      estInvocation: true,
+      invocationTemplateId: loupSpectral.id,
+      niveauApprentissage: 5,
+      raceId: orc.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  await prisma.sort.upsert({
+    where: { id: 55 },
+    update: {},
+    create: {
+      nom: 'Invoquer Ombre',
+      type: SortType.SORT,
+      statUtilisee: StatType.DEXTERITE,
+      coutPA: 4,
+      porteeMin: 1,
+      porteeMax: 3,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0,
+      cooldown: 4,
+      estInvocation: true,
+      invocationTemplateId: ombreFurtive.id,
+      niveauApprentissage: 5,
+      raceId: halfelin.id,
+      zoneId: zoneCase.id,
+    },
+  });
+
+  console.log('Created 5 invocation race spells');
+
+  // ==================== MONSTRE SORTS (invocations) ====================
+  await prisma.monstreSort.upsert({ where: { id: 11 }, update: {}, create: { monstreId: gardienPierre.id, sortId: 44, priorite: 1 } });   // Frappe de pierre
+  await prisma.monstreSort.upsert({ where: { id: 12 }, update: {}, create: { monstreId: espritLumiere.id, sortId: 46, priorite: 1 } });   // Soin mineur
+  await prisma.monstreSort.upsert({ where: { id: 13 }, update: {}, create: { monstreId: espritLumiere.id, sortId: 45, priorite: 2 } });   // Rayon lumineux
+  await prisma.monstreSort.upsert({ where: { id: 14 }, update: {}, create: { monstreId: loupSpectral.id, sortId: 47, priorite: 1 } });    // Morsure spectrale
+  await prisma.monstreSort.upsert({ where: { id: 15 }, update: {}, create: { monstreId: ombreFurtive.id, sortId: 48, priorite: 1 } });    // Lancer d'ombre
+  await prisma.monstreSort.upsert({ where: { id: 16 }, update: {}, create: { monstreId: golemArcanique.id, sortId: 49, priorite: 1 } });  // Poing arcanique
+  await prisma.monstreSort.upsert({ where: { id: 17 }, update: {}, create: { monstreId: golemArcanique.id, sortId: 50, priorite: 2 } });  // Rayon arcanique
+
+  console.log('Created 7 invocation monster-spell links');
 
   console.log('Seeding completed!');
 }

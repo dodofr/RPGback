@@ -425,6 +425,7 @@ export class MapService {
       paBase: number;
       pmBase: number;
       niveauBase: number;
+      iaType?: string;
     },
     quantity: number,
     niveau: number
@@ -449,6 +450,7 @@ export class MapService {
         pmMax: template.pmBase,
         monstreTemplateId: template.id,
         niveau,
+        iaType: template.iaType,
       });
     }
 

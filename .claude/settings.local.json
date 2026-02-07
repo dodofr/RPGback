@@ -41,7 +41,9 @@
       "Bash(npx ts-node-dev:*)",
       "Bash(git -C \"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\backend\" status)",
       "Bash(git -C \"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\backend\" diff --stat)",
-      "Bash(git -C \"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\backend\" log --oneline -5)"
+      "Bash(git -C \"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\backend\" log --oneline -5)",
+      "Bash(echo:*)",
+      "Bash(node:*)"
     ]
   }
 }

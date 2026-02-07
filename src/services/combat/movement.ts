@@ -91,30 +91,57 @@ export function getValidMoveDestinations(
 }
 
 /**
- * Find path between two positions (simple implementation)
- * Returns array of positions to traverse
+ * Get all cells that a straight line from 'from' to 'to' passes through.
+ * Uses Bresenham supercover variant: when the line passes exactly through
+ * a corner between cells, BOTH adjacent cells are included (strict LOS).
+ * This means a single entity on a diagonal corner can block line of sight.
  */
-export function findPath(from: Position, to: Position): Position[] {
-  const path: Position[] = [];
-  let current = { ...from };
+export function getLineOfSightCells(from: Position, to: Position): Position[] {
+  const cells: Position[] = [];
 
-  // Simple pathfinding: move horizontally then vertically
-  while (current.x !== to.x) {
-    current.x += current.x < to.x ? 1 : -1;
-    path.push({ ...current });
+  let dx = Math.abs(to.x - from.x);
+  let dy = Math.abs(to.y - from.y);
+
+  const sx = to.x > from.x ? 1 : (to.x < from.x ? -1 : 0);
+  const sy = to.y > from.y ? 1 : (to.y < from.y ? -1 : 0);
+
+  let x = from.x;
+  let y = from.y;
+  let error = dx - dy;
+
+  dx *= 2;
+  dy *= 2;
+
+  while (true) {
+    cells.push({ x, y });
+
+    if (x === to.x && y === to.y) break;
+
+    if (error > 0) {
+      x += sx;
+      error -= dy;
+    } else if (error < 0) {
+      y += sy;
+      error += dx;
+    } else {
+      // Line passes exactly through a corner between 4 cells.
+      // Both adjacent cells are potential blockers (strict LOS).
+      cells.push({ x: x + sx, y });
+      cells.push({ x, y: y + sy });
+      x += sx;
+      y += sy;
+      error += dx - dy;
+    }
   }
 
-  while (current.y !== to.y) {
-    current.y += current.y < to.y ? 1 : -1;
-    path.push({ ...current });
-  }
-
-  return path;
+  return cells;
 }
 
 /**
- * Check if there is line of sight between two positions
- * Checks path for blocking obstacles and entities
+ * Check if there is line of sight between two positions.
+ * Traces a straight line (Bresenham supercover) and checks every
+ * intermediate cell for blocking obstacles and living entities.
+ * The source and destination cells are excluded from blocking checks.
  */
 export function hasLineOfSight(
   from: Position,
@@ -122,11 +149,12 @@ export function hasLineOfSight(
   occupiedPositions: EntityPosition[],
   blockedCases: CombatCaseState[] = []
 ): boolean {
-  const path = findPath(from, to);
+  const cells = getLineOfSightCells(from, to);
 
-  // Check all positions except the destination
-  for (let i = 0; i < path.length - 1; i++) {
-    const pos = path[i];
+  for (const pos of cells) {
+    // Skip source (caster) and destination (target) positions
+    if (pos.x === from.x && pos.y === from.y) continue;
+    if (pos.x === to.x && pos.y === to.y) continue;
 
     // Check for blocking obstacle
     if (isBlockedForLOS(pos.x, pos.y, blockedCases)) {

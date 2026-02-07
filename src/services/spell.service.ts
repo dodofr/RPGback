@@ -157,6 +157,20 @@ export class SpellService {
   }
 
   /**
+   * Decrement cooldowns for a single entity at the start of their turn
+   */
+  async decrementCooldownsForEntity(combatId: number, entiteId: number): Promise<void> {
+    await prisma.sortCooldown.updateMany({
+      where: { combatId, entiteId },
+      data: { toursRestants: { decrement: 1 } },
+    });
+
+    await prisma.sortCooldown.deleteMany({
+      where: { combatId, entiteId, toursRestants: { lte: 0 } },
+    });
+  }
+
+  /**
    * Get all active cooldowns for an entity
    */
   async getCooldowns(combatId: number, entiteId: number) {

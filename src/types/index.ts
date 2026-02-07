@@ -1,7 +1,7 @@
-import { StatType, ZoneType, SortType, SlotType, EffetType, CombatStatus } from '@prisma/client';
+import { StatType, ZoneType, SortType, SlotType, EffetType, CombatStatus, IAType } from '@prisma/client';
 
 // Re-export Prisma enums
-export { StatType, ZoneType, SortType, SlotType, EffetType, CombatStatus };
+export { StatType, ZoneType, SortType, SlotType, EffetType, CombatStatus, IAType };
 
 // Direction enum (used for map navigation, not stored in DB)
 export type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST';
@@ -43,12 +43,28 @@ export interface ActionResult {
     pvRestants: number;
   }[];
   entiteMorte?: number[];
+  heals?: {
+    entiteId: number;
+    healAmount: number;
+    isCritical: boolean;
+    pvRestants: number;
+  }[];
+  missed?: boolean;
+  removedEffects?: {
+    entiteId: number;
+    removedCount: number;
+  }[];
   appliedEffects?: {
     entiteId: number;
     effetId: number;
     effetNom: string;
     duree: number;
   }[];
+  invocation?: {
+    entiteId: number;
+    nom: string;
+    position: Position;
+  };
 }
 
 export interface CombatCaseState {
@@ -98,6 +114,7 @@ export interface CombatEntityState {
   armeCooldownRestant?: number;
   monstreTemplateId?: number | null;
   niveau?: number | null;
+  iaType?: string | null;
 }
 
 export interface ActiveEffectState {
@@ -129,6 +146,7 @@ export interface ArmeData {
   zoneId: number | null;
   statUtilisee: string;
   cooldown: number;
+  tauxEchec: number;
 }
 
 // Character equipment type
@@ -177,6 +195,7 @@ export interface MonsterDefinition {
   pmMax: number;
   monstreTemplateId?: number;
   niveau?: number;
+  iaType?: string;
 }
 
 // Stats calculation

@@ -1,5 +1,5 @@
 import prisma from '../../config/database';
-import { CombatStatus } from '@prisma/client';
+import { CombatStatus, IAType } from '@prisma/client';
 import { Position, CombatCaseState } from '../../types';
 import { manhattanDistance } from '../../utils/formulas';
 import { hasLineOfSight, canMove } from './movement';
@@ -13,6 +13,7 @@ interface EntityState {
   positionX: number;
   positionY: number;
   pvActuels: number;
+  pvMax: number;
   paActuels: number;
   pmActuels: number;
   force: number;
@@ -20,6 +21,7 @@ interface EntityState {
   dexterite: number;
   agilite: number;
   monstreTemplateId?: number | null;
+  iaType?: IAType | null;
 }
 
 interface SpellInfo {
@@ -32,12 +34,24 @@ interface SpellInfo {
   degatsMin: number;
   degatsMax: number;
   cooldown: number;
+  estSoin: boolean;
+  estDispel: boolean;
+  tauxEchec: number;
+}
+
+interface AIContext {
+  combatId: number;
+  entiteId: number;
+  entity: EntityState;
+  blockedCases: CombatCaseState[];
+  healSpells: SpellInfo[];
+  dispelSpells: SpellInfo[];
+  damageSpells: SpellInfo[];
 }
 
 /**
- * Execute a complete AI turn for an enemy entity
- * Uses MonstreSort (priority-based) if monstreTemplateId is set,
- * falls back to generic raceId=null spells otherwise.
+ * Execute a complete AI turn for an entity
+ * Dispatches to the appropriate IA strategy based on iaType
  */
 export async function executeAITurn(combatId: number, entiteId: number): Promise<void> {
   const combat = await prisma.combat.findUnique({
@@ -45,6 +59,9 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
     include: {
       entites: true,
       cases: true,
+      effetsActifs: {
+        include: { effet: true },
+      },
     },
   });
 
@@ -88,82 +105,406 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
     });
   }
 
-  // AI loop: attack → move → attack, repeat while possible
+  // Separate spells by category
+  const healSpells = monsterSpells.filter((s) => s.estSoin);
+  const dispelSpells = monsterSpells.filter((s) => s.estDispel);
+  const damageSpells = monsterSpells.filter((s) => !s.estSoin && !s.estDispel);
+
+  const ctx: AIContext = {
+    combatId,
+    entiteId,
+    entity,
+    blockedCases,
+    healSpells,
+    dispelSpells,
+    damageSpells,
+  };
+
+  // Dispatch to the appropriate strategy
+  const iaType = entity.iaType ?? 'EQUILIBRE';
+  switch (iaType) {
+    case 'AGGRESSIF':
+      await executeAggressifTurn(ctx);
+      break;
+    case 'SOUTIEN':
+      await executeSoutienTurn(ctx);
+      break;
+    case 'DISTANCE':
+      await executeDistanceTurn(ctx);
+      break;
+    case 'EQUILIBRE':
+    default:
+      await executeEquilibreTurn(ctx);
+      break;
+  }
+
+  await endTurn(combatId, entiteId);
+}
+
+// ===== EQUILIBRE (default, original behavior) =====
+// Heal → Dispel → Attack → Move
+
+async function executeEquilibreTurn(ctx: AIContext): Promise<void> {
   let maxIterations = 10;
 
   while (maxIterations > 0) {
     maxIterations--;
 
-    // Refresh entity state
-    const updatedEntity = await prisma.combatEntite.findUnique({
-      where: { id: entiteId },
-    });
-
-    if (!updatedEntity || updatedEntity.pvActuels <= 0) {
-      break;
-    }
-
-    // Refresh alive enemies
-    const currentCombat = await prisma.combat.findUnique({
-      where: { id: combatId },
-      include: { entites: true },
-    });
-    if (!currentCombat || currentCombat.status !== CombatStatus.EN_COURS) break;
-
-    const aliveEnemies = currentCombat.entites.filter(
-      (e) => e.equipe !== entity.equipe && e.pvActuels > 0
-    );
-    if (aliveEnemies.length === 0) break;
-
-    // Find closest enemy
-    const target = findClosestEnemy(updatedEntity, aliveEnemies);
-    if (!target) break;
+    const state = await refreshState(ctx);
+    if (!state) break;
+    const { updatedEntity, aliveEnemies, aliveAllies, currentCombat } = state;
 
     const currentPA = updatedEntity.paActuels;
     const currentPM = updatedEntity.pmActuels;
     const currentX = updatedEntity.positionX;
     const currentY = updatedEntity.positionY;
 
-    // Try to find a usable spell (by priority order)
+    // 1. Heal injured ally (<70% HP)
+    if (ctx.healSpells.length > 0) {
+      const injuredAlly = findMostInjuredAlly(aliveAllies, 0.7);
+      if (injuredAlly) {
+        const healSpell = await findUsableSpell(
+          ctx.combatId, ctx.entiteId, ctx.healSpells,
+          { x: currentX, y: currentY },
+          { x: injuredAlly.positionX, y: injuredAlly.positionY },
+          currentPA, currentCombat.entites, ctx.blockedCases
+        );
+        if (healSpell) {
+          await executeAction(ctx.combatId, ctx.entiteId, healSpell.id, injuredAlly.positionX, injuredAlly.positionY);
+          continue;
+        }
+      }
+    }
+
+    // 2. Dispel debuffed ally
+    if (ctx.dispelSpells.length > 0) {
+      const debuffedAlly = findAllyWithDebuffs(aliveAllies, currentCombat.effetsActifs);
+      if (debuffedAlly) {
+        const dispelSpell = await findUsableSpell(
+          ctx.combatId, ctx.entiteId, ctx.dispelSpells,
+          { x: currentX, y: currentY },
+          { x: debuffedAlly.positionX, y: debuffedAlly.positionY },
+          currentPA, currentCombat.entites, ctx.blockedCases
+        );
+        if (dispelSpell) {
+          await executeAction(ctx.combatId, ctx.entiteId, dispelSpell.id, debuffedAlly.positionX, debuffedAlly.positionY);
+          continue;
+        }
+      }
+    }
+
+    // 3. Attack closest enemy
+    const target = findClosestEnemy(updatedEntity, aliveEnemies);
+    if (!target) break;
+
     const usableSpell = await findUsableSpell(
-      combatId,
-      entiteId,
-      monsterSpells,
+      ctx.combatId, ctx.entiteId, ctx.damageSpells,
       { x: currentX, y: currentY },
       { x: target.positionX, y: target.positionY },
-      currentPA,
-      currentCombat.entites,
-      blockedCases
+      currentPA, currentCombat.entites, ctx.blockedCases
     );
 
     if (usableSpell) {
-      await executeAction(combatId, entiteId, usableSpell.id, target.positionX, target.positionY);
+      await executeAction(ctx.combatId, ctx.entiteId, usableSpell.id, target.positionX, target.positionY);
       continue;
     }
 
-    // Can't attack, try to move closer
+    // 4. Move closer
     if (currentPM > 0) {
       const moveResult = await moveTowardsTarget(
-        combatId,
-        entiteId,
+        ctx.combatId, ctx.entiteId,
         { x: currentX, y: currentY },
         { x: target.positionX, y: target.positionY },
         currentPM,
         { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
-        currentCombat.entites,
-        blockedCases
+        currentCombat.entites, ctx.blockedCases
       );
+      if (moveResult) continue;
+    }
 
-      if (moveResult) {
+    break;
+  }
+}
+
+// ===== AGGRESSIF =====
+// Rush to attack, never heal/dispel, spend all PM to close distance
+
+async function executeAggressifTurn(ctx: AIContext): Promise<void> {
+  let maxIterations = 10;
+
+  while (maxIterations > 0) {
+    maxIterations--;
+
+    const state = await refreshState(ctx);
+    if (!state) break;
+    const { updatedEntity, aliveEnemies, currentCombat } = state;
+
+    const currentPA = updatedEntity.paActuels;
+    const currentPM = updatedEntity.pmActuels;
+    const currentX = updatedEntity.positionX;
+    const currentY = updatedEntity.positionY;
+
+    const target = findClosestEnemy(updatedEntity, aliveEnemies);
+    if (!target) break;
+
+    // 1. Try to attack
+    const usableSpell = await findUsableSpell(
+      ctx.combatId, ctx.entiteId, ctx.damageSpells,
+      { x: currentX, y: currentY },
+      { x: target.positionX, y: target.positionY },
+      currentPA, currentCombat.entites, ctx.blockedCases
+    );
+
+    if (usableSpell) {
+      await executeAction(ctx.combatId, ctx.entiteId, usableSpell.id, target.positionX, target.positionY);
+      continue;
+    }
+
+    // 2. Move closer (spend all PM)
+    if (currentPM > 0) {
+      const moveResult = await moveTowardsTarget(
+        ctx.combatId, ctx.entiteId,
+        { x: currentX, y: currentY },
+        { x: target.positionX, y: target.positionY },
+        currentPM,
+        { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
+        currentCombat.entites, ctx.blockedCases
+      );
+      if (moveResult) continue;
+    }
+
+    break;
+  }
+}
+
+// ===== SOUTIEN =====
+// Heal (threshold 90%) → Dispel → Move towards injured allies → Attack as last resort
+
+async function executeSoutienTurn(ctx: AIContext): Promise<void> {
+  let maxIterations = 10;
+
+  while (maxIterations > 0) {
+    maxIterations--;
+
+    const state = await refreshState(ctx);
+    if (!state) break;
+    const { updatedEntity, aliveEnemies, aliveAllies, currentCombat } = state;
+
+    const currentPA = updatedEntity.paActuels;
+    const currentPM = updatedEntity.pmActuels;
+    const currentX = updatedEntity.positionX;
+    const currentY = updatedEntity.positionY;
+
+    // 1. Heal injured ally (more aggressive threshold: 90%)
+    if (ctx.healSpells.length > 0) {
+      const injuredAlly = findMostInjuredAlly(aliveAllies, 0.9);
+      if (injuredAlly) {
+        const healSpell = await findUsableSpell(
+          ctx.combatId, ctx.entiteId, ctx.healSpells,
+          { x: currentX, y: currentY },
+          { x: injuredAlly.positionX, y: injuredAlly.positionY },
+          currentPA, currentCombat.entites, ctx.blockedCases
+        );
+        if (healSpell) {
+          await executeAction(ctx.combatId, ctx.entiteId, healSpell.id, injuredAlly.positionX, injuredAlly.positionY);
+          continue;
+        }
+
+        // Ally injured but out of range → move towards them
+        if (currentPM > 0) {
+          const moveResult = await moveTowardsTarget(
+            ctx.combatId, ctx.entiteId,
+            { x: currentX, y: currentY },
+            { x: injuredAlly.positionX, y: injuredAlly.positionY },
+            currentPM,
+            { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
+            currentCombat.entites, ctx.blockedCases
+          );
+          if (moveResult) continue;
+        }
+      }
+    }
+
+    // 2. Dispel debuffed ally
+    if (ctx.dispelSpells.length > 0) {
+      const debuffedAlly = findAllyWithDebuffs(aliveAllies, currentCombat.effetsActifs);
+      if (debuffedAlly) {
+        const dispelSpell = await findUsableSpell(
+          ctx.combatId, ctx.entiteId, ctx.dispelSpells,
+          { x: currentX, y: currentY },
+          { x: debuffedAlly.positionX, y: debuffedAlly.positionY },
+          currentPA, currentCombat.entites, ctx.blockedCases
+        );
+        if (dispelSpell) {
+          await executeAction(ctx.combatId, ctx.entiteId, dispelSpell.id, debuffedAlly.positionX, debuffedAlly.positionY);
+          continue;
+        }
+      }
+    }
+
+    // 3. Attack as last resort
+    const target = findClosestEnemy(updatedEntity, aliveEnemies);
+    if (target) {
+      const usableSpell = await findUsableSpell(
+        ctx.combatId, ctx.entiteId, ctx.damageSpells,
+        { x: currentX, y: currentY },
+        { x: target.positionX, y: target.positionY },
+        currentPA, currentCombat.entites, ctx.blockedCases
+      );
+      if (usableSpell) {
+        await executeAction(ctx.combatId, ctx.entiteId, usableSpell.id, target.positionX, target.positionY);
         continue;
       }
     }
 
-    // Can't attack or move, end turn
     break;
   }
+}
 
-  await endTurn(combatId, entiteId);
+// ===== DISTANCE =====
+// Flee if adjacent → Prefer long range spells → Move to stay at range
+
+async function executeDistanceTurn(ctx: AIContext): Promise<void> {
+  // Sort damage spells by porteeMax DESC (prefer long range)
+  const rangedSpells = [...ctx.damageSpells].sort((a, b) => b.porteeMax - a.porteeMax);
+
+  let maxIterations = 10;
+
+  while (maxIterations > 0) {
+    maxIterations--;
+
+    const state = await refreshState(ctx);
+    if (!state) break;
+    const { updatedEntity, aliveEnemies, currentCombat } = state;
+
+    const currentPA = updatedEntity.paActuels;
+    const currentPM = updatedEntity.pmActuels;
+    const currentX = updatedEntity.positionX;
+    const currentY = updatedEntity.positionY;
+
+    const target = findClosestEnemy(updatedEntity, aliveEnemies);
+    if (!target) break;
+
+    const distToTarget = manhattanDistance(currentX, currentY, target.positionX, target.positionY);
+
+    // 1. If enemy is adjacent (dist <= 1), retreat first
+    if (distToTarget <= 1 && currentPM > 0) {
+      const retreated = await moveAwayFromTarget(
+        ctx.combatId, ctx.entiteId,
+        { x: currentX, y: currentY },
+        { x: target.positionX, y: target.positionY },
+        currentPM,
+        { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
+        currentCombat.entites, ctx.blockedCases
+      );
+      if (retreated) continue;
+    }
+
+    // 2. Try ranged attack (sorted by longest range first)
+    const usableSpell = await findUsableSpell(
+      ctx.combatId, ctx.entiteId, rangedSpells,
+      { x: currentX, y: currentY },
+      { x: target.positionX, y: target.positionY },
+      currentPA, currentCombat.entites, ctx.blockedCases
+    );
+
+    if (usableSpell) {
+      await executeAction(ctx.combatId, ctx.entiteId, usableSpell.id, target.positionX, target.positionY);
+      continue;
+    }
+
+    // 3. Move towards target if out of range, but stop when in max range
+    if (currentPM > 0 && rangedSpells.length > 0) {
+      const bestRange = rangedSpells[0].porteeMax;
+      if (distToTarget > bestRange) {
+        const moveResult = await moveTowardsTarget(
+          ctx.combatId, ctx.entiteId,
+          { x: currentX, y: currentY },
+          { x: target.positionX, y: target.positionY },
+          currentPM,
+          { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
+          currentCombat.entites, ctx.blockedCases
+        );
+        if (moveResult) continue;
+      }
+    }
+
+    break;
+  }
+}
+
+// ===== HELPERS =====
+
+/**
+ * Refresh entity and combat state
+ */
+async function refreshState(ctx: AIContext) {
+  const updatedEntity = await prisma.combatEntite.findUnique({
+    where: { id: ctx.entiteId },
+  });
+
+  if (!updatedEntity || updatedEntity.pvActuels <= 0) {
+    return null;
+  }
+
+  const currentCombat = await prisma.combat.findUnique({
+    where: { id: ctx.combatId },
+    include: {
+      entites: true,
+      effetsActifs: {
+        include: { effet: true },
+      },
+    },
+  });
+
+  if (!currentCombat || currentCombat.status !== CombatStatus.EN_COURS) {
+    return null;
+  }
+
+  const aliveEnemies = currentCombat.entites.filter(
+    (e) => e.equipe !== ctx.entity.equipe && e.pvActuels > 0
+  );
+  if (aliveEnemies.length === 0) return null;
+
+  const aliveAllies = currentCombat.entites.filter(
+    (e) => e.equipe === ctx.entity.equipe && e.pvActuels > 0
+  );
+
+  return { updatedEntity, aliveEnemies, aliveAllies, currentCombat };
+}
+
+/**
+ * Find the most injured ally (below threshold % of max HP)
+ */
+function findMostInjuredAlly(allies: EntityState[], threshold: number): EntityState | null {
+  let mostInjured: EntityState | null = null;
+  let lowestRatio = threshold;
+
+  for (const ally of allies) {
+    const ratio = ally.pvActuels / ally.pvMax;
+    if (ratio < lowestRatio) {
+      lowestRatio = ratio;
+      mostInjured = ally;
+    }
+  }
+
+  return mostInjured;
+}
+
+/**
+ * Find an ally that has active debuffs
+ */
+function findAllyWithDebuffs(
+  allies: EntityState[],
+  effetsActifs: Array<{ entiteId: number; effet: { type: string } }>
+): EntityState | null {
+  for (const ally of allies) {
+    const hasDebuff = effetsActifs.some(
+      (e) => e.entiteId === ally.id && e.effet.type === 'DEBUFF'
+    );
+    if (hasDebuff) return ally;
+  }
+  return null;
 }
 
 /**
@@ -239,6 +580,53 @@ async function moveTowardsTarget(
   if (Math.abs(dx) >= Math.abs(dy)) {
     if (dx > 0) possibleMoves.push({ x: from.x + 1, y: from.y });
     else if (dx < 0) possibleMoves.push({ x: from.x - 1, y: from.y });
+    if (dy > 0) possibleMoves.push({ x: from.x, y: from.y + 1 });
+    else if (dy < 0) possibleMoves.push({ x: from.x, y: from.y - 1 });
+  } else {
+    if (dy > 0) possibleMoves.push({ x: from.x, y: from.y + 1 });
+    else if (dy < 0) possibleMoves.push({ x: from.x, y: from.y - 1 });
+    if (dx > 0) possibleMoves.push({ x: from.x + 1, y: from.y });
+    else if (dx < 0) possibleMoves.push({ x: from.x - 1, y: from.y });
+  }
+
+  for (const move of possibleMoves) {
+    const moveCheck = canMove(from, move, availablePM, grid, entities, blockedCases);
+    if (moveCheck.valid) {
+      const result = await moveEntity(combatId, entiteId, move.x, move.y);
+      return result.success;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Move one step away from the target (reverse of moveTowardsTarget)
+ */
+async function moveAwayFromTarget(
+  combatId: number,
+  entiteId: number,
+  from: Position,
+  to: Position,
+  availablePM: number,
+  grid: { width: number; height: number },
+  entities: EntityState[],
+  blockedCases: CombatCaseState[]
+): Promise<boolean> {
+  // Reverse the direction
+  const dx = from.x - to.x;
+  const dy = from.y - to.y;
+
+  const possibleMoves: Position[] = [];
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    if (dx > 0) possibleMoves.push({ x: from.x + 1, y: from.y });
+    else if (dx < 0) possibleMoves.push({ x: from.x - 1, y: from.y });
+    else {
+      // Same X, try both horizontal directions
+      possibleMoves.push({ x: from.x + 1, y: from.y });
+      possibleMoves.push({ x: from.x - 1, y: from.y });
+    }
     if (dy > 0) possibleMoves.push({ x: from.x, y: from.y + 1 });
     else if (dy < 0) possibleMoves.push({ x: from.x, y: from.y - 1 });
   } else {
