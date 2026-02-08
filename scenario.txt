@@ -1,10 +1,6 @@
-[--] Non testable en jeu : aucun sort/arme de niveau 1 n'a tauxEchec > 0
-     Les sorts avec tauxEchec sont de haut niveau (4, 7, 10)
-     Le code de miss existe dans engine.ts (verifie apres PA/cooldown)
-[--] Dispel sur cible sans effets : non teste directement (cooldown empechait)
+voir la difference entre claude.md et memory.md
 
-comment on met les stats au lvl up
-
+Test combats a l'air ok
 
 
 

@@ -62,11 +62,14 @@ export class ProgressionService {
       }
     }
 
-    // Distribute XP equally among surviving characters
-    const xpPerCharacter = Math.floor(totalXP / team0Alive.length);
+    // Distribute XP equally among all player characters (alive and dead)
+    const team0All = combat.entites.filter((e) => e.equipe === 0 && e.personnageId !== null && e.invocateurId === null);
+    if (team0All.length === 0) return [];
+
+    const xpPerCharacter = Math.floor(totalXP / team0All.length);
     const results: { personnageId: number; xpGagne: number; levelUp: boolean; nouveauNiveau?: number }[] = [];
 
-    for (const entity of team0Alive) {
+    for (const entity of team0All) {
       if (entity.personnageId) {
         const result = await this.addXP(entity.personnageId, xpPerCharacter);
         results.push(result);

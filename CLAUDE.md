@@ -27,10 +27,6 @@ npx prisma db push       # Push schema sans migration (dev)
 npx prisma db seed       # Peupler avec données de base
 npx prisma studio        # Interface graphique BDD
 npx prisma generate      # Régénérer le client Prisma
-
-# PostgreSQL (Windows)
-setup_db.bat             # Créer user/database (première fois)
-# Démarrer PostgreSQL : Services Windows → postgresql-x64-18 → Démarrer
 ```
 
 ## Structure du projet
@@ -38,15 +34,14 @@ setup_db.bat             # Créer user/database (première fois)
 ```
 backend/
 ├── src/
-│   ├── index.ts                 # Point d'entrée, démarrage serveur
-│   ├── app.ts                   # Configuration Express, middlewares
-│   ├── config/
-│   │   └── database.ts          # Client Prisma singleton
+│   ├── index.ts                 # Point d'entrée
+│   ├── app.ts                   # Configuration Express
+│   ├── config/database.ts       # Client Prisma singleton
 │   ├── api/
-│   │   ├── routes.ts            # Agrégation de toutes les routes
+│   │   ├── routes.ts            # Agrégation routes
 │   │   ├── players/             # CRUD joueurs
 │   │   ├── characters/          # CRUD personnages + équipement + progression
-│   │   ├── groups/              # Gestion des groupes + navigation
+│   │   ├── groups/              # Gestion groupes + navigation
 │   │   ├── combat/              # Endpoints combat
 │   │   ├── maps/                # Régions, maps, monstres, spawns
 │   │   ├── grilles/             # CRUD grilles de combat prédéfinies
@@ -56,7 +51,7 @@ backend/
 │   │   ├── player.service.ts
 │   │   ├── character.service.ts # + stats totales, équipement
 │   │   ├── group.service.ts     # + navigation entre maps, engagement auto
-│   │   ├── region.service.ts    # Gestion des régions
+│   │   ├── region.service.ts
 │   │   ├── map.service.ts       # Maps, groupes ennemis, spawns, engagement
 │   │   ├── monstre.service.ts   # Templates de monstres
 │   │   ├── progression.service.ts  # XP, level-up, allocation stats
@@ -68,188 +63,99 @@ backend/
 │   │       ├── engine.ts           # Logique coeur du combat
 │   │       ├── initiative.ts       # Calcul ordre de jeu
 │   │       ├── damage.ts           # Calcul dégâts/critiques
-│   │       ├── movement.ts         # Déplacement sur grille
+│   │       ├── movement.ts         # Déplacement sur grille + LOS
 │   │       ├── grid.ts             # Chargement grille template, obstacles
 │   │       ├── aoe.ts              # Zones d'effet (5 types)
 │   │       ├── ai.ts               # IA des monstres
 │   │       ├── invocation.ts       # Système d'invocations
-│   │       └── effects.ts          # Buffs/debuffs (application, calcul stats modifiées)
+│   │       └── effects.ts          # Buffs/debuffs (application, stats modifiées)
 │   ├── utils/
-│   │   ├── random.ts              # Fonctions aléatoires
+│   │   ├── random.ts
 │   │   └── formulas.ts            # Formules de jeu (PV, stats, XP...)
-│   └── types/
-│       └── index.ts               # Types TypeScript partagés
+│   └── types/index.ts             # Types TypeScript partagés
 ├── prisma/
 │   ├── schema.prisma              # Schéma BDD complet
 │   └── seed.ts                    # Données initiales
-├── docs/
-│   ├── API_DOCUMENTATION.md       # Doc API complète
-│   ├── QUICK_REFERENCE.md         # Référence rapide
-│   ├── frontend-types.ts          # Types pour le frontend
-│   └── api-client-example.ts      # Exemple client API
-└── setup_db.bat                   # Script setup PostgreSQL
+└── docs/
+    ├── API_DOCUMENTATION.md       # Doc API complète + exemples réponses
+    └── QUICK_REFERENCE.md         # Référence rapide + curl exemples
 ```
 
 ## Architecture
 
-### Pattern utilisé
-- **Controller**: Validation des entrées (Zod), gestion HTTP
-- **Service**: Logique métier, accès BDD via Prisma
-- **Routes**: Définition des endpoints Express
-
-### Flux d'une requête
+### Pattern : Controller/Service/Route
 ```
-Request → Routes → Controller → Service → Prisma → PostgreSQL
-                      ↓
-                 Validation Zod
+Request → Routes → Controller (Zod) → Service (Prisma) → PostgreSQL
 ```
 
 ## API Endpoints
 
 ### Players (`/api/players`)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| POST | `/` | Créer un joueur |
-| GET | `/` | Lister tous les joueurs |
-| GET | `/:id` | Obtenir un joueur |
-| GET | `/:id/characters` | Personnages du joueur |
-| GET | `/:id/groups` | Groupes du joueur |
-| DELETE | `/:id` | Supprimer un joueur |
+POST `/` | GET `/` | GET `/:id` | GET `/:id/characters` | GET `/:id/groups` | DELETE `/:id`
 
 ### Characters (`/api/characters`)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| POST | `/` | Créer un personnage |
-| GET | `/` | Lister tous les personnages |
-| GET | `/:id` | Obtenir un personnage avec stats totales |
-| PATCH | `/:id` | Modifier nom/stats |
-| PUT | `/:id/equipment` | Équiper un item |
-| GET | `/:id/spells` | Sorts appris |
-| POST | `/:id/allocate-stats` | Allouer points de stats |
-| GET | `/:id/progression` | Info XP/niveau |
-| DELETE | `/:id` | Supprimer un personnage |
+POST `/` | GET `/` | GET `/:id` (avec stats totales) | PATCH `/:id` | PUT `/:id/equipment` | GET `/:id/spells` | POST `/:id/allocate-stats` | GET `/:id/progression` | DELETE `/:id`
 
 ### Groups (`/api/groups`)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| POST | `/` | Créer un groupe |
-| GET | `/` | Lister tous les groupes |
-| GET | `/:id` | Obtenir un groupe |
-| POST | `/:id/characters` | Ajouter un personnage (max 6) |
-| DELETE | `/:id/characters/:charId` | Retirer un personnage |
-| PATCH | `/:id/move` | Déplacer le groupe |
-| POST | `/:id/enter-map` | Entrer sur une map |
-| POST | `/:id/use-connection` | Utiliser une connexion |
-| POST | `/:id/move-direction` | Naviguer par direction (NORD/SUD/EST/OUEST) |
-| POST | `/:id/leave-map` | Quitter la map |
-| DELETE | `/:id` | Supprimer un groupe |
+POST `/` | GET `/` | GET `/:id` | POST `/:id/characters` (max 6) | DELETE `/:id/characters/:charId` | PATCH `/:id/move` | POST `/:id/enter-map` | POST `/:id/use-connection` | POST `/:id/move-direction` (NORD/SUD/EST/OUEST) | POST `/:id/leave-map` | DELETE `/:id`
 
 ### Combat (`/api/combats`)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| POST | `/` | Créer un combat |
-| GET | `/` | Lister tous les combats |
-| GET | `/:id` | État du combat |
-| POST | `/:id/action` | Exécuter sort/attaque ou attaque d'arme |
-| POST | `/:id/move` | Déplacer une entité |
-| POST | `/:id/end-turn` | Finir le tour |
-| POST | `/:id/flee` | Fuir le combat |
+POST `/` | GET `/` | GET `/:id` | POST `/:id/action` (sort ou arme) | POST `/:id/move` | POST `/:id/end-turn` | POST `/:id/flee`
 
 ### Maps (`/api/maps`)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| GET | `/` | Lister toutes les maps |
-| GET | `/:id` | Détails map + groupes ennemis + connexions |
-| POST | `/` | Créer une map |
-| POST | `/:id/connections` | Ajouter connexion |
-| POST | `/:id/spawn-enemies` | Spawn groupes ennemis (MANUEL) |
-| POST | `/:id/engage` | Engager un groupe ennemi |
-| POST | `/:id/respawn` | Respawn groupes vaincus |
+GET `/` | GET `/:id` | POST `/` | POST `/:id/connections` | POST `/:id/spawn-enemies` | POST `/:id/engage` | POST `/:id/respawn`
 
-### Grilles de combat (`/api/grilles`)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| POST | `/` | Créer une grille (nom, mapId, dimensions, cases, spawns) |
-| GET | `/` | Lister toutes les grilles |
-| GET | `/:id` | Détails grille avec cases et spawns |
-| PUT | `/:id` | Mise à jour complète (remplace tout) |
-| DELETE | `/:id` | Supprimer une grille |
-| PUT | `/:id/cases` | Remplacer les obstacles |
-| PUT | `/:id/spawns` | Remplacer les positions de spawn |
+### Grilles (`/api/grilles`)
+POST `/` | GET `/` | GET `/:id` | PUT `/:id` | DELETE `/:id` | PUT `/:id/cases` | PUT `/:id/spawns`
 
 ### Regions (`/api/regions`)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| GET | `/` | Lister régions avec maps |
-| GET | `/:id` | Détails région |
-| POST | `/` | Créer une région |
+GET `/` | GET `/:id` | POST `/`
 
 ### Monstres (`/api/monstres`)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| GET | `/` | Lister templates |
-| GET | `/:id` | Détails template |
-| POST | `/` | Créer template |
+GET `/` | GET `/:id` | POST `/`
 
 ### Donjons (`/api/donjons`)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| GET | `/` | Lister tous les donjons |
-| GET | `/:id` | Détails d'un donjon |
-| POST | `/:id/enter` | Entrer dans un donjon |
-| GET | `/run/:groupeId` | État du run actif |
-| POST | `/run/:groupeId/abandon` | Abandonner le donjon |
+GET `/` | GET `/:id` | POST `/:id/enter` | GET `/run/:groupeId` | POST `/run/:groupeId/abandon`
 
-### Static Data (`/api/races`, `/api/spells`, `/api/equipment`, `/api/effects`, `/api/zones`)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| GET | `/races` | Lister races avec sorts |
-| GET | `/races/:id` | Détails race |
-| GET | `/spells` | Lister tous les sorts |
-| GET | `/spells/:id` | Détails sort |
-| GET | `/equipment` | Lister équipements |
-| GET | `/equipment/:id` | Détails équipement |
-| GET | `/effects` | Lister effets (buffs/debuffs) |
-| GET | `/zones` | Lister zones d'effet |
+### Static Data
+GET `/api/races` | `/api/races/:id` | `/api/spells` | `/api/spells/:id` | `/api/equipment` | `/api/equipment/:id` | `/api/effects` | `/api/zones`
 
 ## Base de données
 
 ### Tables principales
 - `Joueur` - Comptes joueurs
-- `Personnage` - Personnages avec stats, niveau, XP, équipement (JSON)
+- `Personnage` - Stats, niveau, XP, équipement (JSON)
 - `PersonnageSort` - Sorts appris par personnage
-- `Groupe` - Équipes de personnages (max 6), position sur map
-- `GroupePersonnage` - Relation many-to-many groupe/personnage
-- `Combat` - Instances de combat (`entiteActuelleId` tracke le tour actif)
-- `CombatEntite` - Entités dans un combat (snapshot des stats + armeData JSON pour l'arme équipée + monstreTemplateId/niveau pour XP scaling et IA + iaType pour stratégie IA + invocateurId pour invocations)
+- `Groupe` / `GroupePersonnage` - Équipes (max 6), position sur map
+- `Combat` - Instances de combat (`entiteActuelleId` = tour actif)
+- `CombatEntite` - Snapshot stats + `armeData` JSON + `monstreTemplateId`/`niveau` + `iaType` + `invocateurId`
 - `CombatCase` - Obstacles sur la grille
-- `EffetActif` - Buffs/debuffs actifs (`onDelete: Cascade` via Combat)
-- `SortCooldown` - Cooldowns des sorts en combat (`onDelete: Cascade` via Combat)
+- `EffetActif` - Buffs/debuffs actifs (Cascade via Combat)
+- `SortCooldown` - Cooldowns sorts en combat (Cascade via Combat)
 
 ### Tables Monde & Maps
 - `Region` - Zones du monde (Forêt, Plaine, Montagne...)
-- `Map` - Cartes dans une région avec **voisins directionnels** (`nordMapId`, `sudMapId`, `estMapId`, `ouestMapId`)
-- `MapConnection` - Portails nommés avec position (x, y) pour navigation positionnelle (sans direction)
-- `MonstreTemplate` - Définitions de monstres réutilisables (+ `iaType` pour stratégie IA, `pvScalingInvocation` pour scaling PV invocations)
-- `RegionMonstre` - Liaison many-to-many monstres ↔ régions avec probabilité
-- `MonstreSort` - Sorts spécifiques par monstre avec priorité (1 = plus haute)
-- `GroupeEnnemi` - Groupes d'ennemis sur une map (position unique, 1-3 groupes par map)
-- `GroupeEnnemiMembre` - Composition des groupes (types de monstres mixtes, 1-8 monstres)
+- `Map` - Cartes avec voisins directionnels (`nordMapId`, `sudMapId`, `estMapId`, `ouestMapId`)
+- `MapConnection` - Portails nommés avec position (x, y)
+- `MonstreTemplate` - Définitions monstres (+ `iaType`, `pvScalingInvocation`)
+- `RegionMonstre` - Many-to-many monstres ↔ régions avec probabilité
+- `MonstreSort` - Sorts par monstre avec priorité (1 = plus haute)
+- `GroupeEnnemi` / `GroupeEnnemiMembre` - Groupes ennemis sur map (1-3 groupes, 1-8 monstres, composition mixte)
 
 ### Tables grilles de combat
-- `GrilleCombat` - Templates de grilles de combat (nom, mapId, dimensions)
-- `GrilleCase` - Obstacles prédéfinis sur une grille template
-- `GrilleSpawn` - Positions de spawn prédéfinies (8 joueurs + 8 ennemis par grille)
+- `GrilleCombat` - Templates (nom, mapId, dimensions)
+- `GrilleCase` - Obstacles prédéfinis (Cascade)
+- `GrilleSpawn` - 8 joueurs + 8 ennemis par grille (Cascade)
 
 ### Tables référentielles
-- `Race` - Races avec bonus de stats
-- `Sort` - Sorts/attaques avec niveau requis (degatsCritMin/degatsCritMax pour range de critique, `estSoin`/`estDispel`/`estInvocation` pour type spécial, `tauxEchec` pour chance de rater, `invocationTemplateId` pour sorts d'invocation)
-- `SortEffet` - Liaison sort → effet (chanceDeclenchement, surCible/surLanceur)
+- `Race` - Bonus de stats
+- `Sort` - Sorts avec `degatsCritMin`/`degatsCritMax`, `estSoin`/`estDispel`/`estInvocation`, `tauxEchec`, `invocationTemplateId`
+- `SortEffet` - Liaison sort → effet (`chanceDeclenchement`, `surCible`/`surLanceur`)
 - `Zone` - Types de zones d'effet
-- `Equipement` - Items équipables avec bonus stats. Les armes ont aussi des données d'attaque (degats, portee, PA, zone, etc.) + `tauxEchec` optionnel
+- `Equipement` - Items avec bonus stats. Armes : données d'attaque + `tauxEchec` optionnel
 - `Effet` - Buffs/debuffs
 
-### Enums (Prisma)
+### Enums
 ```prisma
 enum StatType { FORCE, INTELLIGENCE, DEXTERITE, AGILITE, VIE, CHANCE }
 enum SortType { ARME, SORT }
@@ -263,900 +169,160 @@ enum CombatMode { MANUEL, AUTO }
 enum IAType { EQUILIBRE, AGGRESSIF, SOUTIEN, DISTANCE }
 ```
 
-### Types TypeScript (src/types/index.ts)
+### Types TypeScript
 ```typescript
-type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST'  // Pour navigation entre maps
+type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST'
 ```
-
-## Système de progression
-
-### Expérience et niveau
-```typescript
-// XP requis pour le niveau suivant
-xpRequis = niveau² × 50
-
-// Exemple: niveau 1 → 2 = 50 XP, niveau 5 → 6 = 1250 XP
-
-// Points de stats gagnés par niveau
-pointsParNiveau = 10
-```
-
-### Distribution d'XP
-- XP distribuée uniquement si le groupe gagne le combat
-- XP partagée entre les personnages survivants
-- XP proportionnelle au niveau du monstre : `XP = xpRecompense × (niveau / niveauBase)`
-- Utilise `monstreTemplateId` et `niveau` stockés dans CombatEntite (fallback par nom si absent)
-- Level-up automatique si XP suffisant
-- Nouveaux sorts appris automatiquement au level-up
-
-### Apprentissage des sorts
-- À la création du personnage, les sorts de niveau 1 de sa race sont appris automatiquement
-- Au level-up, les sorts dont le `niveauApprentissage` correspond au nouveau niveau sont appris
-- Un personnage peut voir ses sorts via `GET /characters/:id/spells`
-
-### Allocation de stats
-- 10 points disponibles par niveau
-- Endpoint: `POST /characters/:id/allocate-stats`
-- Body: `{ force: 2, agilite: 3, ... }`
-
-## Système d'équipement
-
-### Slots disponibles
-- ARME, COIFFE, AMULETTE, BOUCLIER
-- HAUT, BAS
-- ANNEAU1, ANNEAU2
-- FAMILIER
-
-### Stats totales
-```typescript
-statsTotales = statsBase + bonusRace + bonusÉquipement
-```
-
-### Équiper un item
-```typescript
-PUT /characters/:id/equipment
-{ slot: "ARME", equipmentId: 1 }
-```
-
-### Vérifications
-- Niveau minimum de l'équipement
-- Slot correspondant
 
 ## Système de combat
 
-### Grille de combat
-- Grilles prédéfinies stockées en BDD (`GrilleCombat`)
-- Une grille aléatoire est choisie parmi les templates de la map
-- Taille standard: 15×10 (configurable par template)
-- 8 positions de spawn joueurs (equipe=0) + 8 ennemis (equipe=1)
-- Joueurs placés à gauche (x=0-1), ennemis à droite (x=13-14)
-- Obstacles prédéfinis peuvent bloquer:
-  - Mouvement uniquement
-  - Mouvement ET ligne de vue
-
 ### Déroulement
-1. Création du combat (via engage ou rencontre AUTO)
-2. Sélection aléatoire d'une grille template pour la map
-3. Placement joueurs/monstres aux positions de spawn prédéfinies
-4. Copie des obstacles de la grille template dans le combat
-5. Snapshot de l'arme équipée (armeData) pour chaque joueur
-6. Calcul initiative: `agilité + random(1-20)`
-7. **Alternance d'initiative par bloc équilibré** (voir ci-dessous)
-8. `entiteActuelleId` est initialisé sur l'entité avec `ordreJeu === 1` et mis à jour à chaque `endTurn()`
-9. Chaque tour: déplacements (PM) + actions (PA) via sorts OU attaque d'arme
-10. **Vérification de tour** : `executeAction()`, `moveEntity()` et `endTurn()` refusent si `entiteId !== entiteActuelleId`
-11. **Vérification de sort** : `executeAction()` vérifie que le sort est appris (PersonnageSort pour joueurs, MonstreSort pour monstres)
-12. IA joue automatiquement pour les monstres ET les invocations des joueurs (entités avec `invocateurId`)
-13. Fin de round: restauration PA/PM
-14. Début de tour de chaque entité: décrémentation de ses effets, cooldowns sorts et cooldown arme
-15. Fin combat: une équipe éliminée ou fuite → nettoyage effets/cooldowns + suppression invocations survivantes
-16. Distribution XP si victoire
+1. Création (via engage ou rencontre AUTO) → grille template aléatoire → placement spawns → copie obstacles → snapshot armeData → initiative
+2. Initiative alternée : `INIT = agilité + random(1-20)`, alternance J1→M1→J2→M2→..., reste de l'équipe plus nombreuse à la fin
+3. `entiteActuelleId` tracke le tour actif, vérifié sur `executeAction()`, `moveEntity()`, `endTurn()`
+4. Chaque tour : déplacements (PM) + actions (PA) via sorts OU arme
+5. Vérification de sort : `PersonnageSort` (joueurs) / `MonstreSort` (monstres)
+6. IA auto-play : monstres (equipe=1) ET invocations joueur (`invocateurId !== null`)
+7. Début de tour : décrémentation effets + cooldowns per-entity
+8. Fin combat : nettoyage effets/cooldowns + suppression invocations survivantes + XP si victoire (tous les joueurs, vivants ET morts, invocations exclues)
 
-### Actions de combat
-- **Sort** : `POST /combats/:id/action { entiteId, sortId, targetX, targetY }` — utilise un sort appris
-- **Arme** : `POST /combats/:id/action { entiteId, useArme: true, targetX, targetY }` — attaque avec l'arme équipée (nécessite une arme avec données d'attaque)
-- Sans arme équipée, `useArme: true` retourne une erreur
-
-### Vérification de tour (entiteActuelleId)
-- Le champ `Combat.entiteActuelleId` persiste l'ID de l'entité dont c'est le tour
-- Initialisé dans `initializeInitiative()` sur l'entité avec `ordreJeu === 1`
-- Mis à jour dans `endTurn()` vers l'entité suivante
-- `executeAction()`, `moveEntity()` et `endTurn()` vérifient `combat.entiteActuelleId !== entiteId` → erreur `"Not this entity's turn"`
-- `getCombatState()` retourne `entiteActuelle` directement depuis ce champ (plus de calcul dynamique)
-
-### Vérification de sort (spell ownership)
-- `executeAction()` vérifie que l'entité connaît le sort avant de l'exécuter
-- **Joueur** (`personnageId` non null) : vérifie `PersonnageSort` → erreur `"Spell not learned"`
-- **Monstre** (`monstreTemplateId` non null) : vérifie `MonstreSort` → erreur `"Spell not available"`
-
-### Ciblage libre
-- Les sorts et armes touchent **toutes les entités** dans la zone d'effet, alliés ET ennemis
-- Aucun filtre par équipe : un sort d'attaque peut viser un allié, un soin peut viser un ennemi
-- Le joueur doit choisir ses cibles avec précaution (AoE dangereuse pour l'équipe)
-
-### Pourcentage d'échec (tauxEchec)
-- Chaque sort et arme peut avoir un `tauxEchec` (0.0-1.0)
-- Vérifié **après** déduction des PA et application du cooldown
-- **Sort raté** : les PA sont perdus, retour `missed: true`
-- **Arme ratée** : les PA sont perdus ET le tour est terminé automatiquement (`endTurn()`)
-- Sorts existants avec tauxEchec : Explosion arcanique (15%), Tempête arcanique (20%), Rage berserk (10%), Frappe dévastatrice (15%), Attaque éclair (10%)
-- Armes avec tauxEchec : Arc long (10%), Dagues jumelles (5%)
-
-### Sorts de soin (estSoin)
-- Les sorts avec `estSoin: true` rendent des PV au lieu de faire des dégâts
-- Utilisent `calculateDamage()` pour calculer le montant de soin (même formule que les dégâts)
-- Les PV sont plafonnés à `pvMax` (pas de sur-soin)
-- Réponse API contient `heals[]` au lieu de `damages[]`
-- Sorts de soin disponibles : Soin (Humain, niv 3), Soin de lumière (Elfe, niv 1), Second souffle (Nain, niv 4)
-
-### Sorts de désenvoutement (estDispel)
-- Les sorts avec `estDispel: true` retirent **tous les effets actifs** (buffs ET debuffs) de la cible
-- 0 dégâts, pas de calcul de damage
-- Réponse API contient `removedEffects[]` avec le nombre d'effets retirés par cible
-- Chaque race a un sort de dispel (niveau 1, 3 PA, portée 1-5, cooldown 2)
-
-### Système d'initiative alternée
-
-Le système d'initiative assure un équilibre entre les équipes :
-
-1. Chaque entité calcule son initiative : `INIT = agilité + random(1-20)`
-2. Les équipes sont séparées et triées par initiative (décroissante)
-3. L'ordre alterne : `Joueur[0] → Ennemi[0] → Joueur[1] → Ennemi[1] → ...`
-4. Les entités restantes de l'équipe plus nombreuse jouent à la fin
-
-**Exemple** (3 joueurs vs 5 monstres) :
-```
-Joueurs triés par init : J1(25), J2(20), J3(15)
-Monstres triés par init : M1(22), M2(18), M3(16), M4(12), M5(8)
-Ordre final : J1 → M1 → J2 → M2 → J3 → M3 → M4 → M5
-```
-
-**Avantages** :
-- Équilibre garanti même avec des équipes de tailles différentes
-- L'agilité détermine qui joue en premier dans son équipe
-- Les invocations jouent juste après leur invocateur
+### Actions
+- **Sort** : `{ entiteId, sortId, targetX, targetY }` — sort appris
+- **Arme** : `{ entiteId, useArme: true, targetX, targetY }` — arme équipée (snapshot armeData)
+- **Ciblage libre** : touche TOUTES entités dans zone (alliés ET ennemis)
+- **tauxEchec** : vérifié après PA déduits. Sort raté = PA perdus. Arme ratée = tour perdu (endTurn)
+- **estSoin** : heal (même formule que dégâts, +PV plafonné à pvMax)
+- **estDispel** : supprime tous effets actifs de la cible
+- **estInvocation** : invoque entité à position libre (0 dégâts)
 
 ### Formules clés
 ```typescript
-// Points de vie
 pvMax = 50 + (vie × 5)
-
-// PA/PM de base
-paBase = 6
-pmBase = 3
-
-// Dégâts
+paBase = 6, pmBase = 3
 multiplicateur = (stat / 100) + 1
 chanceCrit = chanceCritBase + (chance / 100)
-dégâts normaux = floor(random(degatsMin, degatsMax) × multiplicateur)
-dégâts critiques = floor(random(degatsCritMin, degatsCritMax) × multiplicateur)
-
-// Soin (même formule que dégâts, appliqué en +PV)
-soin = floor(random(degatsMin, degatsMax) × multiplicateur)
-pvFinal = min(pvActuels + soin, pvMax)
-
-// Échec
-missed = random() < tauxEchec  // PA perdus, arme = tour perdu
-
-// Distance (Manhattan, pas de diagonale)
-distance = |x2 - x1| + |y2 - y1|
-
-// Scaling monstres (+10% par niveau)
-scaleFactor = 1 + (niveau - niveauBase) × 0.1
-statFinale = floor(statBase × scaleFactor)
+dégâts = floor(random(degatsMin, degatsMax) × multiplicateur)
+critiques = floor(random(degatsCritMin, degatsCritMax) × multiplicateur)
+distance = |x2 - x1| + |y2 - y1|  // Manhattan
+scaleFactor = 1 + (niveau - niveauBase) × 0.1  // Monstres +10%/niveau
+xpRequis = niveau² × 50
+XP monstre = xpRecompense × (niveau / niveauBase)
+XP par joueur = totalXP / nombre total joueurs (vivants + morts, hors invocations)
 ```
 
 ### Zones d'effet
-| Type | Description |
-|------|-------------|
-| CASE | Case unique ciblée |
-| CROIX | Centre + extensions N/S/E/O selon taille |
-| CERCLE | Toutes cases dans rayon (Manhattan) |
-| LIGNE | Ligne droite depuis lanceur vers cible |
-| CONE | Cône depuis lanceur vers direction |
+CASE (unique) | CROIX (N/S/E/O selon taille) | CERCLE (rayon Manhattan) | LIGNE (lanceur→cible) | CONE (lanceur→direction)
 
 ### Ligne de vue (LOS)
-- Vérifiée avant chaque sort/arme ayant `ligneDeVue: true`
-- Algorithme **Bresenham supercover** : trace une vraie ligne droite de cellule en cellule
-- **LDV stricte** sur les diagonales : quand la ligne passe par un coin entre 4 cellules, les 2 cellules adjacentes sont vérifiées (une seule entité/obstacle suffit à bloquer)
-- Bloquée par obstacles avec `bloqueLigneDeVue: true`
-- Bloquée par entités vivantes (`pvActuels > 0`) sur le chemin
-- Position du lanceur et de la cible exclues des vérifications
-- Implémentation dans `movement.ts` : `getLineOfSightCells()` + `hasLineOfSight()`
-
-### Cooldowns
-- Certains sorts ont un cooldown (tours)
-- Décrémenté au début du tour de chaque entité (per-entity, pas global par round)
-- Vérifié avant utilisation du sort
-- Nettoyés automatiquement en fin de combat (victoire, défaite ou fuite)
+- Bresenham supercover, LDV stricte sur diagonales
+- Bloquée par obstacles (`bloqueLigneDeVue`) et entités vivantes
+- Lanceur et cible exclus des vérifications
+- `movement.ts` : `getLineOfSightCells()` + `hasLineOfSight()`
 
 ## IA des monstres
 
-### Types d'IA (IAType)
-Chaque monstre/invocation a un `iaType` qui détermine sa stratégie de combat :
+### Types d'IA
+| IAType | Comportement |
+|--------|-------------|
+| EQUILIBRE | heal allié <70% → dispel debuff → attaque → move (défaut) |
+| AGGRESSIF | attaque uniquement, rush, jamais heal/dispel |
+| SOUTIEN | heal allié <90%, avance vers alliés blessés, attaque en dernier |
+| DISTANCE | recule si adjacent (`moveAwayFromTarget`), préfère sorts longue portée |
 
-| IAType | Comportement | Utilisé par |
-|--------|-------------|-------------|
-| EQUILIBRE | Équilibré : heal → dispel → attack → move (défaut) | Bandit, Golem Arcanique |
-| AGGRESSIF | Fonce au combat, jamais de heal/dispel | Gobelin, Loup, Squelette, Troll, Gardien de Pierre, Loup Spectral |
-| SOUTIEN | Soigne en priorité (seuil 90%), attaque en dernier recours | Esprit de Lumière |
-| DISTANCE | Recule si ennemi adjacent, préfère sorts longue portée | Araignée Géante, Ombre Furtive |
+### Dispatch
+`executeAITurn()` → `executeEquilibreTurn()` / `executeAggressifTurn()` / `executeSoutienTurn()` / `executeDistanceTurn()`
 
-### Dispatch par iaType
-L'IA dispatche automatiquement vers la stratégie appropriée selon `entity.iaType` :
-- `executeEquilibreTurn()` — heal allié blessé (<70%) → dispel debuff → attaque → déplacement
-- `executeAggressifTurn()` — attaque uniquement, dépense tous les PM pour avancer, jamais heal/dispel
-- `executeSoutienTurn()` — heal allié blessé (<90%), avance vers alliés blessés, attaque en dernier recours
-- `executeDistanceTurn()` — recule si ennemi adjacent (`moveAwayFromTarget`), préfère sorts longue portée (tri par `porteeMax` DESC)
+Sorts via `MonstreSort` triés par `priorite`. Auto-play pour monstres ET invocations (`invocateurId !== null`).
 
-### Auto-play
-L'IA joue automatiquement pour :
-- **Monstres** (equipe === 1)
-- **Invocations des joueurs** (entités avec `invocateurId !== null`, même equipe 0)
+### Pathfinding
+- `bfsFirstStep()` : BFS pour trouver le meilleur premier pas vers une cible en contournant obstacles/entités
+- `moveTowardsTarget()` : utilise BFS, retourne le premier pas optimal
+- `moveAwayFromTarget()` : teste les 4 directions, choisit celle qui maximise la distance
 
-### Sélection de sort
-- Sorts récupérés via `MonstreSort` triés par `priorite` (1 = plus haute)
-- Utilise `entity.monstreTemplateId` pour le lookup
-- Fallback : si `monstreTemplateId` est null, utilise les sorts raceId=null
-
-### Helpers IA
-- `findMostInjuredAlly(allies, threshold)` : retourne l'allié le plus blessé sous le seuil (ratio PV/PVMax)
-- `findAllyWithDebuffs(allies, effetsActifs)` : retourne le premier allié ayant un debuff actif
-- `findClosestEnemy(entity, enemies)` : retourne l'ennemi le plus proche (Manhattan)
-- `moveAwayFromTarget(entity, target)` : recule l'entité à l'opposé de la cible (inverse de `moveTowardsTarget`)
+### Helpers
+`findMostInjuredAlly()`, `findAllyWithDebuffs()`, `findClosestEnemy()`
 
 ## Système d'invocations
 
-### Sorts d'invocation
-- Un sort avec `estInvocation: true` et `invocationTemplateId` invoque une entité
-- Le sort utilise des PA mais ne fait pas de dégâts (degats à 0)
-- La position cible doit être libre (pas occupée, pas bloquée)
-- Pas de limite de nombre d'invocations : seul le cooldown du sort empêche le spam
-- Chaque race a un sort d'invocation appris au niveau 5
-
-### Templates d'invocation (5)
-| Template | IAType | Race | Stats base | pvBase | pvScaling |
-|----------|--------|------|-----------|--------|-----------|
-| Gardien de Pierre | AGGRESSIF | Nain | FOR:15, VIE:20 | 60 | 25% |
-| Esprit de Lumière | SOUTIEN | Elfe | INT:18, AGI:12 | 30 | 10% |
-| Loup Spectral | AGGRESSIF | Orc | FOR:14, AGI:20 | 35 | 10% |
-| Ombre Furtive | DISTANCE | Halfelin | DEX:16, AGI:18 | 25 | 10% |
-| Golem Arcanique | EQUILIBRE | Humain | FOR:12, INT:12 | 50 | 25% |
-
-### Scaling des stats d'invocation
-Les invocations héritent d'une partie des stats du lanceur :
-```typescript
-// Stats (FOR, INT, DEX, AGI, VIE, CHANCE) : base template + 50% du lanceur
-statInvocation = template.stat + floor(caster.stat × 0.5)
-
-// PV : base template + % des PV max du lanceur (pvScalingInvocation par template)
-pvMax = template.pvBase + floor(caster.pvMax × pvScalingInvocation)
-
-// PA/PM : fixes depuis le template, pas de scaling
-```
-- `pvScalingInvocation` est stocké sur `MonstreTemplate` (Float nullable, défaut 0.10)
-- Les tanks (Gardien, Golem) ont 25% → plus résistants
-- Les fragiles (Esprit, Loup, Ombre) ont 10% → meurent vite
-
-### Comportement des invocations
-- L'invocation joue juste après son invocateur (initiative alternée)
-- L'invocation appartient à la même équipe que l'invocateur
-- L'invocation a son propre `iaType` (depuis le MonstreTemplate) et joue via l'IA automatiquement
-- Les invocations des joueurs (equipe 0) jouent aussi via l'IA (condition: `invocateurId !== null`)
-- Chaque invocation a ses propres sorts via `MonstreSort`
-
-### Mort de l'invocateur
-- Toutes ses invocations meurent automatiquement
-- Les effets actifs sur les morts (invocateur + invocations) sont supprimés
-- Réordonnancement de l'initiative
-
-### Nettoyage en fin de combat
-- Toutes les invocations survivantes sont tuées (pvActuels → 0) en fin de combat
-- Appliqué dans `checkCombatEnd()` (victoire/défaite) et `fleeCombat()` (fuite)
-- Les invocations ont `xpRecompense: 0` → pas de XP en les tuant
-
-### Réponse API invocation
-```json
-{
-  "success": true,
-  "message": "Invoked Golem Arcanique at (3,4)",
-  "actionType": "SORT",
-  "damages": [],
-  "invocation": {
-    "entiteId": 15,
-    "nom": "Golem Arcanique",
-    "position": { "x": 3, "y": 4 }
-  }
-}
-```
+- Sort `estInvocation: true` + `invocationTemplateId` → invoque entité (0 dégâts, position libre requise)
+- 5 templates (ids 7-11, xpRecompense=0), chaque race a 1 sort d'invocation niveau 5
+- Scaling : stats = template + 50% lanceur, PV = pvBase + (pvMax lanceur × pvScalingInvocation)
+- PA/PM fixes du template, propre `iaType` et sorts via `MonstreSort`
+- Joue juste après invocateur (initiative alternée)
+- Mort invocateur → invocations meurent. Fin combat → invocations supprimées
 
 ## Système de buffs/debuffs
 
-### Fonctionnement
-Les effets (buffs/debuffs) modifient les stats des entités en combat :
-
-1. **Liaison Sort → Effet** via la table `SortEffet`
-   - `chanceDeclenchement` : probabilité d'application (0.0-1.0)
-   - `surCible` : true = appliqué aux cibles, false = appliqué au lanceur
-
-2. **Application automatique** : après chaque sort, les effets liés sont appliqués selon leur probabilité
-
-3. **Modification des stats** : les dégâts sont calculés avec les stats modifiées par les effets actifs
-   ```typescript
-   statModifiée = statBase + somme(effets.valeur)
-   // Exemple: Force 15 + Rage(+20) = 35
-   ```
-
-4. **Durée** : décrémentée au début du tour de chaque entité (per-entity), supprimé quand `toursRestants <= 0`. Un buff durée 1 lancé par le dernier joueur du round persiste tout le round suivant.
-
-5. **Nettoyage automatique** :
-   - Mort d'une entité → ses effets actifs sont supprimés (+ ceux de ses invocations tuées)
-   - Fin de combat (victoire/défaite/fuite) → tous les effets et cooldowns sont supprimés
-   - `onDelete: Cascade` sur `EffetActif.combat` en BDD
-
-### Types d'effets
-| Effet | Type | Stat | Valeur | Durée |
-|-------|------|------|--------|-------|
-| Rage | BUFF | FORCE | +20 | 3 tours |
-| Concentration | BUFF | INTELLIGENCE | +15 | 2 tours |
-| Agilité accrue | BUFF | AGILITE | +25 | 2 tours |
-| Affaiblissement | DEBUFF | FORCE | -15 | 2 tours |
-| Ralentissement | DEBUFF | AGILITE | -20 | 2 tours |
-
-### Sorts avec effets (seed)
-- **Cri de rage** (Humain) → Rage sur lanceur (100%)
-- **Méditation** (Elfe) → Concentration sur lanceur (100%)
-- **Malédiction** (Orc) → Affaiblissement sur cible (100%)
-- **Entrave** (Halfelin) → Ralentissement sur cible (100%)
-- **Pas lourd** (Nain) → Agilité accrue sur lanceur (100%)
-- **Coup brutal** (Orc) → 25% Affaiblissement sur cible
-- **Morsure venimeuse** (Araignée) → 30% Ralentissement
-- **Jet de toile** (Araignée) → 50% Ralentissement
-
-### Réponse API avec effets
-```json
-{
-  "success": true,
-  "message": "Spell hit 1 target(s). Applied effects: Ralentissement",
-  "damages": [...],
-  "appliedEffects": [
-    { "entiteId": 5, "effetId": 5, "effetNom": "Ralentissement", "duree": 2 }
-  ]
-}
-```
-
-### Réponse API soin
-```json
-{
-  "success": true,
-  "message": "Heal hit 1 target(s).",
-  "actionType": "SORT",
-  "damages": [],
-  "heals": [
-    { "entiteId": 1, "healAmount": 25, "isCritical": false, "pvRestants": 75 }
-  ]
-}
-```
-
-### Réponse API dispel
-```json
-{
-  "success": true,
-  "message": "Dispel removed 2 effect(s) from 1 target(s).",
-  "actionType": "SORT",
-  "damages": [],
-  "removedEffects": [
-    { "entiteId": 5, "removedCount": 2 }
-  ]
-}
-```
-
-### Réponse API échec (miss)
-```json
-{
-  "success": true,
-  "message": "Spell missed!",
-  "actionType": "SORT",
-  "damages": [],
-  "missed": true
-}
-```
-
-### État du combat avec effets
-```json
-{
-  "effetsActifs": [
-    {
-      "id": 1,
-      "entiteId": 6,
-      "effetId": 1,
-      "toursRestants": 2,
-      "nom": "Rage",
-      "type": "BUFF",
-      "statCiblee": "FORCE",
-      "valeur": 20
-    }
-  ]
-}
-```
+- `SortEffet` lie Sort → Effet avec `chanceDeclenchement` et `surCible`/`surLanceur`
+- Application automatique après sort. Stats modifiées : `statBase + somme(effets.valeur)`
+- Durée décrémentée per-entity au début du tour, supprimé à `toursRestants <= 0`
+- Nettoyage : mort entité → ses effets supprimés (+invocations). Fin combat → tous effets/cooldowns supprimés
+- 5 effets : Rage (BUFF FOR +20, 3t), Concentration (BUFF INT +15, 2t), Agilité accrue (BUFF AGI +25, 2t), Affaiblissement (DEBUFF FOR -15, 2t), Ralentissement (DEBUFF AGI -20, 2t)
 
 ## Système de monde & maps
 
 ### Types de maps
-| Type | CombatMode | Description |
-|------|------------|-------------|
-| WILDERNESS | MANUEL | Ennemis visibles, combat volontaire |
-| DONJON | AUTO | Rencontres aléatoires à chaque déplacement |
-| VILLE | MANUEL | Zone sûre, pas de combat |
-| SAFE | MANUEL | Zone sûre (clairière, camp...) |
-| BOSS | AUTO | Combat de boss |
+WILDERNESS (MANUEL, ennemis visibles) | DONJON (AUTO, rencontres aléatoires) | VILLE/SAFE (pas de combat) | BOSS (AUTO)
 
-### Système de groupes d'ennemis
+### Navigation
+- **Direction** : `POST /groups/:id/move-direction { direction }` → lit `map.nordMapId`/`sudMapId`/etc.
+- **Connexion** : `POST /groups/:id/use-connection { connectionId }` → portail nommé
+- **Déplacement** : `PATCH /groups/:id/move { x, y }` → engagement auto si groupe ennemi
+- **Entrée map** : `POST /groups/:id/enter-map { mapId }` → spawn auto groupes ennemis (MANUEL)
 
-Les ennemis sont organisés en **groupes** sur les maps :
-
-- **1-3 groupes** par map (mode MANUEL)
-- **1-8 monstres** par groupe
-- **Composition mixte** : un groupe peut contenir plusieurs types de monstres (ex: 3 Loups + 2 Gobelins)
-- **Position unique** : chaque groupe a une seule position (x, y) sur la map
-
-#### Structure des données
-```typescript
-GroupeEnnemi {
-  id, mapId, positionX, positionY,
-  vaincu, vainquuAt, respawnTime,
-  membres: GroupeEnnemiMembre[]
-}
-
-GroupeEnnemiMembre {
-  id, groupeEnnemiId, monstreId,
-  quantite,  // Nombre de ce type de monstre
-  niveau,    // Niveau des monstres de ce type
-  monstre: MonstreTemplate
-}
-```
-
-### Modes de combat
-
-#### Mode MANUEL (WILDERNESS)
-- **Groupes ennemis visibles** sur la map (`GroupeEnnemi`)
-- **Spawn automatique** : 1-3 groupes créés à l'entrée sur la map via `RegionMonstre` (monstres de la région)
-- **Engagement automatique** : se déplacer sur la case d'un groupe déclenche le combat
-- **Engagement manuel** : `POST /maps/:id/engage { groupeId, groupeEnnemiId }`
-
-#### Mode AUTO (DONJON)
-- **Rencontres aléatoires** basées sur `tauxRencontre` (0.0-1.0)
-- **Monstres issus de la région** via `RegionMonstre` (sélection pondérée par probabilité)
-- **Groupes mixtes** : chaque rencontre génère 1-8 monstres de 1-4 types différents
-- Combat déclenché automatiquement lors du déplacement
-
-### Flux de navigation
-```
-1. Entrer sur une map (spawn auto des groupes en mode MANUEL)
-   POST /groups/:id/enter-map { mapId, startX?, startY? }
-   → Retourne: group + map avec groupesEnnemis[]
-
-2. Se déplacer (engagement auto si groupe ennemi à la position)
-   PATCH /groups/:id/move { x, y }
-   → Retourne { group, combat?, connection? }
-   → Mode MANUEL: combat si groupe ennemi à (x, y)
-   → Mode AUTO: combat aléatoire possible
-
-3. Naviguer par direction (téléportation vers map adjacente)
-   POST /groups/:id/move-direction { direction: "NORD"|"SUD"|"EST"|"OUEST" }
-   → Lit directement map.nordMapId/sudMapId/estMapId/ouestMapId
-   → Téléporte vers la map destination (spawn auto des ennemis)
-   → Erreur si aucune sortie dans cette direction (champ null)
-
-4. Utiliser une connexion (par ID)
-   POST /groups/:id/use-connection { connectionId }
-   → Téléporte vers map destination
-
-5. Engagement manuel (optionnel, mode MANUEL)
-   POST /maps/:id/engage { groupeId, groupeEnnemiId }
-   → Crée le combat avec tous les monstres du groupe
-
-6. Spawner manuellement des groupes (via régions)
-   POST /maps/:id/spawn-enemies
-   → Crée 1-3 groupes de monstres issus de la région (RegionMonstre)
-
-7. Respawn des groupes vaincus
-   POST /maps/:id/respawn
-   → Réactive les groupes dont le respawnTime est écoulé
-```
-
-### Navigation par direction
-Chaque map a 4 champs optionnels pour ses voisins : `nordMapId`, `sudMapId`, `estMapId`, `ouestMapId`.
-
-**Avantages de ce système :**
-- Lecture directe : `map.estMapId` au lieu de chercher dans MapConnection
-- Une seule source de vérité (pas de duplication bidirectionnelle)
-- Requête simplifiée dans le service
-
-```typescript
-// Exemple: depuis "Orée de la forêt" (map.estMapId = 2, map.ouestMapId = 5)
-POST /groups/1/move-direction { direction: "EST" }
-// → Téléporte vers "Sentier forestier" (map 2)
-
-POST /groups/1/move-direction { direction: "OUEST" }
-// → Téléporte vers "Route commerciale" (map 5)
-
-POST /groups/1/move-direction { direction: "NORD" }
-// → Erreur: "No exit in direction NORD" (map.nordMapId = null)
-```
-
-**Voisins configurés dans le seed :**
-| Map | Nord | Sud | Est | Ouest |
-|-----|------|-----|-----|-------|
-| Orée de la forêt | - | - | Sentier | Route |
-| Sentier forestier | Grotte | Clairière | - | Orée |
-| Grotte aux Gobelins | - | Sentier | - | - |
-| Clairière paisible | Sentier | - | - | - |
-| Route commerciale | - | - | Orée | Village |
-| Village de Piedmont | - | - | Route | - |
-
-**Note :** `MapConnection` reste disponible pour les portails nommés avec position (ex: "Entrée de la grotte" à x=20, y=3).
+### Groupes ennemis
+- MANUEL : 1-3 `GroupeEnnemi` par map, 1-8 `GroupeEnnemiMembre` mixtes, spawn auto via `RegionMonstre`
+- AUTO : rencontres aléatoires (`tauxRencontre`), monstres via `RegionMonstre` (pondéré)
+- Engagement : automatique (déplacement sur case) ou manuel (`POST /maps/:id/engage`)
 
 ## Conventions de code
 
 ### Nommage
-- Fichiers: `kebab-case` ou `camelCase.ts`
-- Classes: `PascalCase`
-- Fonctions/variables: `camelCase`
-- Tables BDD: `PascalCase` (français)
-- Colonnes BDD: `camelCase`
-
-### API REST
-- Endpoints en anglais: `/api/players`, `/api/characters`
-- Modèles BDD en français: `Joueur`, `Personnage`
-- IDs numériques auto-incrémentés
+- Fichiers: `kebab-case` ou `camelCase.ts` | Classes: `PascalCase` | Fonctions/variables: `camelCase`
+- Tables BDD: `PascalCase` (français) | Colonnes: `camelCase`
+- Endpoints en anglais (`/api/players`) | Modèles BDD en français (`Joueur`)
 
 ### Erreurs
 ```typescript
-// Format standard
-{ error: "Message d'erreur", details?: [] }
-
-// Codes HTTP
-200 - Succès
-201 - Créé
-204 - Succès sans contenu
-400 - Requête invalide
-404 - Non trouvé
-500 - Erreur serveur
+{ error: "Message", details?: [] }
+// 200 Succès | 201 Créé | 204 Sans contenu | 400 Invalide | 404 Non trouvé | 500 Erreur
 ```
-
-## Tests manuels rapides
-
-```bash
-# Health check
-curl http://localhost:3000/health
-
-# Créer un joueur et personnage
-curl -X POST http://localhost:3000/api/players \
-  -H "Content-Type: application/json" \
-  -d '{"nom": "TestPlayer"}'
-
-curl -X POST http://localhost:3000/api/characters \
-  -H "Content-Type: application/json" \
-  -d '{"nom": "Guerrier", "joueurId": 1, "raceId": 1}'
-
-# Équiper un item
-curl -X PUT http://localhost:3000/api/characters/1/equipment \
-  -H "Content-Type: application/json" \
-  -d '{"slot": "ARME", "equipmentId": 1}'
-
-# Voir progression
-curl http://localhost:3000/api/characters/1/progression
-
-# Allouer des stats
-curl -X POST http://localhost:3000/api/characters/1/allocate-stats \
-  -H "Content-Type: application/json" \
-  -d '{"force": 5, "vie": 5}'
-
-# Créer un groupe et ajouter personnages
-curl -X POST http://localhost:3000/api/groups \
-  -H "Content-Type: application/json" \
-  -d '{"nom": "MonGroupe", "joueurId": 1}'
-
-curl -X POST http://localhost:3000/api/groups/1/characters \
-  -H "Content-Type: application/json" \
-  -d '{"characterId": 1}'
-
-# Explorer le monde
-curl http://localhost:3000/api/regions
-curl http://localhost:3000/api/maps/1
-
-# Entrer sur une map (spawn auto des groupes ennemis)
-curl -X POST http://localhost:3000/api/groups/1/enter-map \
-  -H "Content-Type: application/json" \
-  -d '{"mapId": 1}'
-
-# Voir les groupes ennemis sur la map
-curl http://localhost:3000/api/maps/1
-# Retourne: groupesEnnemis: [{ id, positionX, positionY, membres: [...] }]
-
-# Se déplacer vers un groupe ennemi (combat automatique)
-curl -X PATCH http://localhost:3000/api/groups/1/move \
-  -H "Content-Type: application/json" \
-  -d '{"x": 15, "y": 8}'
-
-# Ou engagement manuel d'un groupe ennemi
-curl -X POST http://localhost:3000/api/maps/1/engage \
-  -H "Content-Type: application/json" \
-  -d '{"groupeId": 1, "groupeEnnemiId": 1}'
-
-# Spawn manuel de groupes ennemis (utilise les monstres de la région)
-curl -X POST http://localhost:3000/api/maps/1/spawn-enemies
-
-# Respawn des groupes vaincus
-curl -X POST http://localhost:3000/api/maps/1/respawn
-
-# Actions de combat
-curl http://localhost:3000/api/combats/1
-
-curl -X POST http://localhost:3000/api/combats/1/action \
-  -H "Content-Type: application/json" \
-  -d '{"entiteId": 1, "sortId": 1, "targetX": 5, "targetY": 5}'
-
-# Attaque d'arme (utilise l'arme équipée du personnage)
-curl -X POST http://localhost:3000/api/combats/1/action \
-  -H "Content-Type: application/json" \
-  -d '{"entiteId": 1, "useArme": true, "targetX": 5, "targetY": 5}'
-
-curl -X POST http://localhost:3000/api/combats/1/end-turn \
-  -H "Content-Type: application/json" \
-  -d '{"entiteId": 1}'
-
-# Navigation par direction
-curl -X POST http://localhost:3000/api/groups/1/move-direction \
-  -H "Content-Type: application/json" \
-  -d '{"direction": "EST"}'
-
-# Lancer un sort de buff (Cri de rage applique Rage sur soi)
-curl -X POST http://localhost:3000/api/combats/1/action \
-  -H "Content-Type: application/json" \
-  -d '{"entiteId": 1, "sortId": 31, "targetX": 0, "targetY": 2}'
-# Réponse: appliedEffects: [{ effetNom: "Rage", duree: 3 }]
-
-# Voir les effets actifs
-curl http://localhost:3000/api/combats/1
-# Réponse inclut: effetsActifs: [{ nom: "Rage", valeur: 20, toursRestants: 3 }]
-
-# Lancer un sort de soin (Soin de lumière, Elfe)
-curl -X POST http://localhost:3000/api/combats/1/action \
-  -H "Content-Type: application/json" \
-  -d '{"entiteId": 1, "sortId": 42, "targetX": 0, "targetY": 3}'
-# Réponse: heals: [{ healAmount: 25, pvRestants: 75 }]
-
-# Lancer un désenvoutement (Purification, Humain)
-curl -X POST http://localhost:3000/api/combats/1/action \
-  -H "Content-Type: application/json" \
-  -d '{"entiteId": 1, "sortId": 36, "targetX": 5, "targetY": 5}'
-# Réponse: removedEffects: [{ entiteId: 5, removedCount: 2 }]
-
-# Sort avec tauxEchec (peut retourner missed: true)
-curl -X POST http://localhost:3000/api/combats/1/action \
-  -H "Content-Type: application/json" \
-  -d '{"entiteId": 1, "sortId": 4, "targetX": 5, "targetY": 5}'
-# Si raté: { missed: true, message: "Spell missed!" }
-```
-
-## Données de seed
-
-### Races (5)
-- Nain (FOR +15, VIE +20, DEX +5, INT -5, AGI -5) - 4 sorts (niveaux 1, 4, 7, 10)
-- Orc (FOR +20, VIE +10, DEX +5, AGI +5, INT -10) - 4 sorts (niveaux 1, 4, 7, 10)
-- Halfelin (DEX +15, AGI +15, CHANCE +10, INT +5, FOR -5, VIE -5) - 4 sorts (niveaux 1, 4, 7, 10)
-- Humain (+5 partout) - 4 sorts (niveaux 1, 4, 7, 10)
-- Elfe (INT +15, DEX +10, AGI +10, VIE -5) - 4 sorts (niveaux 1, 4, 7, 10)
-
-### Sorts (55)
-- Humain: 4 sorts SORT (niveaux 1, 4, 7, 10) - polyvalent + 1 buff (Cri de rage) + 1 dispel (Purification) + 1 soin (Soin, niv 3) + 1 invocation (Invoquer Golem, niv 5)
-- Elfe: 4 sorts SORT (niveaux 1, 4, 7, 10) - magie + 1 buff (Méditation) + 1 dispel (Dissipation) + 1 soin (Soin de lumière, niv 1) + 1 invocation (Invoquer Esprit, niv 5)
-- Nain: 4 sorts SORT (niveaux 1, 4, 7, 10) - physique + 1 buff (Pas lourd) + 1 dispel (Briseur de sorts) + 1 soin (Second souffle, niv 4) + 1 invocation (Invoquer Gardien, niv 5)
-- Orc: 4 sorts SORT (niveaux 1, 4, 7, 10) - brutal + 1 debuff (Malédiction) + 1 dispel (Annulation) + 1 invocation (Invoquer Loup Spectral, niv 5)
-- Halfelin: 4 sorts SORT (niveaux 1, 4, 7, 10) - agile + 1 debuff (Entrave) + 1 dispel (Désenvoûtement) + 1 invocation (Invoquer Ombre, niv 5)
-- 10 sorts spécifiques pour monstres (Morsure du loup, Griffure du loup, Coup de dague, Coup d'épée, Tir d'arbalète, Morsure venimeuse, Jet de toile, Coup d'os, Écrasement, Lancer de rocher)
-- 7 sorts pour invocations (Frappe de pierre, Rayon lumineux, Soin mineur, Morsure spectrale, Lancer d'ombre, Poing arcanique, Rayon arcanique)
-- Tous les sorts ont degatsCritMin/degatsCritMax (range de critique)
-- Certains sorts ont un `tauxEchec` > 0 (chance de rater)
-
-### Équipements (12)
-- Répartis sur tous les slots
-- Bonus de stats variés
-- Niveaux requis différents
-- Les 4 armes (Épée, Bâton, Arc, Dagues) ont des données d'attaque (dégâts, portée, PA, zone, stat utilisée)
-- Arc long et Dagues jumelles ont un `tauxEchec` (10% et 5%)
-
-### Effets (5)
-- Rage, Concentration, Agilité (buffs)
-- Faiblesse, Lenteur (debuffs)
-
-### Régions (3)
-- Forêt de Vertbois (niveau 1-5)
-- Plaines du Sud (niveau 1-3)
-- Montagne Grise (niveau 5-10)
-
-### Maps (6)
-- Orée de la forêt (WILDERNESS/MANUEL)
-- Sentier forestier (WILDERNESS/MANUEL)
-- Grotte aux Gobelins (DONJON/AUTO, 35% rencontre)
-- Clairière paisible (SAFE)
-- Route commerciale (WILDERNESS/MANUEL)
-- Village de Piedmont (VILLE)
-
-### Monstres (11)
-- Gobelin (AGGRESSIF), Loup (AGGRESSIF), Bandit (EQUILIBRE) — niveau 1-3
-- Araignée Géante (DISTANCE), Squelette (AGGRESSIF) — niveau 3-5
-- Troll des Forêts (AGGRESSIF) — niveau 5-8
-- Invocations (xpRecompense: 0) : Gardien de Pierre (AGGRESSIF), Esprit de Lumière (SOUTIEN), Loup Spectral (AGGRESSIF), Ombre Furtive (DISTANCE), Golem Arcanique (EQUILIBRE)
-
-### Groupes d'ennemis (6)
-- Orée de la forêt : Meute de 3 Loups, Groupe mixte (2 Gobelins + 1 Loup)
-- Sentier forestier : 4 Araignées Géantes, Groupe mixte (2 Loups + 2 Araignées)
-- Route commerciale : 3 Bandits, Groupe mixte (2 Bandits + 2 Loups)
-
-### RegionMonstre (8)
-- Forêt de Vertbois : Gobelin (0.30), Loup (0.35), Araignée (0.25), Troll (0.10)
-- Plaines du Sud : Bandit (0.60), Loup (0.40)
-- Montagne Grise : Squelette (0.50), Troll (0.50)
-
-### MonstreSort (17)
-- Loup : Morsure du loup (prio 1), Griffure du loup (prio 2)
-- Gobelin : Coup de dague (prio 1)
-- Bandit : Coup d'épée (prio 1), Tir d'arbalète (prio 2)
-- Araignée : Morsure venimeuse (prio 1), Jet de toile (prio 2)
-- Squelette : Coup d'os (prio 1)
-- Troll : Écrasement (prio 1), Lancer de rocher (prio 2, cd:1)
-- Gardien de Pierre : Frappe de pierre (prio 1)
-- Esprit de Lumière : Soin mineur (prio 1, estSoin), Rayon lumineux (prio 2)
-- Loup Spectral : Morsure spectrale (prio 1)
-- Ombre Furtive : Lancer d'ombre (prio 1)
-- Golem Arcanique : Poing arcanique (prio 1), Rayon arcanique (prio 2)
-
-### Connexions (10)
-- Portails nommés avec positions (x, y) pour navigation positionnelle
-- Directions stockées directement sur les maps (`nordMapId`, `sudMapId`, etc.)
-
-### SortEffet (8)
-- Sorts de buff sur lanceur : Cri de rage → Rage, Méditation → Concentration, Pas lourd → Agilité
-- Sorts de debuff sur cible : Malédiction → Affaiblissement, Entrave → Ralentissement
-- Effets secondaires : Coup brutal (25% Affaiblissement), Morsure venimeuse (30% Ralentissement), Jet de toile (50% Ralentissement)
-
-### Grilles de combat (8)
-- 1 par map pouvant héberger un combat (wilderness, donjon, boss)
-- 15×10, joueurs à gauche (x=0-1), ennemis à droite (x=13-14)
-- 4-6 obstacles au centre par grille
-- 16 spawns par grille (8 joueurs + 8 ennemis)
-
-## Points d'attention
-
-### Performance
-- Le combat garde l'état en mémoire (via Prisma)
-- Polling recommandé: 500ms-1000ms côté frontend
-- Pas de WebSocket (MVP avec REST polling)
-- IA des monstres exécutée de manière asynchrone
-
-### Sécurité
-- Pas d'authentification (MVP)
-- Validation Zod sur toutes les entrées
-- Pas de données sensibles exposées
-
-### Limitations actuelles
-- Respawn des groupes ennemis : timer stocké (300s), `POST /maps/:id/respawn` manuel
-- Pas de système de mort permanente
-- Pas de boutique/économie
 
 ## Pour étendre le projet
 
 ### Ajouter un endpoint
-1. Créer/modifier `*.routes.ts`
-2. Créer/modifier `*.controller.ts`
-3. Créer/modifier `*.service.ts`
-4. Ajouter la route dans `api/routes.ts`
+1. `*.routes.ts` → 2. `*.controller.ts` → 3. `*.service.ts` → 4. Ajouter dans `api/routes.ts`
 
 ### Ajouter une table
-1. Modifier `prisma/schema.prisma`
-2. `npx prisma db push` (dev) ou `npx prisma migrate dev`
-3. Mettre à jour `prisma/seed.ts` si données initiales
-4. `npx prisma db seed`
+1. `prisma/schema.prisma` → 2. `npx prisma db push` → 3. `prisma/seed.ts` → 4. `npx prisma db seed`
 
-### Ajouter une nouvelle race
-1. Ajouter dans `prisma/seed.ts` (table Race)
-2. Créer les sorts associés (table Sort avec raceId)
-3. `npx prisma db seed`
+### Ajouter un sort (dans seed.ts)
+- Standard : `raceId, niveauRequis, coutPA, portee, zoneId, degatsMin/Max, cooldown`
+- Soin : `estSoin: true` (degatsMin/Max = montant soin)
+- Dispel : `estDispel: true` (degatsMin/Max à 0)
+- Invocation : `estInvocation: true`, `invocationTemplateId: N`, degats à 0
+- Risqué : `tauxEchec: 0.xx`
 
-### Ajouter un nouveau sort
-1. Ajouter dans `prisma/seed.ts`
-2. Spécifier: raceId, niveauRequis, coutPA, portee, zoneId, degatsMin/Max, cooldown
-3. Pour un soin : ajouter `estSoin: true` (les degatsMin/Max deviennent le montant de soin)
-4. Pour un dispel : ajouter `estDispel: true` (degatsMin/Max à 0)
-5. Pour un sort risqué : ajouter `tauxEchec: 0.xx` (0.0-1.0)
-6. Pour une invocation : ajouter `estInvocation: true`, `invocationTemplateId: N`, degats à 0
-7. `npx prisma db seed`
-
-### Modifier l'IA des monstres
-- Fichier `src/services/combat/ai.ts`
-- Dispatch: `executeAITurn()` → `executeEquilibreTurn()` / `executeAggressifTurn()` / `executeSoutienTurn()` / `executeDistanceTurn()`
-- Helpers: `findClosestEnemy()`, `findUsableSpell()`, `findMostInjuredAlly()`, `findAllyWithDebuffs()`, `moveAwayFromTarget()`
-- Pour ajouter un nouveau type d'IA : ajouter valeur à l'enum `IAType`, créer `executeXxxTurn()`, ajouter au switch dans `executeAITurn()`
+### Modifier l'IA
+- `src/services/combat/ai.ts` : `executeAITurn()` → dispatch par iaType
+- Nouveau type : enum `IAType` + `executeXxxTurn()` + switch dans `executeAITurn()`
 
 ### Modifier les formules
-- `src/utils/formulas.ts` pour calculs généraux
-- `src/services/combat/damage.ts` pour dégâts
-- `src/services/combat/initiative.ts` pour initiative
+- `src/utils/formulas.ts` (générales) | `combat/damage.ts` (dégâts) | `combat/initiative.ts` (initiative)
 
-## Tests validés
+## Données de seed (résumé)
 
-Les fonctionnalités suivantes ont été testées et validées:
+- **5 races** : Nain, Orc, Halfelin, Humain, Elfe — chacune 4 sorts (niv 1/4/7/10) + buff/dispel + invocation (niv 5)
+- **55 sorts** : 20 race + 5 buff/debuff + 5 dispel + 3 soins + 5 invocations + 10 monstres + 7 invocations
+- **12 équipements** : tous slots, 4 armes avec données d'attaque
+- **5 effets** : 3 buffs (Rage, Concentration, Agilité) + 2 debuffs (Affaiblissement, Ralentissement)
+- **3 régions** : Forêt (niv 1-5), Plaines (niv 1-3), Montagne (niv 5-10)
+- **6 maps** : 3 WILDERNESS + 1 DONJON + 1 SAFE + 1 VILLE
+- **11 monstres** : 6 normaux (Gobelin, Loup, Bandit, Araignée, Squelette, Troll) + 5 invocations
+- **6 groupes ennemis** : 2 par map WILDERNESS, composition mixte
+- **8 grilles** : 15×10, 16 spawns, 4-6 obstacles centraux
 
-| Fonctionnalité | Statut |
-|----------------|--------|
-| Health check | OK |
-| CRUD Joueurs | OK |
-| CRUD Personnages | OK |
-| CRUD Groupes | OK |
-| Stats totales (base + race + équipement) | OK |
-| Stat VIE (anciennement ENDURANCE) | OK |
-| Entrée/sortie de map | OK |
-| Spawn ennemis (mode MANUEL) | OK |
-| Engagement combat | OK |
-| Grille avec obstacles | OK |
-| Initiative alternée (Joueur/Ennemi) | OK |
-| Déplacement sur grille | OK |
-| Actions/Sorts avec dégâts et critiques | OK |
-| IA des monstres (déplacement + attaque) | OK |
-| Fin de combat (victoire/défaite) | OK |
-| Distribution XP aux survivants | OK |
-| Données statiques (races, sorts, équipements, effets, zones) | OK |
-| Groupes d'ennemis (spawn, affichage) | OK |
-| Groupes mixtes (plusieurs types de monstres) | OK |
-| Spawn automatique à l'entrée de map | OK |
-| Engagement automatique au déplacement | OK |
-| Engagement manuel de groupe ennemi | OK |
-| Rencontres aléatoires avec groupes mixtes (mode AUTO) | OK |
-| Respawn des groupes vaincus | OK |
-| Grilles de combat prédéfinies (CRUD) | OK |
-| Sélection aléatoire de grille par map | OK |
-| Placement spawn joueurs/ennemis depuis grille | OK |
-| Copie obstacles de grille template vers combat | OK |
-| Critique en range (degatsCritMin/degatsCritMax) | OK |
-| Attaque d'arme physique (useArme) | OK |
-| Snapshot arme dans CombatEntite (armeData) | OK |
-| RegionMonstre (monstres liés aux régions) | OK |
-| MonstreSort (sorts spécifiques par monstre avec priorité) | OK |
-| IA améliorée (sorts par priorité, boucle attaque/déplacement) | OK |
-| XP scaling proportionnel au niveau du monstre | OK |
-| Donjons : rooms au niveauMax, boss surlevelé | OK |
-| Navigation par direction (champs map.nordMapId etc.) | OK |
-| Buffs/debuffs appliqués aux stats en combat | OK |
-| Effets secondaires de sorts (probabilité) | OK |
-| Self-buffs (effets sur lanceur sans cible) | OK |
-| Durée des effets décrémentée per-entity (au début du tour) | OK |
-| Nettoyage effets sur entité morte (+ invocations) | OK |
-| Nettoyage effets/cooldowns en fin de combat (victoire/défaite/fuite) | OK |
-| Ciblage libre (sorts touchent alliés et ennemis) | OK |
-| Sorts de soin (estSoin, heal au lieu de dégâts) | OK |
-| Sorts de désenvoutement (estDispel, supprime tous effets) | OK |
-| Pourcentage d'échec sorts (tauxEchec, PA perdus) | OK |
-| Pourcentage d'échec arme (tauxEchec, tour perdu) | OK |
-| IA intelligente (heal allié blessé, dispel debuff, puis attaque) | OK |
-| Snapshot arme avec tauxEchec | OK |
-| Suivi du tour actif persistant (entiteActuelleId) | OK |
-| Vérification de tour (action/move/endTurn refusés hors tour) | OK |
-| Vérification de sort appris (PersonnageSort/MonstreSort) | OK |
-| Seed tauxEchec dans create + update (idempotent) | OK |
-| IAType enum (EQUILIBRE, AGGRESSIF, SOUTIEN, DISTANCE) | OK |
-| IA AGGRESSIF (rush, pas de heal/dispel) | OK |
-| IA SOUTIEN (heal 90%, avance vers alliés) | OK |
-| IA DISTANCE (recule si adjacent, sorts longue portée) | OK |
-| IA EQUILIBRE (heal → dispel → attack → move) | OK |
-| Sorts d'invocation (estInvocation, invocationTemplateId) | OK |
-| Invocations avec propre IA et sorts (MonstreSort) | OK |
-| Auto-play invocations joueur (invocateurId !== null) | OK |
-| Nettoyage invocations survivantes en fin de combat | OK |
-| Nettoyage invocations à la fuite | OK |
-| Templates invocation (xpRecompense: 0, pas d'XP) | OK |
+Détails complets : voir `prisma/seed.ts` et `docs/API_DOCUMENTATION.md`
 
 ## Variables d'environnement
 
@@ -1165,18 +331,10 @@ DATABASE_URL="postgresql://rpg_user:rpg_password@localhost:5432/rpg_tactique?sch
 PORT=3000
 ```
 
-## Setup PostgreSQL (Windows)
+## Points d'attention
 
-1. Installer PostgreSQL 18 depuis https://www.postgresql.org/download/windows/
-2. Lancer `setup_db.bat` pour créer l'utilisateur et la base de données
-3. Démarrer le service PostgreSQL via Services Windows (Win+R → services.msc → postgresql-x64-18)
-
-## Dépendances principales
-
-```json
-{
-  "@prisma/client": "^5.10.0",  // ORM
-  "express": "^4.18.2",          // Framework web
-  "zod": "^3.22.4"               // Validation
-}
-```
+- Prisma Json fields : cast `as unknown as T` (pas direct `as T`)
+- `prisma db push` au lieu de `migrate dev` en CLI non-interactif
+- Polling frontend recommandé : 500ms-1000ms (pas de WebSocket, MVP REST)
+- Pas d'authentification (MVP)
+- Upsert pattern dans seed.ts pour idempotence

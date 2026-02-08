@@ -43,7 +43,9 @@
       "Bash(git -C \"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\backend\" diff --stat)",
       "Bash(git -C \"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\backend\" log --oneline -5)",
       "Bash(echo:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(for i in 1 2)",
+      "Bash(do curl -s -X POST http://localhost:3000/api/combats/9/end-turn -H \"Content-Type: application/json\" -d \"{\"\"entiteId\"\": 56}\")"
     ]
   }
 }

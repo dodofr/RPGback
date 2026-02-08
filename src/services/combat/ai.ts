@@ -560,7 +560,79 @@ async function findUsableSpell(
 }
 
 /**
- * Move one step towards the target
+ * BFS to find the best first step towards a target.
+ * Returns the first cell to move to, or null if no path exists.
+ */
+function bfsFirstStep(
+  from: Position,
+  to: Position,
+  maxSteps: number,
+  grid: { width: number; height: number },
+  entities: EntityState[],
+  blockedCases: CombatCaseState[]
+): Position | null {
+  const directions = [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 },
+  ];
+
+  // BFS queue: each entry is [current position, first step taken]
+  const queue: Array<{ pos: Position; firstStep: Position; steps: number }> = [];
+  const visited = new Set<string>();
+  visited.add(`${from.x},${from.y}`);
+
+  // Seed with all valid adjacent moves
+  for (const dir of directions) {
+    const next: Position = { x: from.x + dir.dx, y: from.y + dir.dy };
+    const key = `${next.x},${next.y}`;
+    if (visited.has(key)) continue;
+
+    const moveCheck = canMove(from, next, 1, grid, entities, blockedCases);
+    if (moveCheck.valid) {
+      // Reached the target (or adjacent to it)
+      if (next.x === to.x && next.y === to.y) return next;
+      visited.add(key);
+      queue.push({ pos: next, firstStep: next, steps: 1 });
+    }
+  }
+
+  // BFS to find the path that gets closest to the target
+  let bestFirstStep: Position | null = null;
+  let bestDistance = manhattanDistance(from.x, from.y, to.x, to.y);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+
+    const dist = manhattanDistance(current.pos.x, current.pos.y, to.x, to.y);
+    if (dist < bestDistance) {
+      bestDistance = dist;
+      bestFirstStep = current.firstStep;
+    }
+
+    if (dist === 0) return current.firstStep; // Reached target
+
+    if (current.steps >= maxSteps) continue;
+
+    for (const dir of directions) {
+      const next: Position = { x: current.pos.x + dir.dx, y: current.pos.y + dir.dy };
+      const key = `${next.x},${next.y}`;
+      if (visited.has(key)) continue;
+
+      const moveCheck = canMove(current.pos, next, 1, grid, entities, blockedCases);
+      if (moveCheck.valid) {
+        visited.add(key);
+        queue.push({ pos: next, firstStep: current.firstStep, steps: current.steps + 1 });
+      }
+    }
+  }
+
+  return bestFirstStep;
+}
+
+/**
+ * Move one step towards the target using BFS pathfinding
  */
 async function moveTowardsTarget(
   combatId: number,
@@ -572,36 +644,15 @@ async function moveTowardsTarget(
   entities: EntityState[],
   blockedCases: CombatCaseState[]
 ): Promise<boolean> {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
+  const firstStep = bfsFirstStep(from, to, availablePM, grid, entities, blockedCases);
+  if (!firstStep) return false;
 
-  const possibleMoves: Position[] = [];
-
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    if (dx > 0) possibleMoves.push({ x: from.x + 1, y: from.y });
-    else if (dx < 0) possibleMoves.push({ x: from.x - 1, y: from.y });
-    if (dy > 0) possibleMoves.push({ x: from.x, y: from.y + 1 });
-    else if (dy < 0) possibleMoves.push({ x: from.x, y: from.y - 1 });
-  } else {
-    if (dy > 0) possibleMoves.push({ x: from.x, y: from.y + 1 });
-    else if (dy < 0) possibleMoves.push({ x: from.x, y: from.y - 1 });
-    if (dx > 0) possibleMoves.push({ x: from.x + 1, y: from.y });
-    else if (dx < 0) possibleMoves.push({ x: from.x - 1, y: from.y });
-  }
-
-  for (const move of possibleMoves) {
-    const moveCheck = canMove(from, move, availablePM, grid, entities, blockedCases);
-    if (moveCheck.valid) {
-      const result = await moveEntity(combatId, entiteId, move.x, move.y);
-      return result.success;
-    }
-  }
-
-  return false;
+  const result = await moveEntity(combatId, entiteId, firstStep.x, firstStep.y);
+  return result.success;
 }
 
 /**
- * Move one step away from the target (reverse of moveTowardsTarget)
+ * Move one step away from the target using BFS (maximize distance)
  */
 async function moveAwayFromTarget(
   combatId: number,
@@ -613,36 +664,31 @@ async function moveAwayFromTarget(
   entities: EntityState[],
   blockedCases: CombatCaseState[]
 ): Promise<boolean> {
-  // Reverse the direction
-  const dx = from.x - to.x;
-  const dy = from.y - to.y;
+  const directions = [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 },
+  ];
 
-  const possibleMoves: Position[] = [];
+  const currentDist = manhattanDistance(from.x, from.y, to.x, to.y);
+  let bestMove: Position | null = null;
+  let bestDist = currentDist;
 
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    if (dx > 0) possibleMoves.push({ x: from.x + 1, y: from.y });
-    else if (dx < 0) possibleMoves.push({ x: from.x - 1, y: from.y });
-    else {
-      // Same X, try both horizontal directions
-      possibleMoves.push({ x: from.x + 1, y: from.y });
-      possibleMoves.push({ x: from.x - 1, y: from.y });
-    }
-    if (dy > 0) possibleMoves.push({ x: from.x, y: from.y + 1 });
-    else if (dy < 0) possibleMoves.push({ x: from.x, y: from.y - 1 });
-  } else {
-    if (dy > 0) possibleMoves.push({ x: from.x, y: from.y + 1 });
-    else if (dy < 0) possibleMoves.push({ x: from.x, y: from.y - 1 });
-    if (dx > 0) possibleMoves.push({ x: from.x + 1, y: from.y });
-    else if (dx < 0) possibleMoves.push({ x: from.x - 1, y: from.y });
-  }
-
-  for (const move of possibleMoves) {
-    const moveCheck = canMove(from, move, availablePM, grid, entities, blockedCases);
+  for (const dir of directions) {
+    const next: Position = { x: from.x + dir.dx, y: from.y + dir.dy };
+    const moveCheck = canMove(from, next, availablePM, grid, entities, blockedCases);
     if (moveCheck.valid) {
-      const result = await moveEntity(combatId, entiteId, move.x, move.y);
-      return result.success;
+      const dist = manhattanDistance(next.x, next.y, to.x, to.y);
+      if (dist > bestDist) {
+        bestDist = dist;
+        bestMove = next;
+      }
     }
   }
 
-  return false;
+  if (!bestMove) return false;
+
+  const result = await moveEntity(combatId, entiteId, bestMove.x, bestMove.y);
+  return result.success;
 }
