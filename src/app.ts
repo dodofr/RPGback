@@ -1,9 +1,11 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import cors from 'cors';
 import routes from './api/routes';
 
 const app: Express = express();
 
 // Middleware
+app.use(cors());
 app.use(express.json());
 
 // API Routes

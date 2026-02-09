@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import prisma from '../../config/database';
 import { mapService } from '../../services/map.service';
 import { regionService } from '../../services/region.service';
 import { monstreService } from '../../services/monstre.service';
@@ -274,6 +275,248 @@ export class MapController {
         res.status(400).json({ error: 'Validation error', details: error.errors });
         return;
       }
+      next(error);
+    }
+  }
+
+  async updateMonstre(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      const updateMonstreSchema = z.object({
+        nom: z.string().min(2).max(100).optional(),
+        force: z.number().int().min(1).optional(),
+        intelligence: z.number().int().min(1).optional(),
+        dexterite: z.number().int().min(1).optional(),
+        agilite: z.number().int().min(1).optional(),
+        vie: z.number().int().min(1).optional(),
+        chance: z.number().int().min(1).optional(),
+        pvBase: z.number().int().min(1).optional(),
+        paBase: z.number().int().min(1).optional(),
+        pmBase: z.number().int().min(1).optional(),
+        niveauBase: z.number().int().min(1).optional(),
+        xpRecompense: z.number().int().min(0).optional(),
+        iaType: z.enum(['EQUILIBRE', 'AGGRESSIF', 'SOUTIEN', 'DISTANCE']).optional(),
+        pvScalingInvocation: z.number().min(0).max(1).nullable().optional(),
+      });
+      const data = updateMonstreSchema.parse(req.body);
+      const monstre = await monstreService.update(id, data);
+      res.json(monstre);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      next(error);
+    }
+  }
+
+  async deleteMonstre(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      await monstreService.delete(id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ==================== MAPS (update/delete) ====================
+
+  async updateMap(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      const updateMapSchema = z.object({
+        nom: z.string().min(2).max(100).optional(),
+        type: z.enum(['WILDERNESS', 'VILLE', 'DONJON', 'BOSS', 'SAFE']).optional(),
+        combatMode: z.enum(['MANUEL', 'AUTO']).optional(),
+        largeur: z.number().int().min(5).max(100).optional(),
+        hauteur: z.number().int().min(5).max(100).optional(),
+        tauxRencontre: z.number().min(0).max(1).optional(),
+        nordMapId: z.number().int().positive().nullable().optional(),
+        sudMapId: z.number().int().positive().nullable().optional(),
+        estMapId: z.number().int().positive().nullable().optional(),
+        ouestMapId: z.number().int().positive().nullable().optional(),
+      });
+      const data = updateMapSchema.parse(req.body);
+      const map = await mapService.update(id, data);
+      res.json(map);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      next(error);
+    }
+  }
+
+  async deleteMap(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      await mapService.delete(id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteConnection(req: Request, res: Response, next: NextFunction) {
+    try {
+      const connId = parseInt(req.params.connId, 10);
+      if (isNaN(connId)) {
+        res.status(400).json({ error: 'Invalid connection ID' });
+        return;
+      }
+      await mapService.deleteConnection(connId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ==================== REGIONS (update/delete) ====================
+
+  async updateRegion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      const updateRegionSchema = z.object({
+        nom: z.string().min(2).max(100).optional(),
+        description: z.string().max(500).nullable().optional(),
+        type: z.enum(['FORET', 'PLAINE', 'DESERT', 'MONTAGNE', 'MARAIS', 'CAVERNE', 'CITE']).optional(),
+        niveauMin: z.number().int().min(1).optional(),
+        niveauMax: z.number().int().min(1).optional(),
+      });
+      const data = updateRegionSchema.parse(req.body);
+      const region = await regionService.update(id, data);
+      res.json(region);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      next(error);
+    }
+  }
+
+  async deleteRegion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      await regionService.delete(id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ==================== RELATION: RegionMonstre ====================
+
+  async addRegionMonstre(req: Request, res: Response, next: NextFunction) {
+    try {
+      const regionId = parseInt(req.params.id, 10);
+      if (isNaN(regionId)) {
+        res.status(400).json({ error: 'Invalid region ID' });
+        return;
+      }
+      const schema = z.object({
+        monstreId: z.number().int().positive(),
+        probabilite: z.number().min(0).default(1.0),
+      });
+      const data = schema.parse(req.body);
+      const regionMonstre = await prisma.regionMonstre.create({
+        data: { regionId, monstreId: data.monstreId, probabilite: data.probabilite },
+        include: { monstre: true, region: true },
+      });
+      res.status(201).json(regionMonstre);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      next(error);
+    }
+  }
+
+  async removeRegionMonstre(req: Request, res: Response, next: NextFunction) {
+    try {
+      const regionId = parseInt(req.params.id, 10);
+      const monstreId = parseInt(req.params.monstreId, 10);
+      if (isNaN(regionId) || isNaN(monstreId)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      await prisma.regionMonstre.delete({
+        where: { regionId_monstreId: { regionId, monstreId } },
+      });
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ==================== RELATION: MonstreSort ====================
+
+  async addMonstreSort(req: Request, res: Response, next: NextFunction) {
+    try {
+      const monstreId = parseInt(req.params.id, 10);
+      if (isNaN(monstreId)) {
+        res.status(400).json({ error: 'Invalid monster ID' });
+        return;
+      }
+      const schema = z.object({
+        sortId: z.number().int().positive(),
+        priorite: z.number().int().min(1).default(1),
+      });
+      const data = schema.parse(req.body);
+      const monstreSort = await prisma.monstreSort.create({
+        data: { monstreId, sortId: data.sortId, priorite: data.priorite },
+        include: { sort: true, monstre: true },
+      });
+      res.status(201).json(monstreSort);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      next(error);
+    }
+  }
+
+  async removeMonstreSort(req: Request, res: Response, next: NextFunction) {
+    try {
+      const monstreId = parseInt(req.params.id, 10);
+      const sortId = parseInt(req.params.sortId, 10);
+      if (isNaN(monstreId) || isNaN(sortId)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      await prisma.monstreSort.delete({
+        where: { monstreId_sortId: { monstreId, sortId } },
+      });
+      res.status(204).send();
+    } catch (error) {
       next(error);
     }
   }

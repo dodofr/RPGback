@@ -18,6 +18,9 @@ router.get('/:id/characters', (req, res, next) => playerController.getCharacters
 // GET /api/players/:id/groups - Get player's groups
 router.get('/:id/groups', (req, res, next) => playerController.getGroups(req, res, next));
 
+// PATCH /api/players/:id - Update a player
+router.patch('/:id', (req, res, next) => playerController.update(req, res, next));
+
 // DELETE /api/players/:id - Delete a player
 router.delete('/:id', (req, res, next) => playerController.delete(req, res, next));
 

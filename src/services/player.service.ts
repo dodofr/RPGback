@@ -48,6 +48,13 @@ export class PlayerService {
     });
   }
 
+  async update(id: number, data: { nom?: string }) {
+    return prisma.joueur.update({
+      where: { id },
+      data,
+    });
+  }
+
   async delete(id: number) {
     return prisma.joueur.delete({
       where: { id },

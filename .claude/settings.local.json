@@ -45,7 +45,10 @@
       "Bash(echo:*)",
       "Bash(node:*)",
       "Bash(for i in 1 2)",
-      "Bash(do curl -s -X POST http://localhost:3000/api/combats/9/end-turn -H \"Content-Type: application/json\" -d \"{\"\"entiteId\"\": 56}\")"
+      "Bash(do curl -s -X POST http://localhost:3000/api/combats/9/end-turn -H \"Content-Type: application/json\" -d \"{\"\"entiteId\"\": 56}\")",
+      "Bash(npm create:*)",
+      "Bash(npx vite:*)",
+      "Bash(npm ls:*)"
     ]
   }
 }

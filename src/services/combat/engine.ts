@@ -29,6 +29,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
         },
       },
       cases: true,
+      cooldowns: true,
     },
   });
 
@@ -47,6 +48,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
     },
     entites: combat.entites.map((e) => ({
       id: e.id,
+      personnageId: e.personnageId,
       nom: e.nom,
       equipe: e.equipe,
       position: { x: e.positionX, y: e.positionY },
@@ -88,6 +90,11 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       y: c.y,
       bloqueDeplacement: c.bloqueDeplacement,
       bloqueLigneDeVue: c.bloqueLigneDeVue,
+    })),
+    cooldowns: combat.cooldowns.map((cd) => ({
+      entiteId: cd.entiteId,
+      sortId: cd.sortId,
+      toursRestants: cd.toursRestants,
     })),
   };
 }

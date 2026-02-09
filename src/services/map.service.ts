@@ -64,6 +64,42 @@ export class MapService {
     });
   }
 
+  async update(id: number, data: Partial<{
+    nom: string;
+    type: MapType;
+    combatMode: CombatMode;
+    largeur: number;
+    hauteur: number;
+    tauxRencontre: number;
+    nordMapId: number | null;
+    sudMapId: number | null;
+    estMapId: number | null;
+    ouestMapId: number | null;
+  }>) {
+    return prisma.map.update({
+      where: { id },
+      data,
+      include: { region: true },
+    });
+  }
+
+  async delete(id: number) {
+    // Delete related data
+    await prisma.mapConnection.deleteMany({ where: { OR: [{ fromMapId: id }, { toMapId: id }] } });
+    await prisma.groupeEnnemi.deleteMany({ where: { mapId: id } });
+    await prisma.grilleCombat.deleteMany({ where: { mapId: id } });
+    // Nullify directional references
+    await prisma.map.updateMany({ where: { nordMapId: id }, data: { nordMapId: null } });
+    await prisma.map.updateMany({ where: { sudMapId: id }, data: { sudMapId: null } });
+    await prisma.map.updateMany({ where: { estMapId: id }, data: { estMapId: null } });
+    await prisma.map.updateMany({ where: { ouestMapId: id }, data: { ouestMapId: null } });
+    return prisma.map.delete({ where: { id } });
+  }
+
+  async deleteConnection(connId: number) {
+    return prisma.mapConnection.delete({ where: { id: connId } });
+  }
+
   async addConnection(data: {
     fromMapId: number;
     toMapId: number;

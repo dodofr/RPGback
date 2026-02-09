@@ -186,12 +186,13 @@ export class CombatService {
   }
 
   async findAll() {
-    return prisma.combat.findMany({
-      include: {
-        entites: true,
-      },
+    const combats = await prisma.combat.findMany({
       orderBy: { createdAt: 'desc' },
     });
+    const states = await Promise.all(
+      combats.map(c => getCombatState(c.id))
+    );
+    return states.filter(s => s !== null);
   }
 }
 

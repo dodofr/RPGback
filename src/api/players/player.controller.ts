@@ -92,6 +92,28 @@ export class PlayerController {
     }
   }
 
+  async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      const updatePlayerSchema = z.object({
+        nom: z.string().min(2).max(50).optional(),
+      });
+      const data = updatePlayerSchema.parse(req.body);
+      const player = await playerService.update(id, data);
+      res.json(player);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      next(error);
+    }
+  }
+
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const id = parseInt(req.params.id, 10);

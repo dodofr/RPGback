@@ -13,6 +13,18 @@ regionsRouter.get('/:id', (req, res, next) => mapController.getRegionById(req, r
 // POST /api/regions - Create a region
 regionsRouter.post('/', (req, res, next) => mapController.createRegion(req, res, next));
 
+// PATCH /api/regions/:id - Update a region
+regionsRouter.patch('/:id', (req, res, next) => mapController.updateRegion(req, res, next));
+
+// DELETE /api/regions/:id - Delete a region
+regionsRouter.delete('/:id', (req, res, next) => mapController.deleteRegion(req, res, next));
+
+// POST /api/regions/:id/monstres - Add monster to region
+regionsRouter.post('/:id/monstres', (req, res, next) => mapController.addRegionMonstre(req, res, next));
+
+// DELETE /api/regions/:id/monstres/:monstreId - Remove monster from region
+regionsRouter.delete('/:id/monstres/:monstreId', (req, res, next) => mapController.removeRegionMonstre(req, res, next));
+
 // ==================== MAPS ====================
 const mapsRouter = Router();
 
@@ -37,6 +49,15 @@ mapsRouter.post('/:id/engage', (req, res, next) => mapController.engageEnemy(req
 // POST /api/maps/:id/respawn - Process respawns for defeated enemies
 mapsRouter.post('/:id/respawn', (req, res, next) => mapController.processRespawns(req, res, next));
 
+// PATCH /api/maps/:id - Update a map
+mapsRouter.patch('/:id', (req, res, next) => mapController.updateMap(req, res, next));
+
+// DELETE /api/maps/:id - Delete a map
+mapsRouter.delete('/:id', (req, res, next) => mapController.deleteMap(req, res, next));
+
+// DELETE /api/maps/:id/connections/:connId - Delete a map connection
+mapsRouter.delete('/:id/connections/:connId', (req, res, next) => mapController.deleteConnection(req, res, next));
+
 // ==================== MONSTRES ====================
 const monstresRouter = Router();
 
@@ -48,6 +69,18 @@ monstresRouter.get('/:id', (req, res, next) => mapController.getMonstreById(req,
 
 // POST /api/monstres - Create a monster template
 monstresRouter.post('/', (req, res, next) => mapController.createMonstre(req, res, next));
+
+// PATCH /api/monstres/:id - Update a monster template
+monstresRouter.patch('/:id', (req, res, next) => mapController.updateMonstre(req, res, next));
+
+// DELETE /api/monstres/:id - Delete a monster template
+monstresRouter.delete('/:id', (req, res, next) => mapController.deleteMonstre(req, res, next));
+
+// POST /api/monstres/:id/sorts - Add spell to monster
+monstresRouter.post('/:id/sorts', (req, res, next) => mapController.addMonstreSort(req, res, next));
+
+// DELETE /api/monstres/:id/sorts/:sortId - Remove spell from monster
+monstresRouter.delete('/:id/sorts/:sortId', (req, res, next) => mapController.removeMonstreSort(req, res, next));
 
 export default {
   regions: regionsRouter,

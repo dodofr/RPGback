@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { combatService } from '../../services/combat/combat.service';
+import prisma from '../../config/database';
 
 const monsterSchema = z.object({
   nom: z.string().min(1),
@@ -206,6 +207,28 @@ export class CombatController {
       }
 
       res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async delete(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      // Clear invocateur references first (self-referencing)
+      await prisma.combatEntite.updateMany({
+        where: { combatId: id, invocateurId: { not: null } },
+        data: { invocateurId: null },
+      });
+      // Delete entities
+      await prisma.combatEntite.deleteMany({ where: { combatId: id } });
+      // Delete combat (cascades effets, cooldowns, cases)
+      await prisma.combat.delete({ where: { id } });
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

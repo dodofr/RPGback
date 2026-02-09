@@ -24,4 +24,7 @@ router.post('/:id/end-turn', (req, res, next) => combatController.endTurn(req, r
 // POST /api/combats/:id/flee - Flee from combat
 router.post('/:id/flee', (req, res, next) => combatController.flee(req, res, next));
 
+// DELETE /api/combats/:id - Delete a combat
+router.delete('/:id', (req, res, next) => combatController.delete(req, res, next));
+
 export default router;

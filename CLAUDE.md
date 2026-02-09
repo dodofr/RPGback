@@ -7,7 +7,7 @@ Backend Node.js/TypeScript pour un jeu RPG tactique au tour par tour. API REST a
 ## Stack technique
 
 - **Runtime**: Node.js + TypeScript
-- **API**: Express.js
+- **API**: Express.js + CORS
 - **ORM**: Prisma
 - **BDD**: PostgreSQL
 - **Validation**: Zod
@@ -35,29 +35,29 @@ npx prisma generate      # Régénérer le client Prisma
 backend/
 ├── src/
 │   ├── index.ts                 # Point d'entrée
-│   ├── app.ts                   # Configuration Express
+│   ├── app.ts                   # Configuration Express + CORS
 │   ├── config/database.ts       # Client Prisma singleton
 │   ├── api/
 │   │   ├── routes.ts            # Agrégation routes
-│   │   ├── players/             # CRUD joueurs
+│   │   ├── players/             # CRUD joueurs (controller/service/routes)
 │   │   ├── characters/          # CRUD personnages + équipement + progression
 │   │   ├── groups/              # Gestion groupes + navigation
 │   │   ├── combat/              # Endpoints combat
-│   │   ├── maps/                # Régions, maps, monstres, spawns
+│   │   ├── maps/                # Régions, maps, monstres, spawns + relations
 │   │   ├── grilles/             # CRUD grilles de combat prédéfinies
 │   │   ├── donjons/             # Système de donjons linéaires
-│   │   └── static/              # Données référentielles (races, sorts, équipements)
+│   │   └── static/              # CRUD données référentielles (races, sorts, équipements, effets, zones)
 │   ├── services/
 │   │   ├── player.service.ts
 │   │   ├── character.service.ts # + stats totales, équipement
 │   │   ├── group.service.ts     # + navigation entre maps, engagement auto
-│   │   ├── region.service.ts
-│   │   ├── map.service.ts       # Maps, groupes ennemis, spawns, engagement
-│   │   ├── monstre.service.ts   # Templates de monstres
+│   │   ├── region.service.ts    # + update, delete
+│   │   ├── map.service.ts       # + update, delete, deleteConnection
+│   │   ├── monstre.service.ts   # + update, delete
 │   │   ├── progression.service.ts  # XP, level-up, allocation stats
 │   │   ├── spell.service.ts     # Apprentissage sorts, cooldowns
 │   │   ├── grille.service.ts    # CRUD grilles + getRandomGridForMap()
-│   │   ├── donjon.service.ts    # Système de donjons linéaires
+│   │   ├── donjon.service.ts    # + create, update, delete
 │   │   └── combat/
 │   │       ├── combat.service.ts   # Service principal combat
 │   │       ├── engine.ts           # Logique coeur du combat
@@ -88,10 +88,12 @@ backend/
 Request → Routes → Controller (Zod) → Service (Prisma) → PostgreSQL
 ```
 
+Exception : `static.routes.ts` utilise des handlers inline (pas de controller/service séparés) avec Prisma + Zod directement dans les routes.
+
 ## API Endpoints
 
 ### Players (`/api/players`)
-POST `/` | GET `/` | GET `/:id` | GET `/:id/characters` | GET `/:id/groups` | DELETE `/:id`
+POST `/` | GET `/` | GET `/:id` | GET `/:id/characters` | GET `/:id/groups` | PATCH `/:id` | DELETE `/:id`
 
 ### Characters (`/api/characters`)
 POST `/` | GET `/` | GET `/:id` (avec stats totales) | PATCH `/:id` | PUT `/:id/equipment` | GET `/:id/spells` | POST `/:id/allocate-stats` | GET `/:id/progression` | DELETE `/:id`
@@ -100,25 +102,37 @@ POST `/` | GET `/` | GET `/:id` (avec stats totales) | PATCH `/:id` | PUT `/:id/
 POST `/` | GET `/` | GET `/:id` | POST `/:id/characters` (max 6) | DELETE `/:id/characters/:charId` | PATCH `/:id/move` | POST `/:id/enter-map` | POST `/:id/use-connection` | POST `/:id/move-direction` (NORD/SUD/EST/OUEST) | POST `/:id/leave-map` | DELETE `/:id`
 
 ### Combat (`/api/combats`)
-POST `/` | GET `/` | GET `/:id` | POST `/:id/action` (sort ou arme) | POST `/:id/move` | POST `/:id/end-turn` | POST `/:id/flee`
+POST `/` | GET `/` | GET `/:id` | POST `/:id/action` (sort ou arme) | POST `/:id/move` | POST `/:id/end-turn` | POST `/:id/flee` | DELETE `/:id`
 
 ### Maps (`/api/maps`)
-GET `/` | GET `/:id` | POST `/` | POST `/:id/connections` | POST `/:id/spawn-enemies` | POST `/:id/engage` | POST `/:id/respawn`
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/connections` | DELETE `/:id/connections/:connId` | POST `/:id/spawn-enemies` | POST `/:id/engage` | POST `/:id/respawn`
 
 ### Grilles (`/api/grilles`)
 POST `/` | GET `/` | GET `/:id` | PUT `/:id` | DELETE `/:id` | PUT `/:id/cases` | PUT `/:id/spawns`
 
 ### Regions (`/api/regions`)
-GET `/` | GET `/:id` | POST `/`
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/monstres` | DELETE `/:id/monstres/:monstreId`
 
 ### Monstres (`/api/monstres`)
-GET `/` | GET `/:id` | POST `/`
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/sorts` | DELETE `/:id/sorts/:sortId`
 
 ### Donjons (`/api/donjons`)
-GET `/` | GET `/:id` | POST `/:id/enter` | GET `/run/:groupeId` | POST `/run/:groupeId/abandon`
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/enter` | GET `/run/:groupeId` | POST `/run/:groupeId/abandon`
 
-### Static Data
-GET `/api/races` | `/api/races/:id` | `/api/spells` | `/api/spells/:id` | `/api/equipment` | `/api/equipment/:id` | `/api/effects` | `/api/zones`
+### Static Data — Races (`/api/races`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+
+### Static Data — Sorts (`/api/spells`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/effects` | DELETE `/:id/effects/:effetId`
+
+### Static Data — Equipements (`/api/equipment`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+
+### Static Data — Effets (`/api/effects`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+
+### Static Data — Zones (`/api/zones`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 
 ## Base de données
 
@@ -282,11 +296,28 @@ WILDERNESS (MANUEL, ennemis visibles) | DONJON (AUTO, rencontres aléatoires) | 
 - Tables BDD: `PascalCase` (français) | Colonnes: `camelCase`
 - Endpoints en anglais (`/api/players`) | Modèles BDD en français (`Joueur`)
 
+### Patterns
+- **Controller/Service/Route** : players, characters, groups, combat, maps, donjons, grilles
+- **Inline handlers** : `static.routes.ts` (races, sorts, equipment, effects, zones) — Prisma + Zod directement dans les routes, pas de controller/service séparés
+- **Relations** : endpoints imbriqués (`/spells/:id/effects`, `/regions/:id/monstres`, `/monstres/:id/sorts`)
+
 ### Erreurs
 ```typescript
 { error: "Message", details?: [] }
 // 200 Succès | 201 Créé | 204 Sans contenu | 400 Invalide | 404 Non trouvé | 500 Erreur
 ```
+
+### Suppression (DELETE)
+Avant de supprimer une ressource, nettoyer les relations :
+- **Race** : supprimer PersonnageSort, SortEffet, SortCooldown, MonstreSort des sorts de la race, puis les sorts, puis la race
+- **Sort** : supprimer SortEffet, PersonnageSort, SortCooldown, MonstreSort
+- **Effet** : supprimer SortEffet, EffetActif
+- **Zone** : nullifier zoneId sur Sort et Equipement
+- **Region** : supprimer RegionMonstre
+- **Map** : supprimer MapConnection, GroupeEnnemi, GrilleCombat, nullifier directional refs
+- **Monstre** : supprimer RegionMonstre, MonstreSort
+- **Donjon** : supprimer DonjonRun (DonjonSalle cascade)
+- **Combat** : nullifier invocateurId, supprimer CombatEntite (EffetActif/SortCooldown/CombatCase cascade)
 
 ## Pour étendre le projet
 
@@ -338,3 +369,5 @@ PORT=3000
 - Polling frontend recommandé : 500ms-1000ms (pas de WebSocket, MVP REST)
 - Pas d'authentification (MVP)
 - Upsert pattern dans seed.ts pour idempotence
+- CORS activé (`cors()` middleware dans app.ts)
+- Frontend sur port 5173 (Vite), backend sur port 3000

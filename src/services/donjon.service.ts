@@ -610,6 +610,59 @@ export class DonjonService {
     });
   }
 
+  async create(data: {
+    nom: string;
+    description?: string;
+    regionId: number;
+    niveauMin?: number;
+    niveauMax?: number;
+    bossId: number;
+    salles: { ordre: number; mapId: number }[];
+  }) {
+    return prisma.donjon.create({
+      data: {
+        nom: data.nom,
+        description: data.description,
+        regionId: data.regionId,
+        niveauMin: data.niveauMin ?? 1,
+        niveauMax: data.niveauMax ?? 5,
+        bossId: data.bossId,
+        salles: {
+          create: data.salles,
+        },
+      },
+      include: {
+        region: true,
+        boss: true,
+        salles: { orderBy: { ordre: 'asc' }, include: { map: true } },
+      },
+    });
+  }
+
+  async update(id: number, data: Partial<{
+    nom: string;
+    description: string | null;
+    niveauMin: number;
+    niveauMax: number;
+    bossId: number;
+  }>) {
+    return prisma.donjon.update({
+      where: { id },
+      data,
+      include: {
+        region: true,
+        boss: true,
+        salles: { orderBy: { ordre: 'asc' }, include: { map: true } },
+      },
+    });
+  }
+
+  async delete(id: number) {
+    // DonjonSalle has onDelete: Cascade, so we just need to handle runs
+    await prisma.donjonRun.deleteMany({ where: { donjonId: id } });
+    return prisma.donjon.delete({ where: { id } });
+  }
+
   /**
    * List all dungeons
    */

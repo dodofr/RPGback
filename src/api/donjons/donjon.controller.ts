@@ -24,6 +24,35 @@ export class DonjonController {
   }
 
   /**
+   * POST /api/donjons - Create a dungeon
+   */
+  async createDonjon(req: Request, res: Response, next: NextFunction) {
+    try {
+      const createDonjonSchema = z.object({
+        nom: z.string().min(2).max(100),
+        description: z.string().max(500).optional(),
+        regionId: z.number().int().positive(),
+        niveauMin: z.number().int().min(1).optional(),
+        niveauMax: z.number().int().min(1).optional(),
+        bossId: z.number().int().positive(),
+        salles: z.array(z.object({
+          ordre: z.number().int().min(1).max(4),
+          mapId: z.number().int().positive(),
+        })).min(4).max(4),
+      });
+      const data = createDonjonSchema.parse(req.body);
+      const donjon = await donjonService.create(data);
+      res.status(201).json(donjon);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/donjons/:id - Get dungeon details
    */
   async getDonjonById(req: Request, res: Response, next: NextFunction) {
@@ -41,6 +70,52 @@ export class DonjonController {
       }
 
       res.json(donjon);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/donjons/:id - Update a dungeon
+   */
+  async updateDonjon(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      const updateDonjonSchema = z.object({
+        nom: z.string().min(2).max(100).optional(),
+        description: z.string().max(500).nullable().optional(),
+        niveauMin: z.number().int().min(1).optional(),
+        niveauMax: z.number().int().min(1).optional(),
+        bossId: z.number().int().positive().optional(),
+      });
+      const data = updateDonjonSchema.parse(req.body);
+      const donjon = await donjonService.update(id, data);
+      res.json(donjon);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE /api/donjons/:id - Delete a dungeon
+   */
+  async deleteDonjon(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      await donjonService.delete(id);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

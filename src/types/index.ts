@@ -86,10 +86,18 @@ export interface CombatState {
   entites: CombatEntityState[];
   effetsActifs: ActiveEffectStateWithDetails[];
   cases: CombatCaseState[];
+  cooldowns: CombatCooldownState[];
+}
+
+export interface CombatCooldownState {
+  entiteId: number;
+  sortId: number;
+  toursRestants: number;
 }
 
 export interface CombatEntityState {
   id: number;
+  personnageId: number | null;
   nom: string;
   equipe: number;
   position: Position;

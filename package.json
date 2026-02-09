@@ -15,11 +15,18 @@
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
   },
-  "keywords": ["rpg", "tactical", "game", "backend"],
+  "keywords": [
+    "rpg",
+    "tactical",
+    "game",
+    "backend"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^5.10.0",
+    "@types/cors": "^2.8.19",
+    "cors": "^2.8.6",
     "express": "^4.18.2",
     "zod": "^3.22.4"
   },
