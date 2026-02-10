@@ -40,6 +40,9 @@ mapsRouter.post('/', (req, res, next) => mapController.createMap(req, res, next)
 // POST /api/maps/:id/connections - Add connection to another map
 mapsRouter.post('/:id/connections', (req, res, next) => mapController.addConnection(req, res, next));
 
+// GET /api/maps/:id/grilles - Get combat grids linked to this map
+mapsRouter.get('/:id/grilles', (req, res, next) => mapController.getMapGrilles(req, res, next));
+
 // POST /api/maps/:id/spawn-enemies - Spawn enemies on the map (MANUEL mode)
 mapsRouter.post('/:id/spawn-enemies', (req, res, next) => mapController.spawnEnemies(req, res, next));
 

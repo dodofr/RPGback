@@ -123,6 +123,7 @@ export interface CombatEntityState {
   monstreTemplateId?: number | null;
   niveau?: number | null;
   iaType?: string | null;
+  sorts?: CombatSpellState[];
 }
 
 export interface ActiveEffectState {
@@ -137,6 +138,41 @@ export interface ActiveEffectStateWithDetails extends ActiveEffectState {
   type: EffetType;
   statCiblee: StatType;
   valeur: number;
+}
+
+// Spell data returned with combat entities
+export interface CombatSpellState {
+  id: number;
+  nom: string;
+  description: string | null;
+  type: string;
+  statUtilisee: string;
+  coutPA: number;
+  porteeMin: number;
+  porteeMax: number;
+  ligneDeVue: boolean;
+  degatsMin: number;
+  degatsMax: number;
+  degatsCritMin: number;
+  degatsCritMax: number;
+  chanceCritBase: number;
+  cooldown: number;
+  cooldownRestant: number;
+  estSoin: boolean;
+  estDispel: boolean;
+  estInvocation: boolean;
+  tauxEchec: number;
+  zone: { type: string; taille: number; nom: string } | null;
+  effets: {
+    effetId: number;
+    nom: string;
+    type: string;
+    statCiblee: string;
+    valeur: number;
+    duree: number;
+    chanceDeclenchement: number;
+    surCible: boolean;
+  }[];
 }
 
 // Weapon attack data (snapshot in CombatEntite)

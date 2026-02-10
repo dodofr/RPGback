@@ -48,7 +48,9 @@
       "Bash(do curl -s -X POST http://localhost:3000/api/combats/9/end-turn -H \"Content-Type: application/json\" -d \"{\"\"entiteId\"\": 56}\")",
       "Bash(npm create:*)",
       "Bash(npx vite:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(PGPASSWORD=rpg_password psql:*)",
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\":*)"
     ]
   }
 }

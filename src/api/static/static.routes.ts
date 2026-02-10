@@ -273,6 +273,11 @@ spellsRouter.get('/', async (_req: Request, res: Response, next: NextFunction) =
       include: {
         zone: true,
         race: true,
+        effets: {
+          include: {
+            effet: true,
+          },
+        },
       },
       orderBy: { id: 'asc' },
     });
@@ -295,6 +300,11 @@ spellsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction)
       include: {
         zone: true,
         race: true,
+        effets: {
+          include: {
+            effet: true,
+          },
+        },
       },
     });
 
@@ -353,6 +363,11 @@ spellsRouter.patch('/:id', async (req: Request, res: Response, next: NextFunctio
       include: {
         zone: true,
         race: true,
+        effets: {
+          include: {
+            effet: true,
+          },
+        },
       },
     });
 

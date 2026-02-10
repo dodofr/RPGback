@@ -1,6 +1,6 @@
 import { CombatStatus, Sort, ZoneType, IAType } from '@prisma/client';
 import prisma from '../../config/database';
-import { CombatState, ActionResult, Position, CombatCaseState, ArmeData, ActiveEffectStateWithDetails } from '../../types';
+import { CombatState, ActionResult, Position, CombatCaseState, ArmeData, ActiveEffectStateWithDetails, CombatSpellState } from '../../types';
 import { calculateAlternatingInitiativeOrder, getNextEntity } from './initiative';
 import { calculateDamage, applyDamage, isDead } from './damage';
 import { canMove, calculateMovementCost, hasLineOfSight } from './movement';
@@ -37,6 +37,163 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
     return null;
   }
 
+  // Load spells for each entity
+  const entitesWithSpells = await Promise.all(
+    combat.entites.map(async (e) => {
+      let sorts: CombatSpellState[] = [];
+
+      if (e.personnageId) {
+        // Player entity: get learned spells via PersonnageSort
+        const personnageSorts = await prisma.personnageSort.findMany({
+          where: { personnageId: e.personnageId },
+          include: {
+            sort: {
+              include: {
+                zone: true,
+                effets: {
+                  include: {
+                    effet: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        sorts = personnageSorts.map((ps) => {
+          const cd = combat.cooldowns.find(
+            (c) => c.entiteId === e.id && c.sortId === ps.sortId
+          );
+          return {
+            id: ps.sort.id,
+            nom: ps.sort.nom,
+            description: ps.sort.description,
+            type: ps.sort.type,
+            statUtilisee: ps.sort.statUtilisee,
+            coutPA: ps.sort.coutPA,
+            porteeMin: ps.sort.porteeMin,
+            porteeMax: ps.sort.porteeMax,
+            ligneDeVue: ps.sort.ligneDeVue,
+            degatsMin: ps.sort.degatsMin,
+            degatsMax: ps.sort.degatsMax,
+            degatsCritMin: ps.sort.degatsCritMin,
+            degatsCritMax: ps.sort.degatsCritMax,
+            chanceCritBase: ps.sort.chanceCritBase,
+            cooldown: ps.sort.cooldown,
+            cooldownRestant: cd ? cd.toursRestants : 0,
+            estSoin: ps.sort.estSoin,
+            estDispel: ps.sort.estDispel,
+            estInvocation: ps.sort.estInvocation,
+            tauxEchec: ps.sort.tauxEchec,
+            zone: ps.sort.zone
+              ? { type: ps.sort.zone.type, taille: ps.sort.zone.taille, nom: ps.sort.zone.nom }
+              : null,
+            effets: ps.sort.effets.map((se) => ({
+              effetId: se.effet.id,
+              nom: se.effet.nom,
+              type: se.effet.type,
+              statCiblee: se.effet.statCiblee,
+              valeur: se.effet.valeur,
+              duree: se.effet.duree,
+              chanceDeclenchement: se.chanceDeclenchement,
+              surCible: se.surCible,
+            })),
+          };
+        });
+      } else if (e.monstreTemplateId) {
+        // Monster/invocation entity: get spells via MonstreSort
+        const monstreSorts = await prisma.monstreSort.findMany({
+          where: { monstreId: e.monstreTemplateId },
+          include: {
+            sort: {
+              include: {
+                zone: true,
+                effets: {
+                  include: {
+                    effet: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { priorite: 'asc' },
+        });
+
+        sorts = monstreSorts.map((ms) => {
+          const cd = combat.cooldowns.find(
+            (c) => c.entiteId === e.id && c.sortId === ms.sortId
+          );
+          return {
+            id: ms.sort.id,
+            nom: ms.sort.nom,
+            description: ms.sort.description,
+            type: ms.sort.type,
+            statUtilisee: ms.sort.statUtilisee,
+            coutPA: ms.sort.coutPA,
+            porteeMin: ms.sort.porteeMin,
+            porteeMax: ms.sort.porteeMax,
+            ligneDeVue: ms.sort.ligneDeVue,
+            degatsMin: ms.sort.degatsMin,
+            degatsMax: ms.sort.degatsMax,
+            degatsCritMin: ms.sort.degatsCritMin,
+            degatsCritMax: ms.sort.degatsCritMax,
+            chanceCritBase: ms.sort.chanceCritBase,
+            cooldown: ms.sort.cooldown,
+            cooldownRestant: cd ? cd.toursRestants : 0,
+            estSoin: ms.sort.estSoin,
+            estDispel: ms.sort.estDispel,
+            estInvocation: ms.sort.estInvocation,
+            tauxEchec: ms.sort.tauxEchec,
+            zone: ms.sort.zone
+              ? { type: ms.sort.zone.type, taille: ms.sort.zone.taille, nom: ms.sort.zone.nom }
+              : null,
+            effets: ms.sort.effets.map((se) => ({
+              effetId: se.effet.id,
+              nom: se.effet.nom,
+              type: se.effet.type,
+              statCiblee: se.effet.statCiblee,
+              valeur: se.effet.valeur,
+              duree: se.effet.duree,
+              chanceDeclenchement: se.chanceDeclenchement,
+              surCible: se.surCible,
+            })),
+          };
+        });
+      }
+
+      return {
+        id: e.id,
+        personnageId: e.personnageId,
+        nom: e.nom,
+        equipe: e.equipe,
+        position: { x: e.positionX, y: e.positionY },
+        pvMax: e.pvMax,
+        pvActuels: e.pvActuels,
+        paMax: e.paMax,
+        paActuels: e.paActuels,
+        pmMax: e.pmMax,
+        pmActuels: e.pmActuels,
+        stats: {
+          force: e.force,
+          intelligence: e.intelligence,
+          dexterite: e.dexterite,
+          agilite: e.agilite,
+          vie: e.vie,
+          chance: e.chance,
+        },
+        initiative: e.initiative,
+        ordreJeu: e.ordreJeu,
+        invocateurId: e.invocateurId,
+        armeData: e.armeData as unknown as ArmeData | null,
+        armeCooldownRestant: e.armeCooldownRestant,
+        monstreTemplateId: e.monstreTemplateId,
+        niveau: e.niveau,
+        iaType: e.iaType,
+        sorts,
+      };
+    })
+  );
+
   return {
     id: combat.id,
     status: combat.status,
@@ -46,35 +203,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       largeur: combat.grilleLargeur,
       hauteur: combat.grilleHauteur,
     },
-    entites: combat.entites.map((e) => ({
-      id: e.id,
-      personnageId: e.personnageId,
-      nom: e.nom,
-      equipe: e.equipe,
-      position: { x: e.positionX, y: e.positionY },
-      pvMax: e.pvMax,
-      pvActuels: e.pvActuels,
-      paMax: e.paMax,
-      paActuels: e.paActuels,
-      pmMax: e.pmMax,
-      pmActuels: e.pmActuels,
-      stats: {
-        force: e.force,
-        intelligence: e.intelligence,
-        dexterite: e.dexterite,
-        agilite: e.agilite,
-        vie: e.vie,
-        chance: e.chance,
-      },
-      initiative: e.initiative,
-      ordreJeu: e.ordreJeu,
-      invocateurId: e.invocateurId,
-      armeData: e.armeData as unknown as ArmeData | null,
-      armeCooldownRestant: e.armeCooldownRestant,
-      monstreTemplateId: e.monstreTemplateId,
-      niveau: e.niveau,
-      iaType: e.iaType,
-    })),
+    entites: entitesWithSpells,
     effetsActifs: combat.effetsActifs.map((e) => ({
       id: e.id,
       entiteId: e.entiteId,

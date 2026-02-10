@@ -265,6 +265,18 @@ export class GrilleService {
     return this.findById(id);
   }
 
+  async findByMapId(mapId: number) {
+    return prisma.grilleCombat.findMany({
+      where: { mapId },
+      include: {
+        cases: true,
+        spawns: { orderBy: [{ equipe: 'asc' }, { ordre: 'asc' }] },
+        map: { select: { id: true, nom: true } },
+      },
+      orderBy: { id: 'asc' },
+    });
+  }
+
   /**
    * Get a random combat grid template for a given map
    */

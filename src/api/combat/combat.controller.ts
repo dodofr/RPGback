@@ -212,6 +212,40 @@ export class CombatController {
     }
   }
 
+  async getEntitySpells(req: Request, res: Response, next: NextFunction) {
+    try {
+      const combatId = parseInt(req.params.id, 10);
+      const entiteId = parseInt(req.params.entiteId, 10);
+      if (isNaN(combatId) || isNaN(entiteId)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+
+      const state = await combatService.getState(combatId);
+      if (!state) {
+        res.status(404).json({ error: 'Combat not found' });
+        return;
+      }
+
+      const entite = state.entites.find((e) => e.id === entiteId);
+      if (!entite) {
+        res.status(404).json({ error: 'Entity not found in this combat' });
+        return;
+      }
+
+      res.json({
+        entiteId: entite.id,
+        nom: entite.nom,
+        paActuels: entite.paActuels,
+        sorts: entite.sorts ?? [],
+        armeData: entite.armeData ?? null,
+        armeCooldownRestant: entite.armeCooldownRestant ?? 0,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const id = parseInt(req.params.id, 10);

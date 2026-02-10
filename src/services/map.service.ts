@@ -8,6 +8,7 @@ export class MapService {
     return prisma.map.findMany({
       include: {
         region: true,
+        _count: { select: { grilles: true } },
       },
       orderBy: { id: 'asc' },
     });
@@ -34,6 +35,16 @@ export class MapService {
               select: { id: true, nom: true, type: true },
             },
           },
+        },
+        grilles: {
+          select: {
+            id: true,
+            nom: true,
+            largeur: true,
+            hauteur: true,
+            _count: { select: { cases: true, spawns: true } },
+          },
+          orderBy: { id: 'asc' },
         },
       },
     });

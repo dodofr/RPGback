@@ -8,4 +8,165 @@ Voir comment on peut gerer et généré les items dropable ou ressource. ajouter
 Ajouter de l'or.
 -Penser a un sytheme de quete et creer des pnj
 
+Visibilité des combats
+J'ai besoin que tu me fasses des propositions d'amélioration au niveau des infos du combat.
+Il faudrait arreter qu'elle soit en doubles et je voudrais bien voir par exemple : Mage lance le sort fleche de lumiere 3PA, Loup subit 20 degats 
+Mage lance le sort fleche de lumiere 3PA, COUP CRITIQUE, Loup subit 30 degats
+On peut imaginer pour les buff ou debuff de voir dans cette ligne également ce qui se passe.
+Dans l'idée "qui lance l'attaque,ce qu'il lance, ce que ca fait, le nombre de degat" ajouter si echec, coup critique, les buff avec l'effet et le nombre de tour qui et sur qui c'est lancé.
+Je te donne ce que j'ai actuellement :
+Tank: Rage (Force +20, 3t)
+Tour 1: Gobelin 3 joue
+Tour 1: Gobelin 3 joue
+Tour 1: Mage joue
+Tour 1: Mage joue
+Mage: Concentration (Intelligence +15, 2t)
+Tour 1: Brute joue
+Tour 1: Brute joue
+Tour 1: Voleur joue
+Tour 1: Voleur joue
+Tour 1: Loup 3 joue
+Tour 1: Loup 3 joue
+Tour 1: Forgeron joue
+Tour 1: Forgeron joue
+Forgeron: Agilité accrue (Agilité +25, 2t)
+Tour 2: Gobelin 3 joue
+Tour 2: Gobelin 3 joue
+Tour 2: Tank joue
+Tour 2: Tank joue
+Tour 2: Gobelin 1 joue
+Tour 2: Gobelin 1 joue
+Tour 2: Mage joue
+Tour 2: Mage joue
+Loup 2 subit 27 degats (18/45 PV)
+Loup 3 subit 23 degats (22/45 PV)
+Loup 2 subit 27 degats (18/45 PV)
+Loup 3 subit 23 degats (22/45 PV)
+Loup 3 subit 22 degats (0/45 PV)
+Loup 3 est mort!
+Loup 2 subit 18 degats (0/45 PV)
+Loup 2 est mort!
+Loup 3 subit 22 degats (0/45 PV)
+Loup 3 est mort!
+Loup 2 subit 18 degats (0/45 PV)
+Loup 2 est mort!
+Tour 2: Esprit de Lumière joue
+Tour 2: Esprit de Lumière joue
+Tour 2: Brute joue
+Tour 2: Brute joue
+Tour 2: Voleur joue
+Tour 2: Voleur joue
+Tour 2: Gobelin 2 joue
+Tour 2: Gobelin 2 joue
+Tour 2: Forgeron joue
+Voleur subit 52 degats (23/75 PV)
+Tour 2: Forgeron joue
+Voleur subit 52 degats (23/75 PV)
+Tour 3: Gobelin 3 joue
+Tour 3: Gobelin 3 joue
+Tour 3: Tank joue
+Brute subit 17 degats (133/150 PV)
+Voleur subit 23 degats (0/75 PV)
+Voleur est mort!
+Tour 3: Tank joue
+Brute subit 17 degats (133/150 PV)
+Voleur subit 23 degats (0/75 PV)
+Voleur est mort!
+Loup 1 subit 29 degats (16/45 PV)
+Loup 1 subit 29 degats (16/45 PV)
+Loup 1 subit 16 degats (0/45 PV)
+Loup 1 est mort!
+Loup 1 subit 16 degats (0/45 PV)
+Loup 1 est mort!
+Tour 3: Gobelin 1 joue
+Tour 3: Gobelin 1 joue
+Tour 3: Loup 4 joue
+Forgeron subit 31 degats (169/200 PV)
+Tank subit 40 degats (85/125 PV)
+Tour 3: Loup 4 joue
+Forgeron subit 31 degats (169/200 PV)
+Tank subit 40 degats (85/125 PV)
+Tour 3: Mage joue
+Mage: Concentration expire
+Tour 3: Mage joue
+Loup 4 subit 22 degats (23/45 PV)
+Gobelin 1 subit 33 degats (9/42 PV)
+Tank subit 65 degats (20/125 PV)
+Loup 4 subit 22 degats (23/45 PV)
+Gobelin 1 subit 33 degats (9/42 PV)
+Tank subit 65 degats (20/125 PV)
+Gobelin 1 subit 9 degats (0/42 PV)
+Gobelin 1 est mort!
+Loup 4 subit 23 degats (0/45 PV)
+Loup 4 est mort!
+Tank subit 20 degats (0/125 PV)
+Tank est mort!
+Gobelin 1 subit 9 degats (0/42 PV)
+Gobelin 1 est mort!
+Loup 4 subit 23 degats (0/45 PV)
+Loup 4 est mort!
+Tank subit 20 degats (0/125 PV)
+Tank est mort!
+Tour 3: Esprit de Lumière joue
+Tour 3: Esprit de Lumière joue
+Tour 3: Brute joue
+Tour 3: Brute joue
+Gobelin 3 subit 39 degats (3/42 PV)
+Gobelin 3: Affaiblissement (Force -15, 2t)
+Gobelin 3 subit 39 degats (3/42 PV)
+Gobelin 3 subit 3 degats (0/42 PV)
+Gobelin 3 est mort!
+Gobelin 3 subit 3 degats (0/42 PV)
+Gobelin 3 est mort!
+Tour 3: Gobelin 2 joue
+Tour 3: Gobelin 2 joue
+Tour 3: Forgeron joue
+Forgeron subit 51 degats (118/200 PV)
+Forgeron: Agilité accrue expire
+Tour 3: Forgeron joue
+Forgeron subit 51 degats (118/200 PV)
+Tour 4: Mage joue
+Tour 4: Mage joue
+Tour 4: Esprit de Lumière joue
+Tour 4: Esprit de Lumière joue
+Tour 4: Brute joue
+Tour 4: Brute joue
+Gobelin 2 subit 36 degats (6/42 PV)
+Gobelin 2 subit 36 degats (6/42 PV)
+Gobelin 2 subit 6 degats (0/42 PV)
+Gobelin 2 est mort!
+Esprit de Lumière subit 37 degats (0/37 PV)
+Esprit de Lumière est mort!
+Gobelin 2 subit 6 degats (0/42 PV)
+Gobelin 2 est mort!
+Esprit de Lumière subit 37 degats (0/37 PV)
+Esprit de Lumière est mort!
 
+Administration des sorts
+
+Tu peux me faire un recapitulatif des sorts comment ca fonctionne coté back.
+
+Premier sujet
+
+je trouve la partie administration du front mal optimisé. j'ai besoin qu'on comprenne pourquoi et comment ameliorer.
+Actuellement j'ai un onglet effet avec des sort a effet. c'est une bonne idée
+J'ai un onglet monstre avec dedans  "ennemies" et "invocations". pratique pour creer les monstres et invocations mais je n'ai pas de liaison avec les sorts qui leurs sont liées.
+j'ai un onglet sort avec dedans "Tous" "Sorts de race" "Sorts de monstre" "Invocations". au niveau des sorts de races c'est tres claire, je peux creer le sort avec possibilité de le liée a la race avec un niveau mini.
+Par contre pour les sorts monstre et invocation je n'ai pas cette possibilité, je creer le sort mais je le lie a personne. je vois bien au niveau des invocation un "template invocation id" mais ca ne me parle pas.
+dans l'idée il faudrait que dans l'onglet "monstre" avec dedans "invocation" on mette l'invocation (l'entité jouante)
+dans les sorts au niveau des "sorts de race" il faudrait mettre le sort qui sert a faire apparaitre l'invocation. Et dans les sort invocations il faudrait mettre les sorts liées aux entité invocations avec une liaison sur l'entité invocation.
+Par exemple dans le sort race on aurait "invocation du dragon rouge" dans l'onglet monstre -> invcation on aurait l'entité "dragon rouge" et dans l'onglet "sort" puis ongle "invocation" on aurait "crie du dragon" et "feu du fragon" qui serait les sorts utilisé par l'entité dragon.
+Pour les enemies, il faudrait dans l'onglet "monstre" puis "ennemies" les ennemies entité et liée les sorts qu'ils aurait. dans les "sort" puis "sorts de monstre" qu'on creer les sorts des ennemies.
+Dis moi si t'as de meilleurs idées.
+
+Deuxieme sujet
+
+Les effets sur les sorts
+Un sort peut étre liée a un effet mais comment je le vois dans le front administrateur ? ou est ce que je vois le % de declenchement de cette effet également ? Je vois par exemple que coup brutal à 25% de chance de declencer affaiblissement.Quand je veux modifier coup brutal je ne vois pas l'info et dans l'onglet "effet" affaiblissement je pense que les infos sont bonnes. c'est au niveau du sort qu'il faut rajouter la liaison avec le buff et le % de déclenchement.
+Autre question. quand tu parle de esdipel, c'est pour les sorts qui debuff c'est ca ? ce serait peut étre plus simple de le mettre en effet et de liée un sort dessus. Sinon on va avoir beaucoup de doublons. Enfin dis moi si tu vois des choses que je ne verrais pas. ca permettrait de faire des sorts qui soigne ou qui tape et qui peuvent avoir un % d'enelever tout les buff ou debuff du personnage. Voir un sort qui ne tape pas mais qui enleve tout.
+
+
+Création de map, gestion
+
+Je peux creer une grille de combat en indiquant la map qui lui est relié ainsi que le nombre de cases largeur et haute. Mais sa s'arrete la.
+Se serait vraiment top d'avoir également un visuel ou je peux choisir les endroits de spwan ainsi que les bloquant pm et ligne de vue. On peut imaginé que je remplisse le nom, la map lié, le nombre de case hauteur puis que j'entre sur cette map vierge ou j'indique les spwan personnage et ennemies et differents bloquant puis je valide le tout.

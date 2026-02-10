@@ -24,6 +24,9 @@ router.post('/:id/end-turn', (req, res, next) => combatController.endTurn(req, r
 // POST /api/combats/:id/flee - Flee from combat
 router.post('/:id/flee', (req, res, next) => combatController.flee(req, res, next));
 
+// GET /api/combats/:id/entities/:entiteId/spells - Get spells for a combat entity
+router.get('/:id/entities/:entiteId/spells', (req, res, next) => combatController.getEntitySpells(req, res, next));
+
 // DELETE /api/combats/:id - Delete a combat
 router.delete('/:id', (req, res, next) => combatController.delete(req, res, next));
 

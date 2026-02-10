@@ -111,6 +111,7 @@ model Zone {
 model Sort {
   id                  Int              @id @default(autoincrement())
   nom                 String
+  description         String?
   type                SortType
   statUtilisee        StatType
   coutPA              Int

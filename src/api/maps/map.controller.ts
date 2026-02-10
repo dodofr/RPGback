@@ -4,6 +4,7 @@ import prisma from '../../config/database';
 import { mapService } from '../../services/map.service';
 import { regionService } from '../../services/region.service';
 import { monstreService } from '../../services/monstre.service';
+import { grilleService } from '../../services/grille.service';
 
 // Validation schemas
 const createMapSchema = z.object({
@@ -229,6 +230,29 @@ export class MapController {
         message: `Respawned ${respawnedGroups.length} enemy groups`,
         groupesEnnemis: respawnedGroups,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ==================== MAP GRILLES ====================
+
+  async getMapGrilles(req: Request, res: Response, next: NextFunction) {
+    try {
+      const mapId = parseInt(req.params.id, 10);
+      if (isNaN(mapId)) {
+        res.status(400).json({ error: 'Invalid map ID' });
+        return;
+      }
+
+      const map = await prisma.map.findUnique({ where: { id: mapId } });
+      if (!map) {
+        res.status(404).json({ error: 'Map not found' });
+        return;
+      }
+
+      const grilles = await grilleService.findByMapId(mapId);
+      res.json(grilles);
     } catch (error) {
       next(error);
     }

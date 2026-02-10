@@ -56,6 +56,11 @@ export class SpellService {
             sort: {
               include: {
                 zone: true,
+                effets: {
+                  include: {
+                    effet: true,
+                  },
+                },
               },
             },
           },
