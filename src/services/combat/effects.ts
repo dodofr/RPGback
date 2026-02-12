@@ -16,6 +16,8 @@ export interface AppliedEffect {
   effetId: number;
   effetNom: string;
   duree: number;
+  isDispel?: boolean;
+  removedCount?: number;
 }
 
 export interface ModifiedStats {
@@ -67,8 +69,9 @@ export async function getStatsWithEffects(
   // Start with base stats
   const modifiedStats: ModifiedStats = { ...baseStats };
 
-  // Apply each active effect
+  // Apply each active effect (skip DISPEL effects — they don't modify stats)
   for (const effect of activeEffects) {
+    if (effect.type === 'DISPEL') continue;
     const statKey = statTypeToKey(effect.statCiblee);
     if (statKey && statKey in modifiedStats) {
       modifiedStats[statKey] += effect.valeur;
@@ -151,6 +154,34 @@ export async function applySpellEffects(
   for (const sortEffet of sortEffets) {
     // Check trigger probability
     if (!checkProbability(sortEffet.chanceDeclenchement)) {
+      continue;
+    }
+
+    // DISPEL effect: remove all active effects from target(s) instead of creating EffetActif
+    if (sortEffet.effet.type === 'DISPEL') {
+      if (sortEffet.surCible) {
+        for (const targetId of targetIds) {
+          const removedCount = await dispelEffects(combatId, targetId);
+          appliedEffects.push({
+            entiteId: targetId,
+            effetId: sortEffet.effetId,
+            effetNom: sortEffet.effet.nom,
+            duree: 0,
+            isDispel: true,
+            removedCount,
+          });
+        }
+      } else {
+        const removedCount = await dispelEffects(combatId, casterId);
+        appliedEffects.push({
+          entiteId: casterId,
+          effetId: sortEffet.effetId,
+          effetNom: sortEffet.effet.nom,
+          duree: 0,
+          isDispel: true,
+          removedCount,
+        });
+      }
       continue;
     }
 

@@ -12,8 +12,9 @@ import { spellService } from '../spell.service';
 import { executeAITurn } from './ai';
 import { createInvocation, killInvocationsOf } from './invocation';
 import { donjonService } from '../donjon.service';
-import { getStatsWithEffects, applySpellEffects, getAllActiveEffectsWithDetails, dispelEffects } from './effects';
+import { getStatsWithEffects, applySpellEffects, AppliedEffect } from './effects';
 import { checkProbability } from '../../utils/random';
+import { addLog } from './combatLog';
 
 /**
  * Get the current state of a combat
@@ -30,6 +31,9 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       },
       cases: true,
       cooldowns: true,
+      logs: {
+        orderBy: { id: 'asc' },
+      },
     },
   });
 
@@ -224,6 +228,12 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       entiteId: cd.entiteId,
       sortId: cd.sortId,
       toursRestants: cd.toursRestants,
+    })),
+    logs: combat.logs.map((l) => ({
+      id: l.id,
+      tour: l.tour,
+      message: l.message,
+      type: l.type,
     })),
   };
 }
@@ -463,6 +473,11 @@ export async function executeAction(
     : spell?.tauxEchec ?? 0;
 
   if (tauxEchec > 0 && checkProbability(tauxEchec)) {
+    const actionLabel = useArme
+      ? `${attacker.nom} utilise ${(attacker.armeData as unknown as ArmeData).nom} (${attackData.coutPA} PA)`
+      : `${attacker.nom} lance ${spell!.nom} (${attackData.coutPA} PA)`;
+    await addLog(combatId, combat.tourActuel, `${actionLabel} → ÉCHEC !`, 'ACTION');
+
     if (useArme) {
       // Weapon miss: PA lost + end turn
       await endTurn(combatId, entiteId);
@@ -550,6 +565,8 @@ export async function executeAction(
       },
     });
 
+    await addLog(combatId, combat.tourActuel, `${attacker.nom} lance ${spell.nom} (${attackData.coutPA} PA) → ${invocTemplate.nom} invoqué`, 'ACTION');
+
     return {
       success: true,
       message: `Invoked ${invocTemplate.nom} at (${targetX}, ${targetY})`,
@@ -577,29 +594,9 @@ export async function executeAction(
   // Apply spell effects (buffs/debuffs) - BEFORE checking for targets
   // This allows self-buffs to work even when no targets are in area
   const targetIds = validTargets.map(t => t.id);
-  let appliedEffects: { entiteId: number; effetId: number; effetNom: string; duree: number }[] = [];
+  let appliedEffects: AppliedEffect[] = [];
   if (!useArme && sortId) {
     appliedEffects = await applySpellEffects(combatId, sortId, entiteId, targetIds);
-  }
-
-  // ===== DISPEL BRANCH =====
-  if (spell?.estDispel) {
-    const removedEffects: { entiteId: number; removedCount: number }[] = [];
-    for (const target of validTargets) {
-      const count = await dispelEffects(combatId, target.id);
-      if (count > 0) {
-        removedEffects.push({ entiteId: target.id, removedCount: count });
-      }
-    }
-    const totalRemoved = removedEffects.reduce((sum, r) => sum + r.removedCount, 0);
-    return {
-      success: true,
-      message: `Dispel removed ${totalRemoved} effect(s) from ${removedEffects.length} target(s).`,
-      actionType,
-      damages: [],
-      removedEffects: removedEffects.length > 0 ? removedEffects : undefined,
-      appliedEffects: appliedEffects.length > 0 ? appliedEffects : undefined,
-    };
   }
 
   // ===== HEAL BRANCH =====
@@ -642,6 +639,25 @@ export async function executeAction(
       });
     }
 
+    // Log heal action
+    const healParts = heals.map(h => {
+      const target = combat.entites.find(e => e.id === h.entiteId);
+      const critStr = h.isCritical ? 'CRITIQUE ! ' : '';
+      return `${critStr}${target?.nom || '?'} récupère ${h.healAmount} PV (${h.pvRestants}/${target?.pvMax || '?'} PV)`;
+    });
+    const healLabel = `${attacker.nom} lance ${spell!.nom} (${attackData.coutPA} PA) → ${healParts.join(', ')}`;
+    await addLog(combatId, combat.tourActuel, healLabel, 'ACTION');
+
+    // Log applied effects
+    for (const ef of appliedEffects) {
+      const target = combat.entites.find(e => e.id === ef.entiteId);
+      if (ef.isDispel) {
+        await addLog(combatId, combat.tourActuel, `Dispel ! ${target?.nom || '?'} perd ${ef.removedCount || 0} effet(s)`, 'ACTION');
+      } else {
+        await addLog(combatId, combat.tourActuel, `${target?.nom || '?'}: ${ef.effetNom} (${ef.duree}t)`, 'EFFET');
+      }
+    }
+
     const effectsMessage = appliedEffects.length > 0
       ? ` Applied effects: ${appliedEffects.map(e => e.effetNom).join(', ')}`
       : '';
@@ -658,6 +674,23 @@ export async function executeAction(
 
   // ===== DAMAGE BRANCH (default) =====
   if (validTargets.length === 0) {
+    // Log effects even when no damage targets
+    const actionLabel = useArme
+      ? `${attacker.nom} utilise ${(attacker.armeData as unknown as ArmeData).nom} (${attackData.coutPA} PA)`
+      : `${attacker.nom} lance ${spell!.nom} (${attackData.coutPA} PA)`;
+
+    if (appliedEffects.length > 0) {
+      await addLog(combatId, combat.tourActuel, `${actionLabel} → aucune cible`, 'ACTION');
+      for (const ef of appliedEffects) {
+        const target = combat.entites.find(e => e.id === ef.entiteId);
+        if (ef.isDispel) {
+          await addLog(combatId, combat.tourActuel, `Dispel ! ${target?.nom || '?'} perd ${ef.removedCount || 0} effet(s)`, 'ACTION');
+        } else {
+          await addLog(combatId, combat.tourActuel, `${target?.nom || '?'}: ${ef.effetNom} (${ef.duree}t)`, 'EFFET');
+        }
+      }
+    }
+
     const effectsMessage = appliedEffects.length > 0
       ? `Applied effects: ${appliedEffects.map(e => e.effetNom).join(', ')}`
       : 'No targets in area';
@@ -723,6 +756,39 @@ export async function executeAction(
       await prisma.effetActif.deleteMany({
         where: { combatId, entiteId: { in: allDeadIds } },
       });
+    }
+  }
+
+  // Log damage action
+  const actionLabel = useArme
+    ? `${attacker.nom} utilise ${(attacker.armeData as unknown as ArmeData).nom} (${attackData.coutPA} PA)`
+    : `${attacker.nom} lance ${spell!.nom} (${attackData.coutPA} PA)`;
+  const dmgParts = damages.map(d => {
+    const target = combat.entites.find(e => e.id === d.entiteId);
+    const critStr = d.isCritical ? 'CRITIQUE ! ' : '';
+    return `${critStr}${target?.nom || '?'} subit ${d.damage} dégâts (${d.pvRestants}/${target?.pvMax || '?'} PV)`;
+  });
+  if (dmgParts.length > 0) {
+    await addLog(combatId, combat.tourActuel, `${actionLabel} → ${dmgParts.join(', ')}`, 'ACTION');
+  } else {
+    await addLog(combatId, combat.tourActuel, `${actionLabel} → aucune cible`, 'ACTION');
+  }
+
+  // Log applied effects
+  for (const ef of appliedEffects) {
+    const target = combat.entites.find(e => e.id === ef.entiteId);
+    if (ef.isDispel) {
+      await addLog(combatId, combat.tourActuel, `Dispel ! ${target?.nom || '?'} perd ${ef.removedCount || 0} effet(s)`, 'ACTION');
+    } else {
+      await addLog(combatId, combat.tourActuel, `${target?.nom || '?'}: ${ef.effetNom} (${ef.duree}t)`, 'EFFET');
+    }
+  }
+
+  // Log deaths
+  for (const deadId of entitesMortes) {
+    const dead = combat.entites.find(e => e.id === deadId);
+    if (dead) {
+      await addLog(combatId, combat.tourActuel, `${dead.nom} est mort !`, 'MORT');
     }
   }
 
@@ -793,18 +859,20 @@ export async function moveEntity(
   }
 
   // Update entity position and PM
+  const pmUsed = moveResult.cost || 0;
   await prisma.combatEntite.update({
     where: { id: entiteId },
     data: {
       positionX: targetX,
       positionY: targetY,
-      pmActuels: entity.pmActuels - (moveResult.cost || 0),
+      pmActuels: entity.pmActuels - pmUsed,
     },
   });
 
   return {
     success: true,
-    message: `Moved to (${targetX}, ${targetY}), ${moveResult.cost} PM used`,
+    message: `Moved to (${targetX}, ${targetY}), ${pmUsed} PM used`,
+    pmUsed,
   };
 }
 
@@ -859,6 +927,8 @@ export async function endTurn(combatId: number, entiteId: number): Promise<Actio
       where: { id: combatId },
       data: { tourActuel: combat.tourActuel + 1, entiteActuelleId: nextEntity.id },
     });
+
+    await addLog(combatId, combat.tourActuel + 1, `Tour ${combat.tourActuel + 1} commence`, 'TOUR');
   } else {
     // Update current entity for the next turn
     await prisma.combat.update({
@@ -915,6 +985,9 @@ export async function fleeCombat(combatId: number): Promise<ActionResult> {
     return { success: false, message: 'Cannot flee from dungeon combat' };
   }
 
+  const combatData = await prisma.combat.findUnique({ where: { id: combatId } });
+  await addLog(combatId, combatData?.tourActuel ?? 0, 'Combat terminé ! Fuite', 'FIN');
+
   await prisma.combat.update({
     where: { id: combatId },
     data: { status: CombatStatus.ABANDONNE },
@@ -944,10 +1017,16 @@ async function checkCombatEnd(combatId: number): Promise<void> {
   const team1Alive = entities.filter((e) => e.equipe === 1 && e.pvActuels > 0);
 
   if (team0Alive.length === 0 || team1Alive.length === 0) {
+    const combat = await prisma.combat.findUnique({ where: { id: combatId } });
+    const tour = combat?.tourActuel ?? 0;
+
     await prisma.combat.update({
       where: { id: combatId },
       data: { status: CombatStatus.TERMINE },
     });
+
+    const isVictory = team0Alive.length > 0;
+    await addLog(combatId, tour, `Combat terminé ! ${isVictory ? 'Victoire' : 'Défaite'}`, 'FIN');
 
     // Clean up combat effects and cooldowns
     await prisma.effetActif.deleteMany({ where: { combatId } });
@@ -1007,6 +1086,29 @@ async function decrementEffects(combatId: number, entiteId?: number): Promise<vo
     where,
     data: { toursRestants: { decrement: 1 } },
   });
+
+  // Find expired effects before deleting (for logging)
+  const expired = await prisma.effetActif.findMany({
+    where: { ...where, toursRestants: { lte: 0 } },
+    include: { effet: true },
+  });
+
+  if (expired.length > 0) {
+    const combat = await prisma.combat.findUnique({ where: { id: combatId } });
+    const tour = combat?.tourActuel ?? 0;
+
+    // Get entity names
+    const entiteIds = [...new Set(expired.map(e => e.entiteId))];
+    const entites = await prisma.combatEntite.findMany({
+      where: { id: { in: entiteIds } },
+    });
+    const nameMap = new Map(entites.map(e => [e.id, e.nom]));
+
+    for (const ef of expired) {
+      const nom = nameMap.get(ef.entiteId) || '?';
+      await addLog(combatId, tour, `${nom}: ${ef.effet.nom} expire`, 'EFFET_EXPIRE');
+    }
+  }
 
   // Remove expired effects
   await prisma.effetActif.deleteMany({

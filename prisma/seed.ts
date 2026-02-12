@@ -1093,7 +1093,20 @@ async function main() {
     },
   });
 
-  console.log('Created 5 effects');
+  // Effet Dispel
+  await prisma.effet.upsert({
+    where: { id: 6 },
+    update: {},
+    create: {
+      nom: 'Dispel',
+      type: EffetType.DISPEL,
+      statCiblee: StatType.VIE,
+      valeur: 0,
+      duree: 0,
+    },
+  });
+
+  console.log('Created 6 effects');
 
   // ==================== SORTS AVEC EFFETS (buff/debuff) ====================
   // Sort 31: Cri de rage (Humain) - applique Rage sur lanceur
@@ -1345,6 +1358,22 @@ async function main() {
   });
 
   console.log('Created 5 dispel spells');
+
+  // Link dispel spells to Dispel effect (SortEffet)
+  for (const sortId of [36, 37, 38, 39, 40]) {
+    await prisma.sortEffet.upsert({
+      where: { sortId_effetId: { sortId, effetId: 6 } },
+      update: {},
+      create: {
+        sortId,
+        effetId: 6,
+        chanceDeclenchement: 1.0,
+        surCible: true,
+      },
+    });
+  }
+
+  console.log('Linked 5 dispel spells to Dispel effect');
 
   // ==================== SORTS DE SOIN ====================
   // Sort 41: Soin (Humain)

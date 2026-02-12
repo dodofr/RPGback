@@ -9,8 +9,8 @@ import { z } from 'zod';
 const StatTypeEnum = z.enum(['FORCE', 'INTELLIGENCE', 'DEXTERITE', 'AGILITE', 'VIE', 'CHANCE']);
 const SortTypeEnum = z.enum(['ARME', 'SORT']);
 const SlotTypeEnum = z.enum(['ARME', 'COIFFE', 'AMULETTE', 'BOUCLIER', 'HAUT', 'BAS', 'ANNEAU1', 'ANNEAU2', 'FAMILIER']);
-const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF']);
-const ZoneTypeEnum = z.enum(['CASE', 'CROIX', 'LIGNE', 'CONE', 'CERCLE']);
+const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF', 'DISPEL']);
+const ZoneTypeEnum = z.enum(['CASE', 'CROIX', 'LIGNE', 'CONE', 'CERCLE', 'LIGNE_PERPENDICULAIRE', 'DIAGONALE', 'CARRE', 'ANNEAU', 'CONE_INVERSE']);
 
 // Race schemas
 const createRaceSchema = z.object({
@@ -98,7 +98,7 @@ const updateEffetSchema = createEffetSchema.partial();
 const createZoneSchema = z.object({
   nom: z.string().min(1),
   type: ZoneTypeEnum,
-  taille: z.number().int().min(1),
+  taille: z.number().int().min(0),
 });
 
 const updateZoneSchema = createZoneSchema.partial();

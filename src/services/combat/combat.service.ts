@@ -5,6 +5,7 @@ import { characterService } from '../character.service';
 import { grilleService } from '../grille.service';
 import { initializeInitiative, getCombatState, executeAction, moveEntity, endTurn, fleeCombat } from './engine';
 import { loadGridTemplate } from './grid';
+import { addLog } from './combatLog';
 
 export class CombatService {
   async create(data: CreateCombatRequest) {
@@ -174,7 +175,15 @@ export class CombatService {
   }
 
   async move(combatId: number, entiteId: number, targetX: number, targetY: number) {
-    return moveEntity(combatId, entiteId, targetX, targetY);
+    const result = await moveEntity(combatId, entiteId, targetX, targetY);
+    if (result.success && result.pmUsed) {
+      const entity = await prisma.combatEntite.findUnique({ where: { id: entiteId } });
+      const combat = await prisma.combat.findUnique({ where: { id: combatId } });
+      if (entity && combat) {
+        await addLog(combatId, combat.tourActuel, `${entity.nom} se déplace (${result.pmUsed} PM)`, 'DEPLACEMENT');
+      }
+    }
+    return result;
   }
 
   async endTurn(combatId: number, entiteId: number) {

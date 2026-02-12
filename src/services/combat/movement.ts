@@ -23,6 +23,76 @@ export function calculateMovementCost(from: Position, to: Position): number {
 }
 
 /**
+ * BFS pathfinding to find the shortest path cost from 'from' to 'to',
+ * walking around obstacles and living entities.
+ * Returns the number of steps (PM cost), or null if unreachable.
+ */
+function bfsPathCost(
+  from: Position,
+  to: Position,
+  maxSteps: number,
+  grid: GridConfig,
+  occupiedPositions: EntityPosition[],
+  blockedCases: CombatCaseState[]
+): number | null {
+  if (from.x === to.x && from.y === to.y) return 0;
+
+  const occupiedSet = new Set<string>();
+  for (const e of occupiedPositions) {
+    if (e.pvActuels > 0) occupiedSet.add(`${e.positionX},${e.positionY}`);
+  }
+  const blockedSet = new Set<string>();
+  for (const c of blockedCases) {
+    if (c.bloqueDeplacement) blockedSet.add(`${c.x},${c.y}`);
+  }
+
+  const visited = new Set<string>();
+  visited.add(`${from.x},${from.y}`);
+
+  const queue: Array<{ x: number; y: number; cost: number }> = [
+    { x: from.x, y: from.y, cost: 0 },
+  ];
+
+  const directions = [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 },
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+
+    for (const dir of directions) {
+      const nx = current.x + dir.dx;
+      const ny = current.y + dir.dy;
+      const key = `${nx},${ny}`;
+      const nextCost = current.cost + 1;
+
+      if (nextCost > maxSteps) continue;
+      if (!isInBounds(nx, ny, grid.width, grid.height)) continue;
+      if (visited.has(key)) continue;
+      if (blockedSet.has(key)) continue;
+
+      // Destination can be checked even though it's "occupied" — we already
+      // validate occupancy separately in canMove
+      if (nx === to.x && ny === to.y) return nextCost;
+
+      // Can't walk through living entities
+      if (occupiedSet.has(key)) {
+        visited.add(key);
+        continue;
+      }
+
+      visited.add(key);
+      queue.push({ x: nx, y: ny, cost: nextCost });
+    }
+  }
+
+  return null;
+}
+
+/**
  * Check if a move is valid
  */
 export function canMove(
@@ -43,14 +113,6 @@ export function canMove(
     return { valid: false, reason: 'Destination is blocked by an obstacle' };
   }
 
-  // Calculate movement cost
-  const cost = calculateMovementCost(from, to);
-
-  // Check if enough PM
-  if (cost > pmAvailable) {
-    return { valid: false, reason: `Not enough PM (need ${cost}, have ${pmAvailable})` };
-  }
-
   // Check if destination is occupied by a living entity
   const occupant = occupiedPositions.find(
     (e) => e.positionX === to.x && e.positionY === to.y && e.pvActuels > 0
@@ -58,6 +120,17 @@ export function canMove(
 
   if (occupant) {
     return { valid: false, reason: 'Destination is occupied' };
+  }
+
+  // BFS to find actual path cost around obstacles and entities
+  const cost = bfsPathCost(from, to, pmAvailable, grid, occupiedPositions, blockedCases);
+
+  if (cost === null) {
+    return { valid: false, reason: 'No valid path to destination' };
+  }
+
+  if (cost > pmAvailable) {
+    return { valid: false, reason: `Not enough PM (need ${cost}, have ${pmAvailable})` };
   }
 
   return { valid: true, cost };

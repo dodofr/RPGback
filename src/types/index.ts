@@ -1,7 +1,7 @@
-import { StatType, ZoneType, SortType, SlotType, EffetType, CombatStatus, IAType } from '@prisma/client';
+import { StatType, ZoneType, SortType, SlotType, EffetType, CombatStatus, IAType, CombatLogType } from '@prisma/client';
 
 // Re-export Prisma enums
-export { StatType, ZoneType, SortType, SlotType, EffetType, CombatStatus, IAType };
+export { StatType, ZoneType, SortType, SlotType, EffetType, CombatStatus, IAType, CombatLogType };
 
 // Direction enum (used for map navigation, not stored in DB)
 export type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST';
@@ -65,6 +65,7 @@ export interface ActionResult {
     nom: string;
     position: Position;
   };
+  pmUsed?: number;
 }
 
 export interface CombatCaseState {
@@ -72,6 +73,13 @@ export interface CombatCaseState {
   y: number;
   bloqueDeplacement: boolean;
   bloqueLigneDeVue: boolean;
+}
+
+export interface CombatLogEntry {
+  id: number;
+  tour: number;
+  message: string;
+  type: string;
 }
 
 export interface CombatState {
@@ -87,6 +95,7 @@ export interface CombatState {
   effetsActifs: ActiveEffectStateWithDetails[];
   cases: CombatCaseState[];
   cooldowns: CombatCooldownState[];
+  logs: CombatLogEntry[];
 }
 
 export interface CombatCooldownState {

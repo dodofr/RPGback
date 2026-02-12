@@ -5,6 +5,7 @@ import { manhattanDistance } from '../../utils/formulas';
 import { hasLineOfSight, canMove } from './movement';
 import { executeAction, moveEntity, endTurn } from './engine';
 import { spellService } from '../spell.service';
+import { addLog } from './combatLog';
 
 interface EntityState {
   id: number;
@@ -37,6 +38,7 @@ interface SpellInfo {
   estSoin: boolean;
   estDispel: boolean;
   tauxEchec: number;
+  hasDispelEffect?: boolean;
 }
 
 interface AIContext {
@@ -89,26 +91,34 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
     bloqueLigneDeVue: c.bloqueLigneDeVue,
   }));
 
-  // Get spells for this monster, ordered by priority
+  // Get spells for this monster, ordered by priority (include effects for DISPEL detection)
   let monsterSpells: SpellInfo[];
   if (entity.monstreTemplateId) {
     const monstreSorts = await prisma.monstreSort.findMany({
       where: { monstreId: entity.monstreTemplateId },
-      include: { sort: true },
+      include: { sort: { include: { effets: { include: { effet: true } } } } },
       orderBy: { priorite: 'asc' },
     });
-    monsterSpells = monstreSorts.map((ms) => ms.sort);
+    monsterSpells = monstreSorts.map((ms) => ({
+      ...ms.sort,
+      hasDispelEffect: ms.sort.effets.some((se) => se.effet.type === 'DISPEL'),
+    }));
   } else {
     // Fallback: generic spells with raceId = null
-    monsterSpells = await prisma.sort.findMany({
+    const spells = await prisma.sort.findMany({
       where: { raceId: null },
+      include: { effets: { include: { effet: true } } },
     });
+    monsterSpells = spells.map((s) => ({
+      ...s,
+      hasDispelEffect: s.effets.some((se) => se.effet.type === 'DISPEL'),
+    }));
   }
 
-  // Separate spells by category
+  // Separate spells by category (use estDispel OR hasDispelEffect for backward compat)
   const healSpells = monsterSpells.filter((s) => s.estSoin);
-  const dispelSpells = monsterSpells.filter((s) => s.estDispel);
-  const damageSpells = monsterSpells.filter((s) => !s.estSoin && !s.estDispel);
+  const dispelSpells = monsterSpells.filter((s) => s.estDispel || s.hasDispelEffect);
+  const damageSpells = monsterSpells.filter((s) => !s.estSoin && !s.estDispel && !s.hasDispelEffect);
 
   const ctx: AIContext = {
     combatId,
@@ -119,6 +129,9 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
     dispelSpells,
     damageSpells,
   };
+
+  // Record PM before AI turn for consolidated movement log
+  const pmBefore = entity.pmActuels;
 
   // Dispatch to the appropriate strategy
   const iaType = entity.iaType ?? 'EQUILIBRE';
@@ -136,6 +149,18 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
     default:
       await executeEquilibreTurn(ctx);
       break;
+  }
+
+  // Log consolidated movement if PM was used
+  const updatedAfter = await prisma.combatEntite.findUnique({ where: { id: entiteId } });
+  if (updatedAfter) {
+    const totalPmUsed = pmBefore - updatedAfter.pmActuels;
+    if (totalPmUsed > 0) {
+      const currentCombat = await prisma.combat.findUnique({ where: { id: combatId } });
+      if (currentCombat) {
+        await addLog(combatId, currentCombat.tourActuel, `${entity.nom} se déplace (${totalPmUsed} PM)`, 'DEPLACEMENT');
+      }
+    }
   }
 
   await endTurn(combatId, entiteId);

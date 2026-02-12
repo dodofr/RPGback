@@ -157,6 +157,127 @@ export function getAffectedCells(
         }
       }
       break;
+
+    case ZoneType.LIGNE_PERPENDICULAIRE: {
+      // Perpendicular line centered on target, relative to caster→target direction
+      if (!casterPosition) {
+        affected.push({ ...targetPosition });
+        break;
+      }
+      const lpdx = targetPosition.x - casterPosition.x;
+      const lpdy = targetPosition.y - casterPosition.y;
+
+      // Perpendicular direction: rotate 90 degrees
+      let perpX: number, perpY: number;
+      if (Math.abs(lpdx) > Math.abs(lpdy)) {
+        // Primary direction is horizontal, perpendicular is vertical
+        perpX = 0;
+        perpY = 1;
+      } else {
+        // Primary direction is vertical, perpendicular is horizontal
+        perpX = 1;
+        perpY = 0;
+      }
+
+      affected.push({ ...targetPosition });
+      for (let i = 1; i <= zone.taille; i++) {
+        const x1 = targetPosition.x + perpX * i;
+        const y1 = targetPosition.y + perpY * i;
+        const x2 = targetPosition.x - perpX * i;
+        const y2 = targetPosition.y - perpY * i;
+        if (isInBounds(x1, y1, grid.width, grid.height)) {
+          affected.push({ x: x1, y: y1 });
+        }
+        if (isInBounds(x2, y2, grid.width, grid.height)) {
+          affected.push({ x: x2, y: y2 });
+        }
+      }
+      break;
+    }
+
+    case ZoneType.DIAGONALE:
+      // Diagonal cross (NE/NW/SE/SW) centered on target
+      affected.push({ ...targetPosition });
+      for (let i = 1; i <= zone.taille; i++) {
+        const diags: [number, number][] = [
+          [targetPosition.x + i, targetPosition.y - i], // NE
+          [targetPosition.x - i, targetPosition.y - i], // NW
+          [targetPosition.x + i, targetPosition.y + i], // SE
+          [targetPosition.x - i, targetPosition.y + i], // SW
+        ];
+        for (const [dx, dy] of diags) {
+          if (isInBounds(dx, dy, grid.width, grid.height)) {
+            affected.push({ x: dx, y: dy });
+          }
+        }
+      }
+      break;
+
+    case ZoneType.CARRE:
+      // Square centered on target, side = 2*taille+1 (Chebyshev distance <= taille)
+      for (let x = targetPosition.x - zone.taille; x <= targetPosition.x + zone.taille; x++) {
+        for (let y = targetPosition.y - zone.taille; y <= targetPosition.y + zone.taille; y++) {
+          if (isInBounds(x, y, grid.width, grid.height)) {
+            affected.push({ x, y });
+          }
+        }
+      }
+      break;
+
+    case ZoneType.ANNEAU:
+      // Ring: only cells at exact Manhattan distance = taille from target
+      for (let x = 0; x < grid.width; x++) {
+        for (let y = 0; y < grid.height; y++) {
+          if (manhattanDistance(targetPosition.x, targetPosition.y, x, y) === zone.taille) {
+            affected.push({ x, y });
+          }
+        }
+      }
+      break;
+
+    case ZoneType.CONE_INVERSE: {
+      // Inverse cone: widens towards the caster instead of away
+      if (!casterPosition) {
+        affected.push({ ...targetPosition });
+        break;
+      }
+      const cidx = targetPosition.x - casterPosition.x;
+      const cidy = targetPosition.y - casterPosition.y;
+
+      // Direction from target TOWARDS caster (inverse)
+      let invPrimaryX = cidx === 0 ? 0 : cidx > 0 ? -1 : 1;
+      let invPrimaryY = cidy === 0 ? 0 : cidy > 0 ? -1 : 1;
+
+      if (Math.abs(cidx) > Math.abs(cidy)) {
+        invPrimaryY = 0;
+      } else if (Math.abs(cidy) > Math.abs(cidx)) {
+        invPrimaryX = 0;
+      }
+
+      for (let i = 0; i <= zone.taille; i++) {
+        const baseX = targetPosition.x + invPrimaryX * i;
+        const baseY = targetPosition.y + invPrimaryY * i;
+        const width = i;
+
+        for (let w = -width; w <= width; w++) {
+          let x, y;
+          if (invPrimaryX !== 0) {
+            x = baseX;
+            y = baseY + w;
+          } else {
+            x = baseX + w;
+            y = baseY;
+          }
+
+          if (isInBounds(x, y, grid.width, grid.height)) {
+            if (!affected.find((p) => p.x === x && p.y === y)) {
+              affected.push({ x, y });
+            }
+          }
+        }
+      }
+      break;
+    }
   }
 
   return affected;

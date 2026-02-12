@@ -63,12 +63,13 @@ backend/
 │   │       ├── engine.ts           # Logique coeur du combat
 │   │       ├── initiative.ts       # Calcul ordre de jeu
 │   │       ├── damage.ts           # Calcul dégâts/critiques
-│   │       ├── movement.ts         # Déplacement sur grille + LOS
+│   │       ├── movement.ts         # Déplacement sur grille (BFS pathfinding) + LOS
 │   │       ├── grid.ts             # Chargement grille template, obstacles
 │   │       ├── aoe.ts              # Zones d'effet (5 types)
 │   │       ├── ai.ts               # IA des monstres
 │   │       ├── invocation.ts       # Système d'invocations
-│   │       └── effects.ts          # Buffs/debuffs (application, stats modifiées)
+│   │       ├── effects.ts          # Buffs/debuffs (application, stats modifiées)
+│   │       └── combatLog.ts        # Journal de combat (addLog, getLogsForCombat)
 │   ├── utils/
 │   │   ├── random.ts
 │   │   └── formulas.ts            # Formules de jeu (PV, stats, XP...)
@@ -144,6 +145,7 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 - `Combat` - Instances de combat (`entiteActuelleId` = tour actif)
 - `CombatEntite` - Snapshot stats + `armeData` JSON + `monstreTemplateId`/`niveau` + `iaType` + `invocateurId`
 - `CombatCase` - Obstacles sur la grille
+- `CombatLog` - Journal de combat côté serveur (Cascade via Combat)
 - `EffetActif` - Buffs/debuffs actifs (Cascade via Combat)
 - `SortCooldown` - Cooldowns sorts en combat (Cascade via Combat)
 
@@ -177,6 +179,7 @@ enum SlotType { ARME, COIFFE, AMULETTE, BOUCLIER, HAUT, BAS, ANNEAU1, ANNEAU2, F
 enum EffetType { BUFF, DEBUFF }
 enum ZoneType { CASE, CROIX, LIGNE, CONE, CERCLE }
 enum CombatStatus { EN_COURS, TERMINE, ABANDONNE }
+enum CombatLogType { ACTION, DEPLACEMENT, TOUR, MORT, EFFET, EFFET_EXPIRE, FIN }
 enum RegionType { FORET, PLAINE, DESERT, MONTAGNE, MARAIS, CAVERNE, CITE }
 enum MapType { WILDERNESS, VILLE, DONJON, BOSS, SAFE }
 enum CombatMode { MANUEL, AUTO }
@@ -227,11 +230,27 @@ XP par joueur = totalXP / nombre total joueurs (vivants + morts, hors invocation
 ### Zones d'effet
 CASE (unique) | CROIX (N/S/E/O selon taille) | CERCLE (rayon Manhattan) | LIGNE (lanceur→cible) | CONE (lanceur→direction)
 
+### Déplacement (pathfinding)
+- **BFS pathfinding** : `bfsPathCost()` dans `movement.ts` calcule le coût réel du chemin le plus court
+- Contourne obstacles (`bloqueDeplacement`) et entités vivantes
+- `canMove()` utilise le BFS (pas la distance Manhattan directe)
+- Le frontend utilise aussi un BFS flood fill pour le preview des cases accessibles
+
 ### Ligne de vue (LOS)
 - Bresenham supercover, LDV stricte sur diagonales
 - Bloquée par obstacles (`bloqueLigneDeVue`) et entités vivantes
 - Lanceur et cible exclus des vérifications
 - `movement.ts` : `getLineOfSightCells()` + `hasLineOfSight()`
+
+### Journal de combat (CombatLog)
+- Logs générés **côté backend** à chaque action, stockés en BDD (`CombatLog` table, Cascade via Combat)
+- `combatLog.ts` : `addLog(combatId, tour, message, type)` / `getLogsForCombat(combatId)`
+- Retournés dans `getCombatState()` via `combat.logs[]`
+- **Types** : ACTION (sort/arme/échec/soin/invocation/dispel), DEPLACEMENT, TOUR, MORT, EFFET, EFFET_EXPIRE, FIN
+- **Consolidation IA** : mouvements IA groupés en un seul log par tour (PM total), pas 1 log par pas
+- **Joueur** : mouvement logué dans `combat.service.ts move()` (pas dans `moveEntity()`)
+- Format : `{nom} lance {sort} ({PA} PA) → {cible} subit {dmg} dégâts ({pv}/{pvMax} PV)`
+- Multi-cibles AoE : un seul message avec toutes les cibles concaténées
 
 ## IA des monstres
 
@@ -317,7 +336,7 @@ Avant de supprimer une ressource, nettoyer les relations :
 - **Map** : supprimer MapConnection, GroupeEnnemi, GrilleCombat, nullifier directional refs
 - **Monstre** : supprimer RegionMonstre, MonstreSort
 - **Donjon** : supprimer DonjonRun (DonjonSalle cascade)
-- **Combat** : nullifier invocateurId, supprimer CombatEntite (EffetActif/SortCooldown/CombatCase cascade)
+- **Combat** : nullifier invocateurId, supprimer CombatEntite (EffetActif/SortCooldown/CombatCase/CombatLog cascade)
 
 ## Pour étendre le projet
 
