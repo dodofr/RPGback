@@ -198,9 +198,7 @@ export function getLineOfSightCells(from: Position, to: Position): Position[] {
       error += dx;
     } else {
       // Line passes exactly through a corner between 4 cells.
-      // Both adjacent cells are potential blockers (strict LOS).
-      cells.push({ x: x + sx, y });
-      cells.push({ x, y: y + sy });
+      // Permissive: the diagonal passes freely between the two corner cells.
       x += sx;
       y += sy;
       error += dx - dy;

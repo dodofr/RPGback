@@ -65,6 +65,10 @@ export interface ActionResult {
     nom: string;
     position: Position;
   };
+  lifesteal?: {
+    healAmount: number;
+    pvRestants: number;
+  };
   pmUsed?: number;
 }
 
@@ -132,6 +136,7 @@ export interface CombatEntityState {
   monstreTemplateId?: number | null;
   niveau?: number | null;
   iaType?: string | null;
+  poBonus?: number;
   sorts?: CombatSpellState[];
 }
 
@@ -147,6 +152,7 @@ export interface ActiveEffectStateWithDetails extends ActiveEffectState {
   type: EffetType;
   statCiblee: StatType;
   valeur: number;
+  valeurMin?: number | null;
 }
 
 // Spell data returned with combat entities
@@ -170,6 +176,7 @@ export interface CombatSpellState {
   estSoin: boolean;
   estDispel: boolean;
   estInvocation: boolean;
+  estVolDeVie: boolean;
   tauxEchec: number;
   zone: { type: string; taille: number; nom: string } | null;
   effets: {
@@ -178,10 +185,21 @@ export interface CombatSpellState {
     type: string;
     statCiblee: string;
     valeur: number;
+    valeurMin?: number | null;
     duree: number;
     chanceDeclenchement: number;
     surCible: boolean;
   }[];
+}
+
+// A single damage line for multi-line weapons
+export interface LigneDegats {
+  ordre: number;
+  degatsMin: number;
+  degatsMax: number;
+  statUtilisee: string;
+  estVolDeVie: boolean;
+  estSoin: boolean;
 }
 
 // Weapon attack data (snapshot in CombatEntite)
@@ -192,6 +210,7 @@ export interface ArmeData {
   degatsCritMin: number;
   degatsCritMax: number;
   chanceCritBase: number;
+  bonusCrit: number;
   coutPA: number;
   porteeMin: number;
   porteeMax: number;
@@ -200,6 +219,8 @@ export interface ArmeData {
   statUtilisee: string;
   cooldown: number;
   tauxEchec: number;
+  estVolDeVie: boolean;
+  lignes: LigneDegats[];
 }
 
 // Character equipment type

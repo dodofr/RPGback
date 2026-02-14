@@ -1030,7 +1030,109 @@ async function main() {
     },
   });
 
-  console.log('Created 12 equipment items');
+  // Marteau vampirique (multi-line weapon example)
+  await prisma.equipement.upsert({
+    where: { id: 13 },
+    update: {},
+    create: {
+      nom: 'Marteau vampirique',
+      slot: SlotType.ARME,
+      bonusForce: 12,
+      bonusVie: 5,
+      niveauMinimum: 7,
+      // Global weapon attack data
+      degatsMin: 15,
+      degatsMax: 25,
+      degatsCritMin: 25,
+      degatsCritMax: 40,
+      chanceCritBase: 0.08,
+      bonusCrit: 10,
+      coutPA: 4,
+      porteeMin: 1,
+      porteeMax: 1,
+      ligneDeVue: true,
+      zoneId: zoneCase.id,
+      statUtilisee: StatType.FORCE,
+      cooldown: 0,
+    },
+  });
+
+  // Damage lines for Marteau vampirique
+  await prisma.ligneDegatsArme.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      equipementId: 13,
+      ordre: 1,
+      degatsMin: 15,
+      degatsMax: 25,
+      statUtilisee: StatType.FORCE,
+    },
+  });
+  await prisma.ligneDegatsArme.upsert({
+    where: { id: 2 },
+    update: {},
+    create: {
+      equipementId: 13,
+      ordre: 2,
+      degatsMin: 5,
+      degatsMax: 10,
+      statUtilisee: StatType.FORCE,
+      estVolDeVie: true,
+    },
+  });
+
+  // Epée élémentaire (multi-line: force + intelligence)
+  await prisma.equipement.upsert({
+    where: { id: 14 },
+    update: {},
+    create: {
+      nom: 'Épée élémentaire',
+      slot: SlotType.ARME,
+      bonusForce: 8,
+      bonusIntelligence: 8,
+      niveauMinimum: 8,
+      degatsMin: 10,
+      degatsMax: 18,
+      degatsCritMin: 20,
+      degatsCritMax: 30,
+      chanceCritBase: 0.06,
+      bonusCrit: 8,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 1,
+      ligneDeVue: true,
+      zoneId: zoneCase.id,
+      statUtilisee: StatType.FORCE,
+      cooldown: 0,
+    },
+  });
+
+  // Damage lines for Épée élémentaire
+  await prisma.ligneDegatsArme.upsert({
+    where: { id: 3 },
+    update: {},
+    create: {
+      equipementId: 14,
+      ordre: 1,
+      degatsMin: 10,
+      degatsMax: 18,
+      statUtilisee: StatType.FORCE,
+    },
+  });
+  await prisma.ligneDegatsArme.upsert({
+    where: { id: 4 },
+    update: {},
+    create: {
+      equipementId: 14,
+      ordre: 2,
+      degatsMin: 5,
+      degatsMax: 12,
+      statUtilisee: StatType.INTELLIGENCE,
+    },
+  });
+
+  console.log('Created 14 equipment items (2 multi-line weapons)');
 
   // ==================== EFFETS ====================
   await prisma.effet.upsert({
@@ -1106,7 +1208,86 @@ async function main() {
     },
   });
 
-  console.log('Created 6 effects');
+  // Effet Souffle (POUSSEE)
+  await prisma.effet.upsert({
+    where: { id: 7 },
+    update: {},
+    create: {
+      nom: 'Souffle',
+      type: EffetType.POUSSEE,
+      statCiblee: StatType.FORCE,
+      valeur: 2,
+      duree: 0,
+    },
+  });
+
+  // Effet Attraction (ATTIRANCE)
+  await prisma.effet.upsert({
+    where: { id: 8 },
+    update: {},
+    create: {
+      nom: 'Attraction',
+      type: EffetType.ATTIRANCE,
+      statCiblee: StatType.FORCE,
+      valeur: 3,
+      duree: 0,
+    },
+  });
+
+  // Effet Poison
+  await prisma.effet.upsert({
+    where: { id: 9 },
+    update: {},
+    create: {
+      nom: 'Poison',
+      type: EffetType.POISON,
+      statCiblee: StatType.FORCE, // ignored for poison
+      valeurMin: 10,
+      valeur: 20,
+      duree: 2,
+    },
+  });
+
+  // Effet Jambes lourdes (DEBUFF PA)
+  await prisma.effet.upsert({
+    where: { id: 10 },
+    update: {},
+    create: {
+      nom: 'Jambes lourdes',
+      type: EffetType.DEBUFF,
+      statCiblee: StatType.PA,
+      valeur: -2,
+      duree: 2,
+    },
+  });
+
+  // Effet Enracinement (DEBUFF PM)
+  await prisma.effet.upsert({
+    where: { id: 11 },
+    update: {},
+    create: {
+      nom: 'Enracinement',
+      type: EffetType.DEBUFF,
+      statCiblee: StatType.PM,
+      valeur: -3,
+      duree: 1,
+    },
+  });
+
+  // Effet Vue brouillée (DEBUFF PO)
+  await prisma.effet.upsert({
+    where: { id: 12 },
+    update: {},
+    create: {
+      nom: 'Vue brouillée',
+      type: EffetType.DEBUFF,
+      statCiblee: StatType.PO,
+      valeur: -2,
+      duree: 2,
+    },
+  });
+
+  console.log('Created 12 effects');
 
   // ==================== SORTS AVEC EFFETS (buff/debuff) ====================
   // Sort 31: Cri de rage (Humain) - applique Rage sur lanceur
@@ -2490,7 +2671,31 @@ async function main() {
     },
   });
 
-  console.log('Created 8 spell-effect links');
+  // Écrasement (sort 29, Troll) → 25% chance de Souffle (POUSSEE 2 cases)
+  await prisma.sortEffet.upsert({
+    where: { sortId_effetId: { sortId: 29, effetId: 7 } },
+    update: {},
+    create: {
+      sortId: 29, // Écrasement
+      effetId: 7, // Souffle (POUSSEE)
+      chanceDeclenchement: 0.25,
+      surCible: true,
+    },
+  });
+
+  // Jet de toile (sort 27, Araignée) → 30% chance d'Attraction (ATTIRANCE 3 cases)
+  await prisma.sortEffet.upsert({
+    where: { sortId_effetId: { sortId: 27, effetId: 8 } },
+    update: {},
+    create: {
+      sortId: 27, // Jet de toile
+      effetId: 8, // Attraction (ATTIRANCE)
+      chanceDeclenchement: 0.30,
+      surCible: true,
+    },
+  });
+
+  console.log('Created 10 spell-effect links');
 
   // ==================== SORTS POUR INVOCATIONS ====================
   // Gardien de Pierre
@@ -2800,6 +3005,40 @@ async function main() {
   await prisma.monstreSort.upsert({ where: { id: 17 }, update: {}, create: { monstreId: golemArcanique.id, sortId: 50, priorite: 2 } });  // Rayon arcanique
 
   console.log('Created 7 invocation monster-spell links');
+
+  // ==================== VOL DE VIE + POISON LINKS ====================
+  // Add estVolDeVie flag to sort 24 (Morsure du Loup - monster spell)
+  await prisma.sort.update({
+    where: { id: 24 },
+    data: { estVolDeVie: true },
+  });
+  console.log('Set estVolDeVie on Morsure du Loup (sort 24)');
+
+  // Link Poison effect to Araignée's Morsure venimeuse (sort 26) - 50% chance
+  await prisma.sortEffet.upsert({
+    where: { sortId_effetId: { sortId: 26, effetId: 9 } },
+    update: {},
+    create: {
+      sortId: 26, // Morsure venimeuse (Araignée)
+      effetId: 9, // Poison
+      chanceDeclenchement: 0.50,
+      surCible: true,
+    },
+  });
+
+  // Link Enracinement (PM debuff) to Jet de toile (sort 27, Araignée) - 40% chance
+  await prisma.sortEffet.upsert({
+    where: { sortId_effetId: { sortId: 27, effetId: 11 } },
+    update: {},
+    create: {
+      sortId: 27, // Jet de toile
+      effetId: 11, // Enracinement (-3 PM)
+      chanceDeclenchement: 0.40,
+      surCible: true,
+    },
+  });
+
+  console.log('Created vol de vie and poison/debuff links');
 
   console.log('Seeding completed!');
 }

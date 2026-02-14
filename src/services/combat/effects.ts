@@ -1,6 +1,8 @@
 import { EffetType, StatType } from '@prisma/client';
 import prisma from '../../config/database';
-import { checkProbability } from '../../utils/random';
+import { checkProbability, randomInt } from '../../utils/random';
+import { CombatCaseState } from './grid';
+import { isInBounds } from '../../utils/formulas';
 
 export interface EffectDetails {
   id: number;
@@ -11,6 +13,13 @@ export interface EffectDetails {
   toursRestants: number;
 }
 
+export interface PushPullResult {
+  moved: boolean;
+  distanceReelle: number;
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+}
+
 export interface AppliedEffect {
   entiteId: number;
   effetId: number;
@@ -18,6 +27,8 @@ export interface AppliedEffect {
   duree: number;
   isDispel?: boolean;
   removedCount?: number;
+  isPushPull?: boolean;
+  pushPullResult?: PushPullResult;
 }
 
 export interface ModifiedStats {
@@ -69,10 +80,11 @@ export async function getStatsWithEffects(
   // Start with base stats
   const modifiedStats: ModifiedStats = { ...baseStats };
 
-  // Apply each active effect (skip DISPEL effects — they don't modify stats)
+  // Apply each active effect (skip non-stat effects — they don't modify stats)
   for (const effect of activeEffects) {
-    if (effect.type === 'DISPEL') continue;
+    if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON') continue;
     const statKey = statTypeToKey(effect.statCiblee);
+    if (!statKey || !(statKey in modifiedStats)) continue; // Skip PA/PM/PO — handled by getResourceModifiers
     if (statKey && statKey in modifiedStats) {
       modifiedStats[statKey] += effect.valeur;
       // Ensure stats don't go below 0
@@ -91,7 +103,8 @@ export async function getStatsWithEffects(
 export async function applyEffect(
   combatId: number,
   entiteId: number,
-  effetId: number
+  effetId: number,
+  lanceurId?: number
 ): Promise<void> {
   const effet = await prisma.effet.findUnique({
     where: { id: effetId },
@@ -114,7 +127,7 @@ export async function applyEffect(
     // Refresh duration if effect already exists
     await prisma.effetActif.update({
       where: { id: existingEffect.id },
-      data: { toursRestants: effet.duree },
+      data: { toursRestants: effet.duree, lanceurId: lanceurId ?? existingEffect.lanceurId },
     });
   } else {
     // Create new active effect
@@ -124,9 +137,113 @@ export async function applyEffect(
         entiteId,
         effetId,
         toursRestants: effet.duree,
+        lanceurId: lanceurId ?? null,
       },
     });
   }
+}
+
+/**
+ * Push or pull an entity along a cardinal direction.
+ * Returns the actual displacement result.
+ */
+export async function pushPullEntity(
+  combatId: number,
+  casterId: number,
+  targetId: number,
+  distance: number,
+  type: 'POUSSEE' | 'ATTIRANCE',
+  gridWidth: number,
+  gridHeight: number,
+  entities: { id: number; positionX: number; positionY: number; pvActuels: number }[],
+  blockedCases: CombatCaseState[]
+): Promise<PushPullResult> {
+  const caster = entities.find(e => e.id === casterId);
+  const target = entities.find(e => e.id === targetId);
+
+  if (!caster || !target) {
+    return { moved: false, distanceReelle: 0, from: { x: 0, y: 0 }, to: { x: 0, y: 0 } };
+  }
+
+  const from = { x: target.positionX, y: target.positionY };
+
+  // Calculate cardinal direction
+  const dx = target.positionX - caster.positionX;
+  const dy = target.positionY - caster.positionY;
+
+  let dirX = 0;
+  let dirY = 0;
+
+  if (type === 'POUSSEE') {
+    // Push: away from caster
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      dirX = dx > 0 ? 1 : -1;
+    } else {
+      dirY = dy > 0 ? 1 : -1;
+    }
+  } else {
+    // Pull: toward caster
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      dirX = dx > 0 ? -1 : 1;
+    } else {
+      dirY = dy > 0 ? -1 : 1;
+    }
+  }
+
+  // If caster and target are on the same cell (shouldn't happen), no movement
+  if (dx === 0 && dy === 0) {
+    return { moved: false, distanceReelle: 0, from, to: from };
+  }
+
+  // Build sets for quick lookup
+  const blockedSet = new Set<string>();
+  for (const c of blockedCases) {
+    if (c.bloqueDeplacement) blockedSet.add(`${c.x},${c.y}`);
+  }
+
+  const occupiedSet = new Set<string>();
+  for (const e of entities) {
+    if (e.pvActuels > 0 && e.id !== targetId) {
+      occupiedSet.add(`${e.positionX},${e.positionY}`);
+    }
+  }
+
+  // Move step by step
+  let currentX = target.positionX;
+  let currentY = target.positionY;
+  let moved = 0;
+
+  for (let i = 0; i < distance; i++) {
+    const nextX = currentX + dirX;
+    const nextY = currentY + dirY;
+
+    // Check bounds
+    if (!isInBounds(nextX, nextY, gridWidth, gridHeight)) break;
+    // Check obstacles
+    if (blockedSet.has(`${nextX},${nextY}`)) break;
+    // Check entities
+    if (occupiedSet.has(`${nextX},${nextY}`)) break;
+
+    currentX = nextX;
+    currentY = nextY;
+    moved++;
+  }
+
+  const to = { x: currentX, y: currentY };
+
+  if (moved > 0) {
+    // Update entity position in DB
+    await prisma.combatEntite.update({
+      where: { id: targetId },
+      data: { positionX: currentX, positionY: currentY },
+    });
+
+    // Update in-memory position for subsequent push/pulls in same spell
+    target.positionX = currentX;
+    target.positionY = currentY;
+  }
+
+  return { moved: moved > 0, distanceReelle: moved, from, to };
 }
 
 /**
@@ -137,7 +254,13 @@ export async function applySpellEffects(
   combatId: number,
   sortId: number,
   casterId: number,
-  targetIds: number[]
+  targetIds: number[],
+  gridContext?: {
+    gridWidth: number;
+    gridHeight: number;
+    entities: { id: number; positionX: number; positionY: number; pvActuels: number }[];
+    blockedCases: CombatCaseState[];
+  }
 ): Promise<AppliedEffect[]> {
   // Get spell effects
   const sortEffets = await prisma.sortEffet.findMany({
@@ -185,10 +308,45 @@ export async function applySpellEffects(
       continue;
     }
 
+    // POUSSEE/ATTIRANCE: instantaneous push/pull effect
+    if (sortEffet.effet.type === 'POUSSEE' || sortEffet.effet.type === 'ATTIRANCE') {
+      if (!gridContext) continue; // Need grid context for push/pull
+
+      if (sortEffet.surCible) {
+        for (const targetId of targetIds) {
+          // Skip dead targets
+          const targetEntity = gridContext.entities.find(e => e.id === targetId);
+          if (!targetEntity || targetEntity.pvActuels <= 0) continue;
+
+          const result = await pushPullEntity(
+            combatId,
+            casterId,
+            targetId,
+            sortEffet.effet.valeur,
+            sortEffet.effet.type,
+            gridContext.gridWidth,
+            gridContext.gridHeight,
+            gridContext.entities,
+            gridContext.blockedCases
+          );
+
+          appliedEffects.push({
+            entiteId: targetId,
+            effetId: sortEffet.effetId,
+            effetNom: sortEffet.effet.nom,
+            duree: 0,
+            isPushPull: true,
+            pushPullResult: result,
+          });
+        }
+      }
+      continue;
+    }
+
     if (sortEffet.surCible) {
       // Apply to all targets
       for (const targetId of targetIds) {
-        await applyEffect(combatId, targetId, sortEffet.effetId);
+        await applyEffect(combatId, targetId, sortEffet.effetId, casterId);
         appliedEffects.push({
           entiteId: targetId,
           effetId: sortEffet.effetId,
@@ -198,7 +356,7 @@ export async function applySpellEffects(
       }
     } else {
       // Apply to caster
-      await applyEffect(combatId, casterId, sortEffet.effetId);
+      await applyEffect(combatId, casterId, sortEffet.effetId, casterId);
       appliedEffects.push({
         entiteId: casterId,
         effetId: sortEffet.effetId,
@@ -246,10 +404,79 @@ export async function getAllActiveEffectsWithDetails(
 }
 
 /**
+ * Get resource modifiers (PA/PM/PO) from active effects
+ */
+export async function getResourceModifiers(
+  combatId: number,
+  entiteId: number
+): Promise<{ paModifier: number; pmModifier: number; poModifier: number }> {
+  const activeEffects = await getActiveEffectsForEntity(combatId, entiteId);
+
+  let paModifier = 0;
+  let pmModifier = 0;
+  let poModifier = 0;
+
+  for (const effect of activeEffects) {
+    if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON') continue;
+    if (effect.statCiblee === 'PA') paModifier += effect.valeur;
+    else if (effect.statCiblee === 'PM') pmModifier += effect.valeur;
+    else if (effect.statCiblee === 'PO') poModifier += effect.valeur;
+  }
+
+  return { paModifier, pmModifier, poModifier };
+}
+
+/**
+ * Apply poison damage to an entity at the start of their turn
+ * Returns true if the entity died from poison
+ */
+export async function applyPoisonDamage(
+  combatId: number,
+  entiteId: number
+): Promise<{ died: boolean; totalDamage: number }> {
+  const poisonEffects = await prisma.effetActif.findMany({
+    where: { combatId, entiteId },
+    include: { effet: true },
+  });
+
+  const poisons = poisonEffects.filter(e => e.effet.type === 'POISON');
+  if (poisons.length === 0) return { died: false, totalDamage: 0 };
+
+  const entity = await prisma.combatEntite.findUnique({ where: { id: entiteId } });
+  if (!entity || entity.pvActuels <= 0) return { died: false, totalDamage: 0 };
+
+  let totalDamage = 0;
+  for (const poison of poisons) {
+    const min = poison.effet.valeurMin ?? poison.effet.valeur;
+    const max = poison.effet.valeur;
+    const damage = randomInt(Math.min(min, max), Math.max(min, max));
+    totalDamage += damage;
+  }
+
+  const newPV = Math.max(0, entity.pvActuels - totalDamage);
+  await prisma.combatEntite.update({
+    where: { id: entiteId },
+    data: { pvActuels: newPV },
+  });
+
+  return { died: newPV <= 0, totalDamage };
+}
+
+/**
+ * Remove all effects cast by a specific entity (when they die)
+ */
+export async function removeEffectsByCaster(combatId: number, casterId: number): Promise<number> {
+  const result = await prisma.effetActif.deleteMany({
+    where: { combatId, lanceurId: casterId },
+  });
+  return result.count;
+}
+
+/**
  * Convert StatType enum to object key
  */
 function statTypeToKey(statType: StatType): keyof ModifiedStats | null {
-  const mapping: Record<StatType, keyof ModifiedStats> = {
+  const mapping: Partial<Record<StatType, keyof ModifiedStats>> = {
     FORCE: 'force',
     INTELLIGENCE: 'intelligence',
     DEXTERITE: 'dexterite',

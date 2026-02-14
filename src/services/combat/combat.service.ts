@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { CombatStatus } from '@prisma/client';
-import { CreateCombatRequest, CharacterEquipment, ArmeData } from '../../types';
+import { CreateCombatRequest, CharacterEquipment, ArmeData, LigneDegats } from '../../types';
 import { characterService } from '../character.service';
 import { grilleService } from '../grille.service';
 import { initializeInitiative, getCombatState, executeAction, moveEntity, endTurn, fleeCombat } from './engine';
@@ -75,8 +75,19 @@ export class CombatService {
       if (armeId) {
         const arme = await prisma.equipement.findUnique({
           where: { id: armeId },
+          include: { lignesDegats: { orderBy: { ordre: 'asc' } } },
         });
         if (arme && arme.degatsMin != null && arme.degatsMax != null) {
+          // Snapshot damage lines
+          const lignes: LigneDegats[] = arme.lignesDegats.map(l => ({
+            ordre: l.ordre,
+            degatsMin: l.degatsMin,
+            degatsMax: l.degatsMax,
+            statUtilisee: l.statUtilisee,
+            estVolDeVie: l.estVolDeVie,
+            estSoin: l.estSoin,
+          }));
+
           armeData = {
             nom: arme.nom,
             degatsMin: arme.degatsMin,
@@ -84,6 +95,7 @@ export class CombatService {
             degatsCritMin: arme.degatsCritMin ?? arme.degatsMin,
             degatsCritMax: arme.degatsCritMax ?? arme.degatsMax,
             chanceCritBase: arme.chanceCritBase ?? 0.05,
+            bonusCrit: arme.bonusCrit ?? 0,
             coutPA: arme.coutPA ?? 3,
             porteeMin: arme.porteeMin ?? 1,
             porteeMax: arme.porteeMax ?? 1,
@@ -92,6 +104,8 @@ export class CombatService {
             statUtilisee: arme.statUtilisee ?? 'FORCE',
             cooldown: arme.cooldown ?? 0,
             tauxEchec: arme.tauxEchec ?? 0,
+            estVolDeVie: arme.estVolDeVie ?? false,
+            lignes,
           };
         }
       }
@@ -118,6 +132,7 @@ export class CombatService {
           agilite: totalStats.agilite,
           vie: totalStats.vie,
           chance: totalStats.chance,
+          poBonus: totalStats.po,
           armeData: armeData ? JSON.parse(JSON.stringify(armeData)) : undefined,
         },
       });

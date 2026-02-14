@@ -1,19 +1,19 @@
 import { CombatStatus, Sort, ZoneType, IAType } from '@prisma/client';
 import prisma from '../../config/database';
-import { CombatState, ActionResult, Position, CombatCaseState, ArmeData, ActiveEffectStateWithDetails, CombatSpellState } from '../../types';
+import { CombatState, ActionResult, Position, CombatCaseState, ArmeData, LigneDegats, ActiveEffectStateWithDetails, CombatSpellState } from '../../types';
 import { calculateAlternatingInitiativeOrder, getNextEntity } from './initiative';
 import { calculateDamage, applyDamage, isDead } from './damage';
 import { canMove, calculateMovementCost, hasLineOfSight } from './movement';
 import { getAffectedCells, getEntitiesInArea } from './aoe';
-import { manhattanDistance } from '../../utils/formulas';
+import { manhattanDistance, getStatValue, calculateStatMultiplier, calculateCritChance } from '../../utils/formulas';
 import { progressionService } from '../progression.service';
 import { getCombatCases } from './grid';
 import { spellService } from '../spell.service';
 import { executeAITurn } from './ai';
 import { createInvocation, killInvocationsOf } from './invocation';
 import { donjonService } from '../donjon.service';
-import { getStatsWithEffects, applySpellEffects, AppliedEffect } from './effects';
-import { checkProbability } from '../../utils/random';
+import { getStatsWithEffects, applySpellEffects, AppliedEffect, PushPullResult, getResourceModifiers, applyPoisonDamage, removeEffectsByCaster } from './effects';
+import { checkProbability, randomInt } from '../../utils/random';
 import { addLog } from './combatLog';
 
 /**
@@ -88,6 +88,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             estSoin: ps.sort.estSoin,
             estDispel: ps.sort.estDispel,
             estInvocation: ps.sort.estInvocation,
+            estVolDeVie: ps.sort.estVolDeVie,
             tauxEchec: ps.sort.tauxEchec,
             zone: ps.sort.zone
               ? { type: ps.sort.zone.type, taille: ps.sort.zone.taille, nom: ps.sort.zone.nom }
@@ -98,6 +99,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
               type: se.effet.type,
               statCiblee: se.effet.statCiblee,
               valeur: se.effet.valeur,
+              valeurMin: se.effet.valeurMin,
               duree: se.effet.duree,
               chanceDeclenchement: se.chanceDeclenchement,
               surCible: se.surCible,
@@ -147,6 +149,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             estSoin: ms.sort.estSoin,
             estDispel: ms.sort.estDispel,
             estInvocation: ms.sort.estInvocation,
+            estVolDeVie: ms.sort.estVolDeVie,
             tauxEchec: ms.sort.tauxEchec,
             zone: ms.sort.zone
               ? { type: ms.sort.zone.type, taille: ms.sort.zone.taille, nom: ms.sort.zone.nom }
@@ -157,6 +160,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
               type: se.effet.type,
               statCiblee: se.effet.statCiblee,
               valeur: se.effet.valeur,
+              valeurMin: se.effet.valeurMin,
               duree: se.effet.duree,
               chanceDeclenchement: se.chanceDeclenchement,
               surCible: se.surCible,
@@ -193,6 +197,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
         monstreTemplateId: e.monstreTemplateId,
         niveau: e.niveau,
         iaType: e.iaType,
+        poBonus: e.poBonus,
         sorts,
       };
     })
@@ -217,6 +222,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       type: e.effet.type,
       statCiblee: e.effet.statCiblee,
       valeur: e.effet.valeur,
+      valeurMin: e.effet.valeurMin,
     })),
     cases: combat.cases.map((c) => ({
       x: c.x,
@@ -418,12 +424,14 @@ export async function executeAction(
     return { success: false, message: `Not enough PA (need ${attackData.coutPA}, have ${attacker.paActuels})` };
   }
 
-  // Check range
+  // Check range (with PO bonus from equipment + effects)
   const distance = manhattanDistance(attacker.positionX, attacker.positionY, targetX, targetY);
-  if (distance < attackData.porteeMin || distance > attackData.porteeMax) {
+  const poMods = await getResourceModifiers(combatId, entiteId);
+  const effectivePorteeMax = attackData.porteeMax + (attacker.poBonus ?? 0) + poMods.poModifier;
+  if (distance < attackData.porteeMin || distance > effectivePorteeMax) {
     return {
       success: false,
-      message: `Target out of range (distance: ${distance}, range: ${attackData.porteeMin}-${attackData.porteeMax})`,
+      message: `Target out of range (distance: ${distance}, range: ${attackData.porteeMin}-${effectivePorteeMax})`,
     };
   }
 
@@ -596,7 +604,17 @@ export async function executeAction(
   const targetIds = validTargets.map(t => t.id);
   let appliedEffects: AppliedEffect[] = [];
   if (!useArme && sortId) {
-    appliedEffects = await applySpellEffects(combatId, sortId, entiteId, targetIds);
+    appliedEffects = await applySpellEffects(combatId, sortId, entiteId, targetIds, {
+      gridWidth: combat.grilleLargeur,
+      gridHeight: combat.grilleHauteur,
+      entities: combat.entites.map(e => ({
+        id: e.id,
+        positionX: e.positionX,
+        positionY: e.positionY,
+        pvActuels: e.pvActuels,
+      })),
+      blockedCases,
+    });
   }
 
   // ===== HEAL BRANCH =====
@@ -653,6 +671,14 @@ export async function executeAction(
       const target = combat.entites.find(e => e.id === ef.entiteId);
       if (ef.isDispel) {
         await addLog(combatId, combat.tourActuel, `Dispel ! ${target?.nom || '?'} perd ${ef.removedCount || 0} effet(s)`, 'ACTION');
+      } else if (ef.isPushPull && ef.pushPullResult) {
+        const r = ef.pushPullResult;
+        if (r.moved) {
+          const verb = ef.effetNom.toLowerCase().includes('attir') ? 'attiré' : 'repoussé';
+          await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} est ${verb} de ${r.distanceReelle} case(s) (${r.from.x},${r.from.y}) → (${r.to.x},${r.to.y})`, 'ACTION');
+        } else {
+          await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} résiste au déplacement`, 'ACTION');
+        }
       } else {
         await addLog(combatId, combat.tourActuel, `${target?.nom || '?'}: ${ef.effetNom} (${ef.duree}t)`, 'EFFET');
       }
@@ -716,23 +742,98 @@ export async function executeAction(
 
   // Calculate and apply damage to each target
   const damages: ActionResult['damages'] = [];
+  const heals: ActionResult['heals'] = [];
   const entitesMortes: number[] = [];
 
-  const spellData = {
-    degatsMin: attackData.degatsMin,
-    degatsMax: attackData.degatsMax,
-    degatsCritMin: attackData.degatsCritMin,
-    degatsCritMax: attackData.degatsCritMax,
-    chanceCritBase: attackData.chanceCritBase,
-    statUtilisee: attackData.statUtilisee as any,
-  };
+  // Check if weapon has multi-line damage
+  const armeDataForLines = useArme ? (attacker.armeData as unknown as ArmeData) : null;
+  const hasLignes = armeDataForLines && armeDataForLines.lignes && armeDataForLines.lignes.length > 0;
+
+  // Global crit roll for weapons (one roll for all lines)
+  let globalWeaponCrit = false;
+  if (hasLignes) {
+    const critChance = calculateCritChance(armeDataForLines.chanceCritBase, attackerModifiedStats.chance);
+    globalWeaponCrit = checkProbability(critChance);
+  }
+
+  // Total lifesteal accumulated across all targets and lines
+  let totalLifestealAmount = 0;
 
   for (const target of validTargets) {
-    const damageResult = calculateDamage(spellData, attackerModifiedStats);
+    let totalDamageForTarget = 0;
+    let totalHealForTarget = 0;
+    let anyCrit = false;
 
-    const newPV = applyDamage(target.pvActuels, damageResult.finalDamage);
+    if (hasLignes) {
+      // ===== MULTI-LINE WEAPON DAMAGE =====
+      const bonusCrit = armeDataForLines.bonusCrit ?? 0;
 
-    // Update target's HP
+      for (const ligne of armeDataForLines.lignes) {
+        const statValue = getStatValue(attackerModifiedStats, ligne.statUtilisee as any);
+        const statMultiplier = calculateStatMultiplier(statValue);
+
+        let baseDmg: number;
+        if (globalWeaponCrit) {
+          baseDmg = randomInt(ligne.degatsMin + bonusCrit, ligne.degatsMax + bonusCrit);
+          anyCrit = true;
+        } else {
+          baseDmg = randomInt(ligne.degatsMin, ligne.degatsMax);
+        }
+        const finalDmg = Math.floor(baseDmg * statMultiplier);
+
+        if (ligne.estSoin) {
+          totalHealForTarget += finalDmg;
+        } else {
+          totalDamageForTarget += finalDmg;
+        }
+
+        // Per-line vol de vie
+        if (ligne.estVolDeVie && !ligne.estSoin && finalDmg > 0) {
+          totalLifestealAmount += Math.floor(finalDmg / 2);
+        }
+      }
+    } else {
+      // ===== SINGLE-LINE DAMAGE (spells or weapons without lignes) =====
+      const spellData = {
+        degatsMin: attackData.degatsMin,
+        degatsMax: attackData.degatsMax,
+        degatsCritMin: attackData.degatsCritMin,
+        degatsCritMax: attackData.degatsCritMax,
+        chanceCritBase: attackData.chanceCritBase,
+        statUtilisee: attackData.statUtilisee as any,
+      };
+
+      const damageResult = calculateDamage(spellData, attackerModifiedStats);
+      totalDamageForTarget = damageResult.finalDamage;
+      anyCrit = damageResult.isCritical;
+    }
+
+    // Apply heal from estSoin lines on target
+    if (totalHealForTarget > 0) {
+      const newPV = Math.min(target.pvMax, target.pvActuels + totalHealForTarget);
+      const actualHeal = newPV - target.pvActuels;
+      await prisma.combatEntite.update({
+        where: { id: target.id },
+        data: { pvActuels: newPV },
+      });
+      if (actualHeal > 0) {
+        heals.push({
+          entiteId: target.id,
+          healAmount: actualHeal,
+          isCritical: anyCrit,
+          pvRestants: newPV,
+        });
+      }
+      // If there's also damage, apply it after heal
+      if (totalDamageForTarget <= 0) continue;
+      // Re-read current PV after heal
+      const afterHeal = await prisma.combatEntite.findUnique({ where: { id: target.id } });
+      if (afterHeal) target.pvActuels = afterHeal.pvActuels;
+    }
+
+    // Apply damage
+    const newPV = applyDamage(target.pvActuels, totalDamageForTarget);
+
     await prisma.combatEntite.update({
       where: { id: target.id },
       data: { pvActuels: newPV },
@@ -740,22 +841,45 @@ export async function executeAction(
 
     damages.push({
       entiteId: target.id,
-      damage: damageResult.finalDamage,
-      isCritical: damageResult.isCritical,
+      damage: totalDamageForTarget,
+      isCritical: anyCrit,
       pvRestants: newPV,
     });
 
     if (isDead(newPV)) {
       entitesMortes.push(target.id);
-      // Kill invocations of the dead entity
       const killedInvocations = await killInvocationsOf(combatId, target.id);
       entitesMortes.push(...killedInvocations);
 
-      // Remove active effects on dead entities
       const allDeadIds = [target.id, ...killedInvocations];
       await prisma.effetActif.deleteMany({
         where: { combatId, entiteId: { in: allDeadIds } },
       });
+
+      for (const deadId of allDeadIds) {
+        await removeEffectsByCaster(combatId, deadId);
+      }
+    }
+  }
+
+  // ===== LIFESTEAL =====
+  // For spells: global estVolDeVie flag. For multi-line weapons: accumulated per-line.
+  const isSpellVolDeVie = !useArme && (spell?.estVolDeVie ?? false);
+  if (isSpellVolDeVie && damages.length > 0) {
+    totalLifestealAmount = Math.floor(damages.reduce((sum, d) => sum + d.damage, 0) / 2);
+  }
+
+  let lifestealResult: ActionResult['lifesteal'] = undefined;
+  if (totalLifestealAmount > 0) {
+    const currentAttacker = await prisma.combatEntite.findUnique({ where: { id: entiteId } });
+    if (currentAttacker && currentAttacker.pvActuels > 0) {
+      const newPV = Math.min(currentAttacker.pvMax, currentAttacker.pvActuels + totalLifestealAmount);
+      const actualHeal = newPV - currentAttacker.pvActuels;
+      await prisma.combatEntite.update({
+        where: { id: entiteId },
+        data: { pvActuels: newPV },
+      });
+      lifestealResult = { healAmount: actualHeal, pvRestants: newPV };
     }
   }
 
@@ -763,15 +887,26 @@ export async function executeAction(
   const actionLabel = useArme
     ? `${attacker.nom} utilise ${(attacker.armeData as unknown as ArmeData).nom} (${attackData.coutPA} PA)`
     : `${attacker.nom} lance ${spell!.nom} (${attackData.coutPA} PA)`;
+  const critPrefix = hasLignes && globalWeaponCrit ? 'CRITIQUE ! ' : '';
   const dmgParts = damages.map(d => {
     const target = combat.entites.find(e => e.id === d.entiteId);
-    const critStr = d.isCritical ? 'CRITIQUE ! ' : '';
+    const critStr = !hasLignes && d.isCritical ? 'CRITIQUE ! ' : '';
     return `${critStr}${target?.nom || '?'} subit ${d.damage} dégâts (${d.pvRestants}/${target?.pvMax || '?'} PV)`;
   });
-  if (dmgParts.length > 0) {
-    await addLog(combatId, combat.tourActuel, `${actionLabel} → ${dmgParts.join(', ')}`, 'ACTION');
+  const healParts = heals.map(h => {
+    const target = combat.entites.find(e => e.id === h.entiteId);
+    return `${target?.nom || '?'} récupère ${h.healAmount} PV (${h.pvRestants}/${target?.pvMax || '?'} PV)`;
+  });
+  const allParts = [...dmgParts, ...healParts];
+  if (allParts.length > 0) {
+    await addLog(combatId, combat.tourActuel, `${critPrefix}${actionLabel} → ${allParts.join(', ')}`, 'ACTION');
   } else {
     await addLog(combatId, combat.tourActuel, `${actionLabel} → aucune cible`, 'ACTION');
+  }
+
+  // Log lifesteal
+  if (lifestealResult && lifestealResult.healAmount > 0) {
+    await addLog(combatId, combat.tourActuel, `${attacker.nom} vole ${lifestealResult.healAmount} PV (${lifestealResult.pvRestants}/${attacker.pvMax} PV)`, 'ACTION');
   }
 
   // Log applied effects
@@ -804,8 +939,10 @@ export async function executeAction(
     message: `${actionType === 'ARME' ? 'Weapon attack' : 'Spell'} hit ${damages.length} target(s).${effectsMessage}`,
     actionType,
     damages,
+    heals: heals.length > 0 ? heals : undefined,
     entiteMorte: entitesMortes.length > 0 ? entitesMortes : undefined,
     appliedEffects: appliedEffects.length > 0 ? appliedEffects : undefined,
+    lifesteal: lifestealResult,
   };
 }
 
@@ -911,13 +1048,14 @@ export async function endTurn(combatId: number, entiteId: number): Promise<Actio
   const isNewRound = nextEntity.ordreJeu <= entity.ordreJeu;
 
   if (isNewRound) {
-    // Reset PA and PM for all alive entities
+    // Reset PA and PM for all alive entities (applying PA/PM modifiers from effects)
     for (const e of aliveEntities) {
+      const mods = await getResourceModifiers(combatId, e.id);
       await prisma.combatEntite.update({
         where: { id: e.id },
         data: {
-          paActuels: e.paMax,
-          pmActuels: e.pmMax,
+          paActuels: Math.max(0, e.paMax + mods.paModifier),
+          pmActuels: Math.max(0, e.pmMax + mods.pmModifier),
         },
       });
     }
@@ -939,6 +1077,22 @@ export async function endTurn(combatId: number, entiteId: number): Promise<Actio
 
   // Decrement effects, cooldowns and weapon cooldown for the next entity at the start of their turn
   await decrementEffects(combatId, nextEntity.id);
+
+  // Check if entity died from poison — if so, skip to next entity
+  const nextEntityAfterPoison = await prisma.combatEntite.findUnique({ where: { id: nextEntity.id } });
+  if (nextEntityAfterPoison && nextEntityAfterPoison.pvActuels <= 0) {
+    // Entity died from poison, check if combat ended
+    const combatAfterPoison = await prisma.combat.findUnique({ where: { id: combatId } });
+    if (combatAfterPoison && combatAfterPoison.status === CombatStatus.EN_COURS) {
+      // Skip to next entity
+      return endTurn(combatId, nextEntity.id);
+    }
+    return {
+      success: true,
+      message: `${nextEntity.nom} died from poison.`,
+    };
+  }
+
   await spellService.decrementCooldownsForEntity(combatId, nextEntity.id);
   if (nextEntity.armeCooldownRestant > 0) {
     await prisma.combatEntite.update({
@@ -1080,6 +1234,50 @@ async function checkCombatEnd(combatId: number): Promise<void> {
 async function decrementEffects(combatId: number, entiteId?: number): Promise<void> {
   const where: { combatId: number; entiteId?: number } = { combatId };
   if (entiteId !== undefined) where.entiteId = entiteId;
+
+  // Apply poison damage BEFORE decrementing durations
+  if (entiteId !== undefined) {
+    const poisonResult = await applyPoisonDamage(combatId, entiteId);
+    if (poisonResult.totalDamage > 0) {
+      const combat = await prisma.combat.findUnique({ where: { id: combatId } });
+      const tour = combat?.tourActuel ?? 0;
+      const entity = await prisma.combatEntite.findUnique({ where: { id: entiteId } });
+      if (entity) {
+        // Log each poison individually for clarity
+        const poisonEffects = await prisma.effetActif.findMany({
+          where: { combatId, entiteId },
+          include: { effet: true },
+        });
+        const poisons = poisonEffects.filter(e => e.effet.type === 'POISON');
+        if (poisons.length > 0) {
+          await addLog(combatId, tour, `${entity.nom} subit ${poisonResult.totalDamage} dégâts de poison (${entity.pvActuels}/${entity.pvMax} PV)`, 'EFFET');
+        }
+      }
+
+      if (poisonResult.died && entity) {
+        await addLog(combatId, combat?.tourActuel ?? 0, `${entity.nom} est mort du poison !`, 'MORT');
+        // Kill invocations of the dead entity
+        const killedInvocations = await killInvocationsOf(combatId, entiteId);
+        // Remove effects on dead entities
+        const allDeadIds = [entiteId, ...killedInvocations];
+        await prisma.effetActif.deleteMany({
+          where: { combatId, entiteId: { in: allDeadIds } },
+        });
+        // Remove effects cast by dead entities
+        for (const deadId of allDeadIds) {
+          await removeEffectsByCaster(combatId, deadId);
+        }
+        // Log death of invocations
+        for (const killedId of killedInvocations) {
+          const killed = await prisma.combatEntite.findUnique({ where: { id: killedId } });
+          if (killed) await addLog(combatId, combat?.tourActuel ?? 0, `${killed.nom} est mort !`, 'MORT');
+        }
+        // Check if combat should end
+        await checkCombatEnd(combatId);
+        return; // Don't decrement effects for dead entity
+      }
+    }
+  }
 
   // Decrement active effects
   await prisma.effetActif.updateMany({

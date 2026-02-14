@@ -127,7 +127,7 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/effects` | DELETE `/:id/effects/:effetId`
 
 ### Static Data — Equipements (`/api/equipment`)
-GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/lignes` | PATCH `/:id/lignes/:ligneId` | DELETE `/:id/lignes/:ligneId`
 
 ### Static Data — Effets (`/api/effects`)
 GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
@@ -143,11 +143,12 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 - `PersonnageSort` - Sorts appris par personnage
 - `Groupe` / `GroupePersonnage` - Équipes (max 6), position sur map
 - `Combat` - Instances de combat (`entiteActuelleId` = tour actif)
-- `CombatEntite` - Snapshot stats + `armeData` JSON + `monstreTemplateId`/`niveau` + `iaType` + `invocateurId`
+- `CombatEntite` - Snapshot stats + `armeData` JSON (incl. `lignes[]`, `bonusCrit`) + `monstreTemplateId`/`niveau` + `iaType` + `invocateurId`
 - `CombatCase` - Obstacles sur la grille
 - `CombatLog` - Journal de combat côté serveur (Cascade via Combat)
-- `EffetActif` - Buffs/debuffs actifs (Cascade via Combat)
+- `EffetActif` - Buffs/debuffs/poisons actifs (Cascade via Combat), `lanceurId` pour tracking mort du lanceur
 - `SortCooldown` - Cooldowns sorts en combat (Cascade via Combat)
+- `LigneDegatsArme` - Lignes de dégâts multi-lignes pour armes (Cascade via Equipement)
 
 ### Tables Monde & Maps
 - `Region` - Zones du monde (Forêt, Plaine, Montagne...)
@@ -165,19 +166,20 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 
 ### Tables référentielles
 - `Race` - Bonus de stats
-- `Sort` - Sorts avec `degatsCritMin`/`degatsCritMax`, `estSoin`/`estDispel`/`estInvocation`, `tauxEchec`, `invocationTemplateId`
+- `Sort` - Sorts avec `degatsCritMin`/`degatsCritMax`, `estSoin`/`estDispel`/`estInvocation`/`estVolDeVie`, `tauxEchec`, `invocationTemplateId`
 - `SortEffet` - Liaison sort → effet (`chanceDeclenchement`, `surCible`/`surLanceur`)
 - `Zone` - Types de zones d'effet
-- `Equipement` - Items avec bonus stats. Armes : données d'attaque + `tauxEchec` optionnel
-- `Effet` - Buffs/debuffs
+- `Equipement` - Items avec bonus stats. Armes : données d'attaque + `tauxEchec` + `estVolDeVie` + `bonusCrit` (crit global) + `LigneDegatsArme[]` (multi-lignes optionnel)
+- `LigneDegatsArme` - Ligne de dégâts arme : `ordre`, `degatsMin/Max`, `statUtilisee`, `estVolDeVie`, `estSoin`
+- `Effet` - Buffs/debuffs/poisons. Champs : `valeurMin` (plage min pour POISON), `type` incl. POISON
 
 ### Enums
 ```prisma
-enum StatType { FORCE, INTELLIGENCE, DEXTERITE, AGILITE, VIE, CHANCE }
+enum StatType { FORCE, INTELLIGENCE, DEXTERITE, AGILITE, VIE, CHANCE, PA, PM, PO }
 enum SortType { ARME, SORT }
 enum SlotType { ARME, COIFFE, AMULETTE, BOUCLIER, HAUT, BAS, ANNEAU1, ANNEAU2, FAMILIER }
-enum EffetType { BUFF, DEBUFF }
-enum ZoneType { CASE, CROIX, LIGNE, CONE, CERCLE }
+enum EffetType { BUFF, DEBUFF, DISPEL, POUSSEE, ATTIRANCE, POISON }
+enum ZoneType { CASE, CROIX, LIGNE, CONE, CERCLE, LIGNE_PERPENDICULAIRE, DIAGONALE, CARRE, ANNEAU, CONE_INVERSE }
 enum CombatStatus { EN_COURS, TERMINE, ABANDONNE }
 enum CombatLogType { ACTION, DEPLACEMENT, TOUR, MORT, EFFET, EFFET_EXPIRE, FIN }
 enum RegionType { FORET, PLAINE, DESERT, MONTAGNE, MARAIS, CAVERNE, CITE }
@@ -204,13 +206,24 @@ type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST'
 8. Fin combat : nettoyage effets/cooldowns + suppression invocations survivantes + XP si victoire (tous les joueurs, vivants ET morts, invocations exclues)
 
 ### Actions
-- **Sort** : `{ entiteId, sortId, targetX, targetY }` — sort appris
-- **Arme** : `{ entiteId, useArme: true, targetX, targetY }` — arme équipée (snapshot armeData)
+- **Sort** : `{ entiteId, sortId, targetX, targetY }` — sort appris (mono-ligne toujours)
+- **Arme** : `{ entiteId, useArme: true, targetX, targetY }` — arme équipée (snapshot armeData avec lignes)
 - **Ciblage libre** : touche TOUTES entités dans zone (alliés ET ennemis)
 - **tauxEchec** : vérifié après PA déduits. Sort raté = PA perdus. Arme ratée = tour perdu (endTurn)
 - **estSoin** : heal (même formule que dégâts, +PV plafonné à pvMax)
 - **estDispel** : supprime tous effets actifs de la cible
 - **estInvocation** : invoque entité à position libre (0 dégâts)
+- **estVolDeVie** : après dégâts, le lanceur récupère 50% des dégâts totaux en PV (plafonné pvMax). Sur Sort = flag global, sur arme = par ligne
+
+### Armes multi-lignes
+- Chaque arme peut avoir 0 ou N `LigneDegatsArme` (table BDD, snapshotée dans `armeData.lignes[]`)
+- **0 lignes** → fallback mono-ligne classique (champs plats `degatsMin/Max`, `degatsCritMin/Max`, `statUtilisee`)
+- **1+ lignes** → multi-lignes : crit global + bonusCrit flat, boucle sur chaque ligne
+- **Crit global** : 1 seul roll par attaque. Si crit → `bonusCrit` ajouté à min ET max de chaque ligne
+- **Stat par ligne** : chaque ligne a sa propre `statUtilisee` (arme hybride FORCE + INTELLIGENCE possible)
+- **Vol de vie par ligne** : `estVolDeVie` sur la ligne → heal 50% des dégâts de cette ligne uniquement
+- **Soin par ligne** : `estSoin` sur la ligne → soigne la cible au lieu d'infliger des dégâts
+- Flow : `1. tauxEchec → 2. roll crit global → 3. pour chaque ligne: stat multiplier + roll dégâts (+ bonusCrit si crit) → 4. somme`
 
 ### Formules clés
 ```typescript

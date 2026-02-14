@@ -6,10 +6,10 @@ import { z } from 'zod';
 // Zod Schemas
 // ============================================================
 
-const StatTypeEnum = z.enum(['FORCE', 'INTELLIGENCE', 'DEXTERITE', 'AGILITE', 'VIE', 'CHANCE']);
+const StatTypeEnum = z.enum(['FORCE', 'INTELLIGENCE', 'DEXTERITE', 'AGILITE', 'VIE', 'CHANCE', 'PA', 'PM', 'PO']);
 const SortTypeEnum = z.enum(['ARME', 'SORT']);
 const SlotTypeEnum = z.enum(['ARME', 'COIFFE', 'AMULETTE', 'BOUCLIER', 'HAUT', 'BAS', 'ANNEAU1', 'ANNEAU2', 'FAMILIER']);
-const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF', 'DISPEL']);
+const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF', 'DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON']);
 const ZoneTypeEnum = z.enum(['CASE', 'CROIX', 'LIGNE', 'CONE', 'CERCLE', 'LIGNE_PERPENDICULAIRE', 'DIAGONALE', 'CARRE', 'ANNEAU', 'CONE_INVERSE']);
 
 // Race schemas
@@ -47,6 +47,7 @@ const createSortSchema = z.object({
   zoneId: z.number().int().nullable().optional(),
   raceId: z.number().int().nullable().optional(),
   estInvocation: z.boolean().default(false),
+  estVolDeVie: z.boolean().default(false),
   invocationTemplateId: z.number().int().nullable().optional(),
 });
 
@@ -79,6 +80,8 @@ const createEquipementSchema = z.object({
   statUtilisee: StatTypeEnum.nullable().optional(),
   cooldown: z.number().int().nullable().optional(),
   tauxEchec: z.number().nullable().optional(),
+  estVolDeVie: z.boolean().default(false),
+  bonusCrit: z.number().int().nullable().optional(),
 });
 
 const updateEquipementSchema = createEquipementSchema.partial();
@@ -89,7 +92,8 @@ const createEffetSchema = z.object({
   type: EffetTypeEnum,
   statCiblee: StatTypeEnum,
   valeur: z.number().int(),
-  duree: z.number().int().min(1),
+  valeurMin: z.number().int().nullable().optional(),
+  duree: z.number().int().min(0),
 });
 
 const updateEffetSchema = createEffetSchema.partial();
@@ -472,6 +476,7 @@ equipmentRouter.get('/', async (_req: Request, res: Response, next: NextFunction
   try {
     const equipment = await prisma.equipement.findMany({
       orderBy: { id: 'asc' },
+      include: { lignesDegats: { orderBy: { ordre: 'asc' } } },
     });
     res.json(equipment);
   } catch (error) {
@@ -489,6 +494,7 @@ equipmentRouter.get('/:id', async (req: Request, res: Response, next: NextFuncti
 
     const item = await prisma.equipement.findUnique({
       where: { id },
+      include: { lignesDegats: { orderBy: { ordre: 'asc' } } },
     });
 
     if (!item) {
@@ -563,8 +569,92 @@ equipmentRouter.delete('/:id', async (req: Request, res: Response, next: NextFun
       return;
     }
 
+    // Clean up damage lines
+    await prisma.ligneDegatsArme.deleteMany({ where: { equipementId: id } });
+
     await prisma.equipement.delete({ where: { id } });
 
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/equipment/:id/lignes - Add damage line to weapon
+equipmentRouter.post('/:id/lignes', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const equipementId = parseInt(req.params.id, 10);
+    if (isNaN(equipementId)) {
+      res.status(400).json({ error: 'Invalid equipment ID' });
+      return;
+    }
+
+    const schema = z.object({
+      ordre: z.number().int().min(1),
+      degatsMin: z.number().int().min(0),
+      degatsMax: z.number().int().min(0),
+      statUtilisee: StatTypeEnum,
+      estVolDeVie: z.boolean().default(false),
+      estSoin: z.boolean().default(false),
+    });
+    const data = schema.parse(req.body);
+
+    const ligne = await prisma.ligneDegatsArme.create({
+      data: { equipementId, ...data },
+    });
+    res.status(201).json(ligne);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Validation error', details: error.errors });
+      return;
+    }
+    next(error);
+  }
+});
+
+// PATCH /api/equipment/:id/lignes/:ligneId - Update a damage line
+equipmentRouter.patch('/:id/lignes/:ligneId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ligneId = parseInt(req.params.ligneId, 10);
+    if (isNaN(ligneId)) {
+      res.status(400).json({ error: 'Invalid line ID' });
+      return;
+    }
+
+    const schema = z.object({
+      ordre: z.number().int().min(1).optional(),
+      degatsMin: z.number().int().min(0).optional(),
+      degatsMax: z.number().int().min(0).optional(),
+      statUtilisee: StatTypeEnum.optional(),
+      estVolDeVie: z.boolean().optional(),
+      estSoin: z.boolean().optional(),
+    });
+    const data = schema.parse(req.body);
+
+    const ligne = await prisma.ligneDegatsArme.update({
+      where: { id: ligneId },
+      data,
+    });
+    res.json(ligne);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Validation error', details: error.errors });
+      return;
+    }
+    next(error);
+  }
+});
+
+// DELETE /api/equipment/:id/lignes/:ligneId - Remove a damage line
+equipmentRouter.delete('/:id/lignes/:ligneId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ligneId = parseInt(req.params.ligneId, 10);
+    if (isNaN(ligneId)) {
+      res.status(400).json({ error: 'Invalid line ID' });
+      return;
+    }
+
+    await prisma.ligneDegatsArme.delete({ where: { id: ligneId } });
     res.status(204).send();
   } catch (error) {
     next(error);
