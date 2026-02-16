@@ -3,6 +3,7 @@ import { CreateCharacterRequest, CharacterEquipment, TotalStats } from '../types
 import { calculatePV, calculateBasePA, calculateBasePM, calculateBasePO } from '../utils/formulas';
 import { progressionService, StatAllocation } from './progression.service';
 import { spellService } from './spell.service';
+import { inventoryService } from './inventory.service';
 
 export class CharacterService {
   async create(data: CreateCharacterRequest) {
@@ -154,27 +155,64 @@ export class CharacterService {
       pa: calculateBasePA(),
       pm: calculateBasePM(),
       po: calculateBasePO(),
+      bonusCritique: 0,
     };
 
-    // Add equipment bonuses
-    const equipment = character.equipements as CharacterEquipment;
-    const equipmentIds = Object.values(equipment).filter((id): id is number => id !== null);
+    // Add equipment bonuses from inventory instances (rolled stats)
+    const equippedItems = await prisma.inventaireItem.findMany({
+      where: { personnageId: characterId, estEquipe: true },
+    });
 
-    if (equipmentIds.length > 0) {
-      const equipments = await prisma.equipement.findMany({
-        where: { id: { in: equipmentIds } },
-      });
+    if (equippedItems.length > 0) {
+      for (const item of equippedItems) {
+        stats.force += item.bonusForce;
+        stats.intelligence += item.bonusIntelligence;
+        stats.dexterite += item.bonusDexterite;
+        stats.agilite += item.bonusAgilite;
+        stats.vie += item.bonusVie;
+        stats.chance += item.bonusChance;
+        stats.pa += item.bonusPA;
+        stats.pm += item.bonusPM;
+        stats.po += item.bonusPO;
+        stats.bonusCritique += item.bonusCritique;
+      }
 
-      for (const equip of equipments) {
-        stats.force += equip.bonusForce;
-        stats.intelligence += equip.bonusIntelligence;
-        stats.dexterite += equip.bonusDexterite;
-        stats.agilite += equip.bonusAgilite;
-        stats.vie += equip.bonusVie;
-        stats.chance += equip.bonusChance;
-        stats.pa += equip.bonusPA;
-        stats.pm += equip.bonusPM;
-        stats.po += equip.bonusPO;
+      // Add panoplie (set) bonuses
+      const setBonuses = await inventoryService.getSetBonuses(characterId);
+      for (const setBonus of setBonuses) {
+        stats.force += setBonus.bonusForce;
+        stats.intelligence += setBonus.bonusIntelligence;
+        stats.dexterite += setBonus.bonusDexterite;
+        stats.agilite += setBonus.bonusAgilite;
+        stats.vie += setBonus.bonusVie;
+        stats.chance += setBonus.bonusChance;
+        stats.pa += setBonus.bonusPA;
+        stats.pm += setBonus.bonusPM;
+        stats.po += setBonus.bonusPO;
+        stats.bonusCritique += setBonus.bonusCritique;
+      }
+    } else {
+      // Fallback: use legacy JSON equipment field if no inventory items exist
+      const equipment = character.equipements as CharacterEquipment;
+      const equipmentIds = Object.values(equipment).filter((id): id is number => id !== null);
+
+      if (equipmentIds.length > 0) {
+        const equipments = await prisma.equipement.findMany({
+          where: { id: { in: equipmentIds } },
+        });
+
+        for (const equip of equipments) {
+          stats.force += equip.bonusForce;
+          stats.intelligence += equip.bonusIntelligence;
+          stats.dexterite += equip.bonusDexterite;
+          stats.agilite += equip.bonusAgilite;
+          stats.vie += equip.bonusVie;
+          stats.chance += equip.bonusChance;
+          stats.pa += equip.bonusPA;
+          stats.pm += equip.bonusPM;
+          stats.po += equip.bonusPO;
+          stats.bonusCritique += equip.bonusCritique;
+        }
       }
     }
 

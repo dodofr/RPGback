@@ -409,21 +409,23 @@ export async function getAllActiveEffectsWithDetails(
 export async function getResourceModifiers(
   combatId: number,
   entiteId: number
-): Promise<{ paModifier: number; pmModifier: number; poModifier: number }> {
+): Promise<{ paModifier: number; pmModifier: number; poModifier: number; critiqueModifier: number }> {
   const activeEffects = await getActiveEffectsForEntity(combatId, entiteId);
 
   let paModifier = 0;
   let pmModifier = 0;
   let poModifier = 0;
+  let critiqueModifier = 0;
 
   for (const effect of activeEffects) {
     if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON') continue;
     if (effect.statCiblee === 'PA') paModifier += effect.valeur;
     else if (effect.statCiblee === 'PM') pmModifier += effect.valeur;
     else if (effect.statCiblee === 'PO') poModifier += effect.valeur;
+    else if (effect.statCiblee === 'CRITIQUE') critiqueModifier += effect.valeur;
   }
 
-  return { paModifier, pmModifier, poModifier };
+  return { paModifier, pmModifier, poModifier, critiqueModifier };
 }
 
 /**

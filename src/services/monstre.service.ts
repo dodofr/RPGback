@@ -24,6 +24,12 @@ export class MonstreService {
           },
           orderBy: { priorite: 'asc' },
         },
+        drops: {
+          include: {
+            ressource: true,
+            equipement: true,
+          },
+        },
       },
     });
   }
@@ -41,6 +47,10 @@ export class MonstreService {
     pmBase?: number;
     niveauBase?: number;
     xpRecompense?: number;
+    orMin?: number;
+    orMax?: number;
+    iaType?: 'EQUILIBRE' | 'AGGRESSIF' | 'SOUTIEN' | 'DISTANCE';
+    pvScalingInvocation?: number | null;
   }) {
     return prisma.monstreTemplate.create({
       data: {
@@ -56,6 +66,10 @@ export class MonstreService {
         pmBase: data.pmBase ?? 3,
         niveauBase: data.niveauBase ?? 1,
         xpRecompense: data.xpRecompense ?? 10,
+        orMin: data.orMin ?? 0,
+        orMax: data.orMax ?? 0,
+        iaType: data.iaType ?? 'EQUILIBRE',
+        pvScalingInvocation: data.pvScalingInvocation ?? null,
       },
     });
   }
@@ -73,6 +87,10 @@ export class MonstreService {
     pmBase: number;
     niveauBase: number;
     xpRecompense: number;
+    orMin: number;
+    orMax: number;
+    iaType: 'EQUILIBRE' | 'AGGRESSIF' | 'SOUTIEN' | 'DISTANCE';
+    pvScalingInvocation: number | null;
   }>) {
     return prisma.monstreTemplate.update({
       where: { id },

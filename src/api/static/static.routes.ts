@@ -58,6 +58,7 @@ const createEquipementSchema = z.object({
   nom: z.string().min(1),
   slot: SlotTypeEnum,
   niveauMinimum: z.number().int().min(1).default(1),
+  poids: z.number().int().min(0).default(1),
   bonusForce: z.number().int().default(0),
   bonusIntelligence: z.number().int().default(0),
   bonusDexterite: z.number().int().default(0),
@@ -67,6 +68,16 @@ const createEquipementSchema = z.object({
   bonusPA: z.number().int().default(0),
   bonusPM: z.number().int().default(0),
   bonusPO: z.number().int().default(0),
+  bonusForceMax: z.number().int().nullable().optional(),
+  bonusIntelligenceMax: z.number().int().nullable().optional(),
+  bonusDexteriteMax: z.number().int().nullable().optional(),
+  bonusAgiliteMax: z.number().int().nullable().optional(),
+  bonusVieMax: z.number().int().nullable().optional(),
+  bonusChanceMax: z.number().int().nullable().optional(),
+  bonusPAMax: z.number().int().nullable().optional(),
+  bonusPMMax: z.number().int().nullable().optional(),
+  bonusPOMax: z.number().int().nullable().optional(),
+  bonusCritiqueMax: z.number().int().nullable().optional(),
   degatsMin: z.number().int().nullable().optional(),
   degatsMax: z.number().int().nullable().optional(),
   degatsCritMin: z.number().int().nullable().optional(),
@@ -82,6 +93,7 @@ const createEquipementSchema = z.object({
   tauxEchec: z.number().nullable().optional(),
   estVolDeVie: z.boolean().default(false),
   bonusCrit: z.number().int().nullable().optional(),
+  panoplieId: z.number().int().nullable().optional(),
 });
 
 const updateEquipementSchema = createEquipementSchema.partial();
@@ -885,10 +897,339 @@ zonesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunctio
   }
 });
 
+// ============================================================
+// Resources routes
+// ============================================================
+const resourcesRouter = Router();
+
+resourcesRouter.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const resources = await prisma.ressource.findMany({ orderBy: { id: 'asc' } });
+    res.json(resources);
+  } catch (error) { next(error); }
+});
+
+resourcesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const resource = await prisma.ressource.findUnique({ where: { id } });
+    if (!resource) { res.status(404).json({ error: 'Resource not found' }); return; }
+    res.json(resource);
+  } catch (error) { next(error); }
+});
+
+resourcesRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({
+      nom: z.string().min(1),
+      description: z.string().nullable().optional(),
+      poids: z.number().int().min(0).default(1),
+      estPremium: z.boolean().default(false),
+    });
+    const data = schema.parse(req.body);
+    const resource = await prisma.ressource.create({ data });
+    res.status(201).json(resource);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+resourcesRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      nom: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+      poids: z.number().int().min(0).optional(),
+      estPremium: z.boolean().optional(),
+    });
+    const data = schema.parse(req.body);
+    const existing = await prisma.ressource.findUnique({ where: { id } });
+    if (!existing) { res.status(404).json({ error: 'Resource not found' }); return; }
+    const resource = await prisma.ressource.update({ where: { id }, data });
+    res.json(resource);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+resourcesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const existing = await prisma.ressource.findUnique({ where: { id } });
+    if (!existing) { res.status(404).json({ error: 'Resource not found' }); return; }
+    // Clean up relations
+    await prisma.inventaireRessource.deleteMany({ where: { ressourceId: id } });
+    await prisma.recetteIngredient.deleteMany({ where: { ressourceId: id } });
+    await prisma.monstreDrop.deleteMany({ where: { ressourceId: id } });
+    await prisma.ressource.delete({ where: { id } });
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
+
+// ============================================================
+// Sets (Panoplies) routes
+// ============================================================
+const setsRouter = Router();
+
+setsRouter.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const sets = await prisma.panoplie.findMany({
+      include: { equipements: true, bonus: { orderBy: { nombrePieces: 'asc' } } },
+      orderBy: { id: 'asc' },
+    });
+    res.json(sets);
+  } catch (error) { next(error); }
+});
+
+setsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const set = await prisma.panoplie.findUnique({
+      where: { id },
+      include: { equipements: true, bonus: { orderBy: { nombrePieces: 'asc' } } },
+    });
+    if (!set) { res.status(404).json({ error: 'Set not found' }); return; }
+    res.json(set);
+  } catch (error) { next(error); }
+});
+
+setsRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({
+      nom: z.string().min(1),
+      description: z.string().nullable().optional(),
+    });
+    const data = schema.parse(req.body);
+    const set = await prisma.panoplie.create({ data });
+    res.status(201).json(set);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+setsRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      nom: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+    });
+    const data = schema.parse(req.body);
+    const existing = await prisma.panoplie.findUnique({ where: { id } });
+    if (!existing) { res.status(404).json({ error: 'Set not found' }); return; }
+    const set = await prisma.panoplie.update({ where: { id }, data });
+    res.json(set);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+setsRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const existing = await prisma.panoplie.findUnique({ where: { id } });
+    if (!existing) { res.status(404).json({ error: 'Set not found' }); return; }
+    // Nullify panoplieId on equipments
+    await prisma.equipement.updateMany({ where: { panoplieId: id }, data: { panoplieId: null } });
+    await prisma.panoplieBonus.deleteMany({ where: { panoplieId: id } });
+    await prisma.panoplie.delete({ where: { id } });
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
+
+// POST /api/sets/:id/bonuses
+setsRouter.post('/:id/bonuses', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const panoplieId = parseInt(req.params.id, 10);
+    if (isNaN(panoplieId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      nombrePieces: z.number().int().min(2),
+      bonusForce: z.number().int().default(0),
+      bonusIntelligence: z.number().int().default(0),
+      bonusDexterite: z.number().int().default(0),
+      bonusAgilite: z.number().int().default(0),
+      bonusVie: z.number().int().default(0),
+      bonusChance: z.number().int().default(0),
+      bonusPA: z.number().int().default(0),
+      bonusPM: z.number().int().default(0),
+      bonusPO: z.number().int().default(0),
+      bonusCritique: z.number().int().default(0),
+    });
+    const data = schema.parse(req.body);
+    const bonus = await prisma.panoplieBonus.create({ data: { panoplieId, ...data } });
+    res.status(201).json(bonus);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+// PATCH /api/sets/:id/bonuses/:bonusId
+setsRouter.patch('/:id/bonuses/:bonusId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const bonusId = parseInt(req.params.bonusId, 10);
+    if (isNaN(bonusId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      nombrePieces: z.number().int().min(2).optional(),
+      bonusForce: z.number().int().optional(),
+      bonusIntelligence: z.number().int().optional(),
+      bonusDexterite: z.number().int().optional(),
+      bonusAgilite: z.number().int().optional(),
+      bonusVie: z.number().int().optional(),
+      bonusChance: z.number().int().optional(),
+      bonusPA: z.number().int().optional(),
+      bonusPM: z.number().int().optional(),
+      bonusPO: z.number().int().optional(),
+      bonusCritique: z.number().int().optional(),
+    });
+    const data = schema.parse(req.body);
+    const bonus = await prisma.panoplieBonus.update({ where: { id: bonusId }, data });
+    res.json(bonus);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+// DELETE /api/sets/:id/bonuses/:bonusId
+setsRouter.delete('/:id/bonuses/:bonusId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const bonusId = parseInt(req.params.bonusId, 10);
+    if (isNaN(bonusId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    await prisma.panoplieBonus.delete({ where: { id: bonusId } });
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
+
+// ============================================================
+// Recipes (admin) routes
+// ============================================================
+const recipesRouter = Router();
+
+recipesRouter.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const recipes = await prisma.recette.findMany({
+      include: { equipement: true, ingredients: { include: { ressource: true } } },
+      orderBy: { id: 'asc' },
+    });
+    res.json(recipes);
+  } catch (error) { next(error); }
+});
+
+recipesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const recipe = await prisma.recette.findUnique({
+      where: { id },
+      include: { equipement: true, ingredients: { include: { ressource: true } } },
+    });
+    if (!recipe) { res.status(404).json({ error: 'Recipe not found' }); return; }
+    res.json(recipe);
+  } catch (error) { next(error); }
+});
+
+recipesRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({
+      nom: z.string().min(1),
+      description: z.string().nullable().optional(),
+      equipementId: z.number().int().positive(),
+      niveauMinimum: z.number().int().min(1).default(1),
+      coutOr: z.number().int().min(0).default(0),
+    });
+    const data = schema.parse(req.body);
+    const recipe = await prisma.recette.create({ data, include: { equipement: true } });
+    res.status(201).json(recipe);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+recipesRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      nom: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+      equipementId: z.number().int().positive().optional(),
+      niveauMinimum: z.number().int().min(1).optional(),
+      coutOr: z.number().int().min(0).optional(),
+    });
+    const data = schema.parse(req.body);
+    const existing = await prisma.recette.findUnique({ where: { id } });
+    if (!existing) { res.status(404).json({ error: 'Recipe not found' }); return; }
+    const recipe = await prisma.recette.update({ where: { id }, data });
+    res.json(recipe);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+recipesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const existing = await prisma.recette.findUnique({ where: { id } });
+    if (!existing) { res.status(404).json({ error: 'Recipe not found' }); return; }
+    await prisma.recetteIngredient.deleteMany({ where: { recetteId: id } });
+    await prisma.recette.delete({ where: { id } });
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
+
+// POST /api/recipes/:id/ingredients
+recipesRouter.post('/:id/ingredients', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const recetteId = parseInt(req.params.id, 10);
+    if (isNaN(recetteId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      ressourceId: z.number().int().positive(),
+      quantite: z.number().int().min(1).default(1),
+    });
+    const data = schema.parse(req.body);
+    const ingredient = await prisma.recetteIngredient.create({
+      data: { recetteId, ...data },
+      include: { ressource: true },
+    });
+    res.status(201).json(ingredient);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+// DELETE /api/recipes/:id/ingredients/:ingredientId
+recipesRouter.delete('/:id/ingredients/:ingredientId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ingredientId = parseInt(req.params.ingredientId, 10);
+    if (isNaN(ingredientId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    await prisma.recetteIngredient.delete({ where: { id: ingredientId } });
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
+
 export default {
   races: racesRouter,
   spells: spellsRouter,
   equipment: equipmentRouter,
   effects: effectsRouter,
   zones: zonesRouter,
+  resources: resourcesRouter,
+  sets: setsRouter,
+  recipes: recipesRouter,
 };

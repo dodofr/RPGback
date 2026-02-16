@@ -1,26 +1,6 @@
-A voir plus tard 
+Quete
+Penser a un sytheme de quete et creer des pnj
 
-Inventaire, drop et quete
-- creer des panoplie qui donne des bonus si plusieurs equipé
--Actuellement : je ne suis pas sur qu'un personnage ai un inventaire. Objectif : creer un inventaire 
--Actuellement : pas de systheme de drop en fin de combats Objetif : plusieurs ici, ajouté un systheme de drop sur les monstres avec des % de chance de drop des items ou ressource. 
-Voir comment on peut gerer et généré les items dropable ou ressource. ajouter un poids a ces items et ressource. Rendre possible de détruire un items ou ressource pour que le personnage libere de la place.
-Ajouter de l'or.
--Penser a un sytheme de quete et creer des pnj
-
-penser a tester attirance, poussé, poison, pa
-
-Les degats
- degat, diminution depuis le centre vers l'exterieur. LA case au centre fait 100% puis les cases a une case du centre 15% de dégat en moins et ensuite 30% etc.
-
- Coup CRITIQUE
- Bloqué les chance de faire un coup critique a 50%. meme si le joueur pourrait avoir 80% de chance de faire des coups critique, je veux que se soit bloqué a 50%. Un personnage peut optimiser sont stuff pour avoir bien plus que 50% de chance de coup critique si il veut mais en combat il sera bloqué a 50%
-
-Log coté front pour les multi ligne
- Pour une attaque multi-lignes, le log ressemblera à :                                                                                                                                                                                                                                 
-  CRITIQUE ! Player utilise Marteau vampirique (4 PA) → Gobelin subit 42 dégâts (8/50 PV)                                                     Player vole 8 PV (48/50 PV)                                                                                                               
-  Les dégâts sont sommés dans le log (total de toutes les lignes), pas détaillés ligne par ligne. C'est le même format que les armes        
-  mono-ligne — le joueur voit juste le total.
-  Par contre, si tu veux un log plus détaillé genre :
-  Player utilise Marteau vampirique (4 PA) → Gobelin subit 42 dégâts (30 FORCE + 12 FORCE VdV) (8/50 PV)
-  ...je peux l'ajouter. Tu veux ce niveau de détail dans les logs ou le total suffit ?
+Faire tout les test front pour voir les comportement
+ameliorer les pages 
+passer au graphisme

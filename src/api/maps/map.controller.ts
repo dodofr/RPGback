@@ -38,6 +38,10 @@ const createMonstreSchema = z.object({
   pmBase: z.number().int().min(1).optional(),
   niveauBase: z.number().int().min(1).optional(),
   xpRecompense: z.number().int().min(0).optional(),
+  orMin: z.number().int().min(0).default(0),
+  orMax: z.number().int().min(0).default(0),
+  iaType: z.enum(['EQUILIBRE', 'AGGRESSIF', 'SOUTIEN', 'DISTANCE']).default('EQUILIBRE'),
+  pvScalingInvocation: z.number().min(0).max(1).nullable().optional(),
 });
 
 const addConnectionSchema = z.object({
@@ -323,6 +327,8 @@ export class MapController {
         pmBase: z.number().int().min(1).optional(),
         niveauBase: z.number().int().min(1).optional(),
         xpRecompense: z.number().int().min(0).optional(),
+        orMin: z.number().int().min(0).optional(),
+        orMax: z.number().int().min(0).optional(),
         iaType: z.enum(['EQUILIBRE', 'AGGRESSIF', 'SOUTIEN', 'DISTANCE']).optional(),
         pvScalingInvocation: z.number().min(0).max(1).nullable().optional(),
       });

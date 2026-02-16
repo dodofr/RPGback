@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { characterController } from './character.controller';
+import { craftController } from '../craft/craft.controller';
 
 const router = Router();
 
@@ -26,6 +27,9 @@ router.post('/:id/allocate-stats', (req, res, next) => characterController.alloc
 
 // GET /api/characters/:id/progression - Get progression info (XP, level, etc.)
 router.get('/:id/progression', (req, res, next) => characterController.getProgression(req, res, next));
+
+// POST /api/characters/:id/craft/:recetteId - Craft an item
+router.post('/:id/craft/:recetteId', (req, res, next) => craftController.craft(req, res, next));
 
 // DELETE /api/characters/:id - Delete a character
 router.delete('/:id', (req, res, next) => characterController.delete(req, res, next));

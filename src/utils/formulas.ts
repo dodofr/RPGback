@@ -74,10 +74,21 @@ export function calculateStatMultiplier(statValue: number): number {
 
 /**
  * Calculate critical chance
- * Formula: chanceCritBase + (chance / 100)
+ * Formula: chanceCritBase + (chance / 5000) + (bonusCritique / 100)
+ * - chance / 5000 : marginal contribution (100 chance = +2%)
+ * - bonusCritique / 100 : equipment + effects (integer, 10 = +10%)
  */
-export function calculateCritChance(chanceCritBase: number, chance: number): number {
-  return chanceCritBase + chance / 100;
+export function calculateCritChance(chanceCritBase: number, chance: number, bonusCritique: number = 0): number {
+  const raw = chanceCritBase + (chance / 5000) + (bonusCritique / 100);
+  return Math.min(0.50, raw);
+}
+
+/**
+ * Calculate AoE damage reduction based on distance from center
+ * -15% per Manhattan distance, minimum 10%
+ */
+export function calculateAoEReduction(distance: number): number {
+  return Math.max(0.10, 1 - distance * 0.15);
 }
 
 /**

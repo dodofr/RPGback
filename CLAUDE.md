@@ -46,18 +46,23 @@ backend/
 │   │   ├── maps/                # Régions, maps, monstres, spawns + relations
 │   │   ├── grilles/             # CRUD grilles de combat prédéfinies
 │   │   ├── donjons/             # Système de donjons linéaires
-│   │   └── static/              # CRUD données référentielles (races, sorts, équipements, effets, zones)
+│   │   ├── inventory/           # Inventaire (controller/routes) — equip, envoi, destruction
+│   │   ├── craft/               # Craft (controller/routes) — recettes
+│   │   └── static/              # CRUD données référentielles (races, sorts, équipements, effets, zones, ressources, panoplies, recettes admin)
 │   ├── services/
 │   │   ├── player.service.ts
 │   │   ├── character.service.ts # + stats totales, équipement
 │   │   ├── group.service.ts     # + navigation entre maps, engagement auto
 │   │   ├── region.service.ts    # + update, delete
 │   │   ├── map.service.ts       # + update, delete, deleteConnection
-│   │   ├── monstre.service.ts   # + update, delete
+│   │   ├── monstre.service.ts   # + update, delete, findById incl. drops
 │   │   ├── progression.service.ts  # XP, level-up, allocation stats
 │   │   ├── spell.service.ts     # Apprentissage sorts, cooldowns
 │   │   ├── grille.service.ts    # CRUD grilles + getRandomGridForMap()
 │   │   ├── donjon.service.ts    # + create, update, delete
+│   │   ├── inventory.service.ts # Inventaire, equip, rollStats, envoi entre personnages
+│   │   ├── craft.service.ts     # Système de craft (recettes, vérif, consommation)
+│   │   ├── drop.service.ts      # Distribution de butin post-combat
 │   │   └── combat/
 │   │       ├── combat.service.ts   # Service principal combat
 │   │       ├── engine.ts           # Logique coeur du combat
@@ -97,7 +102,13 @@ Exception : `static.routes.ts` utilise des handlers inline (pas de controller/se
 POST `/` | GET `/` | GET `/:id` | GET `/:id/characters` | GET `/:id/groups` | PATCH `/:id` | DELETE `/:id`
 
 ### Characters (`/api/characters`)
-POST `/` | GET `/` | GET `/:id` (avec stats totales) | PATCH `/:id` | PUT `/:id/equipment` | GET `/:id/spells` | POST `/:id/allocate-stats` | GET `/:id/progression` | DELETE `/:id`
+POST `/` | GET `/` | GET `/:id` (avec stats totales) | PATCH `/:id` | PUT `/:id/equipment` | GET `/:id/spells` | POST `/:id/allocate-stats` | GET `/:id/progression` | POST `/:id/craft/:recetteId` | DELETE `/:id`
+
+### Inventory (`/api/characters/:id/inventory`)
+GET `/` | DELETE `/items/:itemId` | DELETE `/resources/:ressourceId` | POST `/equip/:itemId` | POST `/unequip` | POST `/send`
+
+### Recipes (`/api/recipes`)
+GET `/` | GET `/:id`
 
 ### Groups (`/api/groups`)
 POST `/` | GET `/` | GET `/:id` | POST `/:id/characters` (max 6) | DELETE `/:id/characters/:charId` | PATCH `/:id/move` | POST `/:id/enter-map` | POST `/:id/use-connection` | POST `/:id/move-direction` (NORD/SUD/EST/OUEST) | POST `/:id/leave-map` | DELETE `/:id`
@@ -115,7 +126,7 @@ POST `/` | GET `/` | GET `/:id` | PUT `/:id` | DELETE `/:id` | PUT `/:id/cases` 
 GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/monstres` | DELETE `/:id/monstres/:monstreId`
 
 ### Monstres (`/api/monstres`)
-GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/sorts` | DELETE `/:id/sorts/:sortId`
+GET `/` | GET `/:id` (incl. drops) | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/sorts` | DELETE `/:id/sorts/:sortId` | POST `/:id/drops` | PATCH `/:id/drops/:dropId` | DELETE `/:id/drops/:dropId`
 
 ### Donjons (`/api/donjons`)
 GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/enter` | GET `/run/:groupeId` | POST `/run/:groupeId/abandon`
@@ -135,6 +146,15 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 ### Static Data — Zones (`/api/zones`)
 GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 
+### Static Data — Ressources (`/api/resources`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+
+### Static Data — Panoplies (`/api/sets`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+
+### Admin — Recettes (`/api/admin/recipes`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+
 ## Base de données
 
 ### Tables principales
@@ -149,12 +169,20 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 - `EffetActif` - Buffs/debuffs/poisons actifs (Cascade via Combat), `lanceurId` pour tracking mort du lanceur
 - `SortCooldown` - Cooldowns sorts en combat (Cascade via Combat)
 - `LigneDegatsArme` - Lignes de dégâts multi-lignes pour armes (Cascade via Equipement)
+- `InventaireItem` - Items instanciés avec stats rollées (personnageId, equipementId, estEquipe, bonus stats fixés)
+- `InventaireRessource` - Stack de ressources par personnage (personnageId + ressourceId, quantite)
+- `Ressource` - Définition ressources (nom, poids, `estPremium` pour drops globaux)
+- `MonstreDrop` - Table de drops par monstre (tauxDrop, quantiteMin/Max, ressourceId ou equipementId)
+- `Panoplie` - Panoplies (sets d'équipements)
+- `PanoplieBonus` - Bonus par palier (nombrePieces → bonus stats)
+- `Recette` - Recettes de craft (equipementId résultat, niveauMinimum, coutOr)
+- `RecetteIngredient` - Ingrédients d'une recette (ressourceId, quantite)
 
 ### Tables Monde & Maps
 - `Region` - Zones du monde (Forêt, Plaine, Montagne...)
 - `Map` - Cartes avec voisins directionnels (`nordMapId`, `sudMapId`, `estMapId`, `ouestMapId`)
 - `MapConnection` - Portails nommés avec position (x, y)
-- `MonstreTemplate` - Définitions monstres (+ `iaType`, `pvScalingInvocation`)
+- `MonstreTemplate` - Définitions monstres (+ `iaType`, `pvScalingInvocation`, `orMin`/`orMax`)
 - `RegionMonstre` - Many-to-many monstres ↔ régions avec probabilité
 - `MonstreSort` - Sorts par monstre avec priorité (1 = plus haute)
 - `GroupeEnnemi` / `GroupeEnnemiMembre` - Groupes ennemis sur map (1-3 groupes, 1-8 monstres, composition mixte)
@@ -305,6 +333,43 @@ Sorts via `MonstreSort` triés par `priorite`. Auto-play pour monstres ET invoca
 - Nettoyage : mort entité → ses effets supprimés (+invocations). Fin combat → tous effets/cooldowns supprimés
 - 5 effets : Rage (BUFF FOR +20, 3t), Concentration (BUFF INT +15, 2t), Agilité accrue (BUFF AGI +25, 2t), Affaiblissement (DEBUFF FOR -15, 2t), Ralentissement (DEBUFF AGI -20, 2t)
 
+## Système d'inventaire
+
+- Poids : `poidsActuel` = somme(items.poids) + somme(ressources.poids × quantité). Or sans poids
+- `poidsMaxInventaire` sur Personnage (défaut 100)
+- `rollStats()` : ranges sur Equipement (`bonusXxxMax`), roll aléatoire à la création de l'instance
+- Items instanciés (`InventaireItem`) avec stats fixées au drop/craft, liés à un `Equipement` template
+- Equip/unequip : met à jour `estEquipe` + sync legacy JSON `personnage.equipements`
+- `getSetBonuses()` : calcule les bonus actifs des panoplies équipées (2+ pièces du même set)
+
+## Système de drops
+
+- Distribution **individuelle** (per player per monster) : or (`orMin`/`orMax`), ressources normales
+- Distribution **globale** (1 roll, 1 joueur aléatoire) : équipements, ressources premium (`estPremium: true`)
+- `MonstreDrop` : `tauxDrop` (0-1), `quantiteMin`/`quantiteMax`, `ressourceId` ou `equipementId`
+- Appelé dans `combat.service.ts` à la fin du combat (victoire joueurs)
+- Equipment droppé → `rollStats()` + `addItem()`, inventaire plein → item perdu silencieusement
+
+## Système de craft
+
+- `Recette` : nom, `equipementId` (résultat), `niveauMinimum`, `coutOr`, ingrédients
+- `RecetteIngredient` : `ressourceId` + `quantite`
+- Flow : vérifie niveau + or + ressources + poids → consomme or/ressources → `rollStats()` → crée `InventaireItem`
+- Endpoint : `POST /api/characters/:id/craft/:recetteId`
+
+## Système de panoplies (sets)
+
+- `Panoplie` + `PanoplieBonus` : bonus par palier (2+ pièces)
+- `Equipement.panoplieId` lie un équipement à une panoplie
+- `getSetBonuses()` dans `inventory.service.ts` : compte les pièces équipées, applique le plus haut palier atteint
+
+## Système d'envoi entre personnages
+
+- `POST /api/characters/:id/inventory/send` — envoi unidirectionnel
+- Body : `{ destinataireId, or?, ressources?: [{ressourceId, quantite}], items?: [itemId] }`
+- Validation : possession, items non équipés, poids destinataire, transaction atomique Prisma
+- Or sans poids, refus complet si destinataire n'a pas la place
+
 ## Système de monde & maps
 
 ### Types de maps
@@ -377,8 +442,11 @@ Avant de supprimer une ressource, nettoyer les relations :
 
 - **5 races** : Nain, Orc, Halfelin, Humain, Elfe — chacune 4 sorts (niv 1/4/7/10) + buff/dispel + invocation (niv 5)
 - **55 sorts** : 20 race + 5 buff/debuff + 5 dispel + 3 soins + 5 invocations + 10 monstres + 7 invocations
-- **12 équipements** : tous slots, 4 armes avec données d'attaque
+- **14 équipements** : tous slots, 4 armes (dont 2 multi-lignes), certains avec stat ranges
 - **5 effets** : 3 buffs (Rage, Concentration, Agilité) + 2 debuffs (Affaiblissement, Ralentissement)
+- **12 ressources** : 2 premium (Pierre précieuse, Cuir de troll)
+- **2 panoplies** : avec bonus par palier
+- **6 recettes** de craft
 - **3 régions** : Forêt (niv 1-5), Plaines (niv 1-3), Montagne (niv 5-10)
 - **6 maps** : 3 WILDERNESS + 1 DONJON + 1 SAFE + 1 VILLE
 - **11 monstres** : 6 normaux (Gobelin, Loup, Bandit, Araignée, Squelette, Troll) + 5 invocations

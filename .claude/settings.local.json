@@ -50,7 +50,8 @@
       "Bash(npx vite:*)",
       "Bash(npm ls:*)",
       "Bash(PGPASSWORD=rpg_password psql:*)",
-      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\":*)"
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\":*)",
+      "Bash(ls -la \"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\frontend\\\\src\\\\pages\\\\admin\"\" | grep -i \"resource|craft|recipe|panop|set|drop \")"
     ]
   }
 }

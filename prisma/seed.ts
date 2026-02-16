@@ -836,7 +836,7 @@ async function main() {
   // ==================== EQUIPEMENTS ====================
   await prisma.equipement.upsert({
     where: { id: 1 },
-    update: {},
+    update: { bonusCritique: 5 },
     create: {
       nom: 'Épée en fer',
       slot: SlotType.ARME,
@@ -856,12 +856,13 @@ async function main() {
       zoneId: zoneCase.id,
       statUtilisee: StatType.FORCE,
       cooldown: 0,
+      bonusCritique: 5,
     },
   });
 
   await prisma.equipement.upsert({
     where: { id: 2 },
-    update: {},
+    update: { bonusCritique: 3 },
     create: {
       nom: 'Bâton de mage',
       slot: SlotType.ARME,
@@ -881,12 +882,13 @@ async function main() {
       zoneId: zoneCase.id,
       statUtilisee: StatType.INTELLIGENCE,
       cooldown: 0,
+      bonusCritique: 3,
     },
   });
 
   await prisma.equipement.upsert({
     where: { id: 3 },
-    update: { tauxEchec: 0.10 },
+    update: { tauxEchec: 0.10, bonusCritique: 10 },
     create: {
       nom: 'Arc long',
       slot: SlotType.ARME,
@@ -908,12 +910,13 @@ async function main() {
       statUtilisee: StatType.DEXTERITE,
       cooldown: 0,
       tauxEchec: 0.10,
+      bonusCritique: 10,
     },
   });
 
   await prisma.equipement.upsert({
     where: { id: 4 },
-    update: { tauxEchec: 0.05 },
+    update: { tauxEchec: 0.05, bonusCritique: 15 },
     create: {
       nom: 'Dagues jumelles',
       slot: SlotType.ARME,
@@ -934,18 +937,20 @@ async function main() {
       statUtilisee: StatType.AGILITE,
       cooldown: 0,
       tauxEchec: 0.05,
+      bonusCritique: 15,
     },
   });
 
   await prisma.equipement.upsert({
     where: { id: 5 },
-    update: {},
+    update: { bonusCritique: 3 },
     create: {
       nom: 'Casque de fer',
       slot: SlotType.COIFFE,
       bonusVie: 8,
       bonusForce: 3,
       niveauMinimum: 1,
+      bonusCritique: 3,
     },
   });
 
@@ -1287,7 +1292,33 @@ async function main() {
     },
   });
 
-  console.log('Created 12 effects');
+  // Effet Précision (BUFF CRITIQUE)
+  await prisma.effet.upsert({
+    where: { id: 13 },
+    update: {},
+    create: {
+      nom: 'Précision',
+      type: EffetType.BUFF,
+      statCiblee: StatType.CRITIQUE,
+      valeur: 10,
+      duree: 3,
+    },
+  });
+
+  // Effet Maladresse (DEBUFF CRITIQUE)
+  await prisma.effet.upsert({
+    where: { id: 14 },
+    update: {},
+    create: {
+      nom: 'Maladresse',
+      type: EffetType.DEBUFF,
+      statCiblee: StatType.CRITIQUE,
+      valeur: -10,
+      duree: 2,
+    },
+  });
+
+  console.log('Created 14 effects');
 
   // ==================== SORTS AVEC EFFETS (buff/debuff) ====================
   // Sort 31: Cri de rage (Humain) - applique Rage sur lanceur
@@ -3039,6 +3070,186 @@ async function main() {
   });
 
   console.log('Created vol de vie and poison/debuff links');
+
+  // ==================== RESSOURCES ====================
+  const cuir = await prisma.ressource.upsert({ where: { nom: 'Cuir' }, update: {}, create: { nom: 'Cuir', description: 'Cuir tanné de bête', poids: 1 } });
+  const os = await prisma.ressource.upsert({ where: { nom: 'Os' }, update: {}, create: { nom: 'Os', description: 'Os solide de monstre', poids: 1 } });
+  const crocs = await prisma.ressource.upsert({ where: { nom: 'Crocs' }, update: {}, create: { nom: 'Crocs', description: 'Crocs pointus', poids: 1 } });
+  const mineraiFer = await prisma.ressource.upsert({ where: { nom: 'Minerai de fer' }, update: {}, create: { nom: 'Minerai de fer', description: 'Minerai brut de fer', poids: 2 } });
+  const toileAraignee = await prisma.ressource.upsert({ where: { nom: "Toile d'araignée" }, update: {}, create: { nom: "Toile d'araignée", description: 'Fil de soie résistant', poids: 1 } });
+  const bois = await prisma.ressource.upsert({ where: { nom: 'Bois' }, update: {}, create: { nom: 'Bois', description: 'Bois solide', poids: 2 } });
+  const herbeMedicinale = await prisma.ressource.upsert({ where: { nom: 'Herbe médicinale' }, update: {}, create: { nom: 'Herbe médicinale', description: 'Plante aux vertus curatives', poids: 1 } });
+  const pierrePrecieuse = await prisma.ressource.upsert({ where: { nom: 'Pierre précieuse' }, update: { estPremium: true }, create: { nom: 'Pierre précieuse', description: 'Gemme brillante', poids: 1, estPremium: true } });
+  const laine = await prisma.ressource.upsert({ where: { nom: 'Laine' }, update: {}, create: { nom: 'Laine', description: 'Laine épaisse', poids: 1 } });
+  const plume = await prisma.ressource.upsert({ where: { nom: 'Plume' }, update: {}, create: { nom: 'Plume', description: 'Plume légère', poids: 1 } });
+  const poilLoup = await prisma.ressource.upsert({ where: { nom: 'Poil de loup' }, update: {}, create: { nom: 'Poil de loup', description: 'Fourrure de loup', poids: 1 } });
+  const cuirTroll = await prisma.ressource.upsert({ where: { nom: 'Cuir de troll' }, update: { estPremium: true }, create: { nom: 'Cuir de troll', description: 'Cuir épais et résistant', poids: 3, estPremium: true } });
+
+  console.log('Created resources');
+
+  // ==================== MONSTER GOLD (orMin/orMax) ====================
+  await prisma.monstreTemplate.update({ where: { id: gobelin.id }, data: { orMin: 1, orMax: 5 } });
+  await prisma.monstreTemplate.update({ where: { id: loup.id }, data: { orMin: 2, orMax: 4 } });
+  await prisma.monstreTemplate.update({ where: { id: bandit.id }, data: { orMin: 3, orMax: 10 } });
+  await prisma.monstreTemplate.update({ where: { id: araigneeGeante.id }, data: { orMin: 1, orMax: 6 } });
+  await prisma.monstreTemplate.update({ where: { id: squelette.id }, data: { orMin: 2, orMax: 8 } });
+  await prisma.monstreTemplate.update({ where: { id: trollDesForets.id }, data: { orMin: 10, orMax: 25 } });
+
+  console.log('Updated monster gold ranges');
+
+  // ==================== MONSTER DROPS ====================
+  // Gobelin: Os (50%), Minerai de fer (20%)
+  await prisma.monstreDrop.upsert({ where: { id: 1 }, update: {}, create: { monstreId: gobelin.id, ressourceId: os.id, tauxDrop: 0.50, quantiteMin: 1, quantiteMax: 2 } });
+  await prisma.monstreDrop.upsert({ where: { id: 2 }, update: {}, create: { monstreId: gobelin.id, ressourceId: mineraiFer.id, tauxDrop: 0.20, quantiteMin: 1, quantiteMax: 1 } });
+
+  // Loup: Poil de loup (60%), Crocs (40%)
+  await prisma.monstreDrop.upsert({ where: { id: 3 }, update: {}, create: { monstreId: loup.id, ressourceId: poilLoup.id, tauxDrop: 0.60, quantiteMin: 1, quantiteMax: 2 } });
+  await prisma.monstreDrop.upsert({ where: { id: 4 }, update: {}, create: { monstreId: loup.id, ressourceId: crocs.id, tauxDrop: 0.40, quantiteMin: 1, quantiteMax: 1 } });
+
+  // Bandit: Cuir (50%), Minerai de fer (30%), Épée en fer (5%)
+  await prisma.monstreDrop.upsert({ where: { id: 5 }, update: {}, create: { monstreId: bandit.id, ressourceId: cuir.id, tauxDrop: 0.50, quantiteMin: 1, quantiteMax: 2 } });
+  await prisma.monstreDrop.upsert({ where: { id: 6 }, update: {}, create: { monstreId: bandit.id, ressourceId: mineraiFer.id, tauxDrop: 0.30, quantiteMin: 1, quantiteMax: 1 } });
+  await prisma.monstreDrop.upsert({ where: { id: 7 }, update: {}, create: { monstreId: bandit.id, equipementId: 1, tauxDrop: 0.05, quantiteMin: 1, quantiteMax: 1 } });
+
+  // Araignée: Toile (70%), Herbe médicinale (25%)
+  await prisma.monstreDrop.upsert({ where: { id: 8 }, update: {}, create: { monstreId: araigneeGeante.id, ressourceId: toileAraignee.id, tauxDrop: 0.70, quantiteMin: 1, quantiteMax: 3 } });
+  await prisma.monstreDrop.upsert({ where: { id: 9 }, update: {}, create: { monstreId: araigneeGeante.id, ressourceId: herbeMedicinale.id, tauxDrop: 0.25, quantiteMin: 1, quantiteMax: 1 } });
+
+  // Squelette: Os (80%), Pierre précieuse (10%)
+  await prisma.monstreDrop.upsert({ where: { id: 10 }, update: {}, create: { monstreId: squelette.id, ressourceId: os.id, tauxDrop: 0.80, quantiteMin: 1, quantiteMax: 3 } });
+  await prisma.monstreDrop.upsert({ where: { id: 11 }, update: {}, create: { monstreId: squelette.id, ressourceId: pierrePrecieuse.id, tauxDrop: 0.10, quantiteMin: 1, quantiteMax: 1 } });
+
+  // Troll: Cuir de troll (60%), Bois (40%), Bouclier en bois (8%)
+  await prisma.monstreDrop.upsert({ where: { id: 12 }, update: {}, create: { monstreId: trollDesForets.id, ressourceId: cuirTroll.id, tauxDrop: 0.60, quantiteMin: 1, quantiteMax: 2 } });
+  await prisma.monstreDrop.upsert({ where: { id: 13 }, update: {}, create: { monstreId: trollDesForets.id, ressourceId: bois.id, tauxDrop: 0.40, quantiteMin: 1, quantiteMax: 3 } });
+  await prisma.monstreDrop.upsert({ where: { id: 14 }, update: {}, create: { monstreId: trollDesForets.id, equipementId: 8, tauxDrop: 0.08, quantiteMin: 1, quantiteMax: 1 } });
+
+  console.log('Created monster drops');
+
+  // ==================== PANOPLIES ====================
+  const panoplieGuerrier = await prisma.panoplie.upsert({
+    where: { nom: 'Panoplie du Guerrier' },
+    update: {},
+    create: { nom: 'Panoplie du Guerrier', description: 'Équipement complet du guerrier' },
+  });
+
+  const panoplieMage = await prisma.panoplie.upsert({
+    where: { nom: 'Panoplie du Mage' },
+    update: {},
+    create: { nom: 'Panoplie du Mage', description: 'Équipement complet du mage' },
+  });
+
+  // Panoplie du Guerrier: Épée en fer (1) + Casque de fer (5) + Plastron de cuir (9)
+  await prisma.equipement.update({ where: { id: 1 }, data: { panoplieId: panoplieGuerrier.id } }); // Épée en fer
+  await prisma.equipement.update({ where: { id: 5 }, data: { panoplieId: panoplieGuerrier.id } }); // Casque de fer
+  await prisma.equipement.update({ where: { id: 9 }, data: { panoplieId: panoplieGuerrier.id } }); // Plastron de cuir
+
+  // Panoplie du Mage: Bâton de mage (2) + Chapeau de sorcier (6) + Amulette de vie (7)
+  await prisma.equipement.update({ where: { id: 2 }, data: { panoplieId: panoplieMage.id } }); // Bâton de mage
+  await prisma.equipement.update({ where: { id: 6 }, data: { panoplieId: panoplieMage.id } }); // Chapeau de sorcier
+  await prisma.equipement.update({ where: { id: 7 }, data: { panoplieId: panoplieMage.id } }); // Amulette de vie
+
+  // Panoplie bonuses
+  // Guerrier: 2 pièces = +10 FOR, 3 pièces = +20 FOR +1 PA
+  await prisma.panoplieBonus.upsert({
+    where: { panoplieId_nombrePieces: { panoplieId: panoplieGuerrier.id, nombrePieces: 2 } },
+    update: {},
+    create: { panoplieId: panoplieGuerrier.id, nombrePieces: 2, bonusForce: 10 },
+  });
+  await prisma.panoplieBonus.upsert({
+    where: { panoplieId_nombrePieces: { panoplieId: panoplieGuerrier.id, nombrePieces: 3 } },
+    update: {},
+    create: { panoplieId: panoplieGuerrier.id, nombrePieces: 3, bonusForce: 20, bonusPA: 1 },
+  });
+
+  // Mage: 2 pièces = +10 INT, 3 pièces = +20 INT +1 PO
+  await prisma.panoplieBonus.upsert({
+    where: { panoplieId_nombrePieces: { panoplieId: panoplieMage.id, nombrePieces: 2 } },
+    update: {},
+    create: { panoplieId: panoplieMage.id, nombrePieces: 2, bonusIntelligence: 10 },
+  });
+  await prisma.panoplieBonus.upsert({
+    where: { panoplieId_nombrePieces: { panoplieId: panoplieMage.id, nombrePieces: 3 } },
+    update: {},
+    create: { panoplieId: panoplieMage.id, nombrePieces: 3, bonusIntelligence: 20, bonusPO: 1 },
+  });
+
+  console.log('Created panoplies');
+
+  // ==================== ADD STAT RANGES TO SOME EQUIPMENT ====================
+  // Casque de fer: bonusForce 3-8, bonusVie 5-12
+  await prisma.equipement.update({ where: { id: 5 }, data: { bonusForceMax: 8, bonusVieMax: 12 } });
+  // Chapeau de sorcier: bonusIntelligence 5-12
+  await prisma.equipement.update({ where: { id: 6 }, data: { bonusIntelligenceMax: 12 } });
+  // Plastron de cuir: bonusVie 8-15
+  await prisma.equipement.update({ where: { id: 9 }, data: { bonusVieMax: 15 } });
+  // Bouclier en bois: bonusVie 3-8
+  await prisma.equipement.update({ where: { id: 8 }, data: { bonusVieMax: 8 } });
+  // Anneau de force: bonusForce 5-10
+  await prisma.equipement.update({ where: { id: 11 }, data: { bonusForceMax: 10 } });
+  // Anneau de sagesse: bonusIntelligence 5-10
+  await prisma.equipement.update({ where: { id: 12 }, data: { bonusIntelligenceMax: 10 } });
+
+  console.log('Added stat ranges to equipment');
+
+  // ==================== RECETTES ====================
+  // Casque de fer: 3x Minerai de fer + 2x Cuir, 10 or, level 1
+  const recetteCasque = await prisma.recette.upsert({
+    where: { nom: 'Forger un Casque de fer' },
+    update: {},
+    create: { nom: 'Forger un Casque de fer', description: 'Forge un casque solide', equipementId: 5, niveauMinimum: 1, coutOr: 10 },
+  });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteCasque.id, ressourceId: mineraiFer.id } }, update: {}, create: { recetteId: recetteCasque.id, ressourceId: mineraiFer.id, quantite: 3 } });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteCasque.id, ressourceId: cuir.id } }, update: {}, create: { recetteId: recetteCasque.id, ressourceId: cuir.id, quantite: 2 } });
+
+  // Plastron de cuir: 5x Cuir + 2x Laine, 15 or, level 2
+  const recettePlastron = await prisma.recette.upsert({
+    where: { nom: 'Coudre un Plastron de cuir' },
+    update: {},
+    create: { nom: 'Coudre un Plastron de cuir', description: 'Assemble un plastron résistant', equipementId: 9, niveauMinimum: 2, coutOr: 15 },
+  });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recettePlastron.id, ressourceId: cuir.id } }, update: {}, create: { recetteId: recettePlastron.id, ressourceId: cuir.id, quantite: 5 } });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recettePlastron.id, ressourceId: laine.id } }, update: {}, create: { recetteId: recettePlastron.id, ressourceId: laine.id, quantite: 2 } });
+
+  // Bouclier en bois: 4x Bois + 2x Minerai de fer, 12 or, level 1
+  const recetteBouclier = await prisma.recette.upsert({
+    where: { nom: 'Assembler un Bouclier en bois' },
+    update: {},
+    create: { nom: 'Assembler un Bouclier en bois', description: 'Fabrique un bouclier robuste', equipementId: 8, niveauMinimum: 1, coutOr: 12 },
+  });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteBouclier.id, ressourceId: bois.id } }, update: {}, create: { recetteId: recetteBouclier.id, ressourceId: bois.id, quantite: 4 } });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteBouclier.id, ressourceId: mineraiFer.id } }, update: {}, create: { recetteId: recetteBouclier.id, ressourceId: mineraiFer.id, quantite: 2 } });
+
+  // Amulette de vie: 2x Herbe médicinale + 1x Pierre précieuse, 20 or, level 3
+  const recetteAmulette = await prisma.recette.upsert({
+    where: { nom: 'Enchanter une Amulette de vie' },
+    update: {},
+    create: { nom: 'Enchanter une Amulette de vie', description: 'Crée une amulette protectrice', equipementId: 7, niveauMinimum: 3, coutOr: 20 },
+  });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteAmulette.id, ressourceId: herbeMedicinale.id } }, update: {}, create: { recetteId: recetteAmulette.id, ressourceId: herbeMedicinale.id, quantite: 2 } });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteAmulette.id, ressourceId: pierrePrecieuse.id } }, update: {}, create: { recetteId: recetteAmulette.id, ressourceId: pierrePrecieuse.id, quantite: 1 } });
+
+  // Anneau de force: 3x Os + 1x Pierre précieuse + 2x Minerai de fer, 25 or, level 3
+  const recetteAnneauForce = await prisma.recette.upsert({
+    where: { nom: 'Forger un Anneau de force' },
+    update: {},
+    create: { nom: 'Forger un Anneau de force', description: 'Forge un anneau puissant', equipementId: 11, niveauMinimum: 3, coutOr: 25 },
+  });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteAnneauForce.id, ressourceId: os.id } }, update: {}, create: { recetteId: recetteAnneauForce.id, ressourceId: os.id, quantite: 3 } });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteAnneauForce.id, ressourceId: pierrePrecieuse.id } }, update: {}, create: { recetteId: recetteAnneauForce.id, ressourceId: pierrePrecieuse.id, quantite: 1 } });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteAnneauForce.id, ressourceId: mineraiFer.id } }, update: {}, create: { recetteId: recetteAnneauForce.id, ressourceId: mineraiFer.id, quantite: 2 } });
+
+  // Chapeau de sorcier: 3x Toile d'araignée + 2x Plume + 1x Pierre précieuse, 18 or, level 2
+  const recetteChapeau = await prisma.recette.upsert({
+    where: { nom: 'Tisser un Chapeau de sorcier' },
+    update: {},
+    create: { nom: 'Tisser un Chapeau de sorcier', description: 'Tisse un chapeau magique', equipementId: 6, niveauMinimum: 2, coutOr: 18 },
+  });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteChapeau.id, ressourceId: toileAraignee.id } }, update: {}, create: { recetteId: recetteChapeau.id, ressourceId: toileAraignee.id, quantite: 3 } });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteChapeau.id, ressourceId: plume.id } }, update: {}, create: { recetteId: recetteChapeau.id, ressourceId: plume.id, quantite: 2 } });
+  await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteChapeau.id, ressourceId: pierrePrecieuse.id } }, update: {}, create: { recetteId: recetteChapeau.id, ressourceId: pierrePrecieuse.id, quantite: 1 } });
+
+  console.log('Created recipes');
 
   console.log('Seeding completed!');
 }

@@ -1,4 +1,6 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
+import prisma from '../../config/database';
 import { mapController } from './map.controller';
 
 // ==================== REGIONS ====================
@@ -84,6 +86,65 @@ monstresRouter.post('/:id/sorts', (req, res, next) => mapController.addMonstreSo
 
 // DELETE /api/monstres/:id/sorts/:sortId - Remove spell from monster
 monstresRouter.delete('/:id/sorts/:sortId', (req, res, next) => mapController.removeMonstreSort(req, res, next));
+
+// POST /api/monstres/:id/drops - Add drop to monster
+monstresRouter.post('/:id/drops', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const monstreId = parseInt(req.params.id, 10);
+    if (isNaN(monstreId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      ressourceId: z.number().int().positive().nullable().optional(),
+      equipementId: z.number().int().positive().nullable().optional(),
+      tauxDrop: z.number().min(0).max(1).default(0.3),
+      quantiteMin: z.number().int().min(1).default(1),
+      quantiteMax: z.number().int().min(1).default(1),
+    });
+    const data = schema.parse(req.body);
+    const drop = await prisma.monstreDrop.create({
+      data: { monstreId, ...data },
+      include: { ressource: true, equipement: true },
+    });
+    res.status(201).json(drop);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+// PATCH /api/monstres/:id/drops/:dropId - Update a drop
+monstresRouter.patch('/:id/drops/:dropId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dropId = parseInt(req.params.dropId, 10);
+    if (isNaN(dropId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      ressourceId: z.number().int().positive().nullable().optional(),
+      equipementId: z.number().int().positive().nullable().optional(),
+      tauxDrop: z.number().min(0).max(1).optional(),
+      quantiteMin: z.number().int().min(1).optional(),
+      quantiteMax: z.number().int().min(1).optional(),
+    });
+    const data = schema.parse(req.body);
+    const drop = await prisma.monstreDrop.update({
+      where: { id: dropId },
+      data,
+      include: { ressource: true, equipement: true },
+    });
+    res.json(drop);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+// DELETE /api/monstres/:id/drops/:dropId - Remove a drop
+monstresRouter.delete('/:id/drops/:dropId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dropId = parseInt(req.params.dropId, 10);
+    if (isNaN(dropId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    await prisma.monstreDrop.delete({ where: { id: dropId } });
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
 
 export default {
   regions: regionsRouter,

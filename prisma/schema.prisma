@@ -19,6 +19,7 @@ enum StatType {
   PA
   PM
   PO
+  CRITIQUE
 }
 
 enum ZoneType {
@@ -169,6 +170,7 @@ model Equipement {
   nom               String
   slot              SlotType
   niveauMinimum     Int       @default(1)
+  poids             Int       @default(1)
   bonusForce        Int       @default(0)
   bonusIntelligence Int       @default(0)
   bonusDexterite    Int       @default(0)
@@ -178,6 +180,17 @@ model Equipement {
   bonusPA           Int       @default(0)
   bonusPM           Int       @default(0)
   bonusPO           Int       @default(0)
+  // Ranges max pour stats aléatoires (null = stat fixe)
+  bonusForceMax      Int?
+  bonusIntelligenceMax Int?
+  bonusDexteriteMax  Int?
+  bonusAgiliteMax    Int?
+  bonusVieMax        Int?
+  bonusChanceMax     Int?
+  bonusPAMax         Int?
+  bonusPMMax         Int?
+  bonusPOMax         Int?
+  bonusCritiqueMax   Int?
   // Champs d'attaque (pour armes uniquement)
   degatsMin         Int?
   degatsMax         Int?
@@ -196,7 +209,14 @@ model Equipement {
   estVolDeVie       Boolean   @default(false)
   // Crit global pour armes multi-lignes
   bonusCrit         Int?
+  bonusCritique     Int       @default(0)
+  // Panoplie
+  panoplieId        Int?
+  panoplie          Panoplie? @relation(fields: [panoplieId], references: [id])
   lignesDegats      LigneDegatsArme[]
+  inventaireItems   InventaireItem[]
+  recettes          Recette[]
+  drops             MonstreDrop[]
 }
 
 model Effet {
@@ -311,12 +331,15 @@ model MonstreTemplate {
   xpRecompense   Int                  @default(10)
   iaType         IAType               @default(EQUILIBRE)
   pvScalingInvocation Float?
+  orMin          Int                  @default(0)
+  orMax          Int                  @default(0)
   groupesMembres GroupeEnnemiMembre[]
   donjonsBoss    Donjon[]
   regions        RegionMonstre[]
   sorts          MonstreSort[]
   combatEntites  CombatEntite[]
   invocationSorts Sort[]              @relation("InvocationSort")
+  drops          MonstreDrop[]
 }
 
 model RegionMonstre {
@@ -391,6 +414,8 @@ model Personnage {
   agilite                Int
   vie                    Int
   chance                 Int
+  or                     Int                @default(0)
+  poidsMaxInventaire     Int                @default(100)
   joueurId               Int
   joueur                 Joueur             @relation(fields: [joueurId], references: [id])
   raceId                 Int
@@ -398,6 +423,8 @@ model Personnage {
   groupes                GroupePersonnage[]
   equipements            Json               @default("{}")
   sortsAppris            PersonnageSort[]
+  inventaireItems        InventaireItem[]
+  inventaireRessources   InventaireRessource[]
 }
 
 model PersonnageSort {
@@ -439,6 +466,7 @@ model Combat {
   entiteActuelleId Int?
   grilleLargeur    Int
   grilleHauteur    Int
+  groupeId         Int?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   entites          CombatEntite[]
@@ -505,6 +533,7 @@ model CombatEntite {
   monstreTemplate     MonstreTemplate? @relation(fields: [monstreTemplateId], references: [id])
   iaType              IAType?
   poBonus             Int              @default(0)
+  bonusCritique       Int              @default(0)
 }
 
 model EffetActif {
@@ -568,6 +597,117 @@ model GrilleSpawn {
 
   @@unique([grilleId, equipe, ordre])
   @@unique([grilleId, x, y])
+}
+
+// ==================== INVENTAIRE & ÉCONOMIE ====================
+
+model InventaireItem {
+  id              Int        @id @default(autoincrement())
+  personnageId    Int
+  personnage      Personnage @relation(fields: [personnageId], references: [id], onDelete: Cascade)
+  equipementId    Int
+  equipement      Equipement @relation(fields: [equipementId], references: [id])
+  bonusForce      Int        @default(0)
+  bonusIntelligence Int      @default(0)
+  bonusDexterite  Int        @default(0)
+  bonusAgilite    Int        @default(0)
+  bonusVie        Int        @default(0)
+  bonusChance     Int        @default(0)
+  bonusPA         Int        @default(0)
+  bonusPM         Int        @default(0)
+  bonusPO         Int        @default(0)
+  bonusCritique   Int        @default(0)
+  estEquipe       Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+
+  @@index([personnageId])
+  @@index([personnageId, estEquipe])
+}
+
+model Ressource {
+  id          Int                   @id @default(autoincrement())
+  nom         String                @unique
+  description String?
+  poids       Int                   @default(1)
+  estPremium  Boolean               @default(false)
+  inventaires InventaireRessource[]
+  drops       MonstreDrop[]
+  ingredients RecetteIngredient[]
+}
+
+model InventaireRessource {
+  id           Int        @id @default(autoincrement())
+  personnageId Int
+  personnage   Personnage @relation(fields: [personnageId], references: [id], onDelete: Cascade)
+  ressourceId  Int
+  ressource    Ressource  @relation(fields: [ressourceId], references: [id])
+  quantite     Int        @default(1)
+
+  @@unique([personnageId, ressourceId])
+}
+
+model MonstreDrop {
+  id            Int              @id @default(autoincrement())
+  monstreId     Int
+  monstre       MonstreTemplate  @relation(fields: [monstreId], references: [id], onDelete: Cascade)
+  ressourceId   Int?
+  ressource     Ressource?       @relation(fields: [ressourceId], references: [id])
+  equipementId  Int?
+  equipement    Equipement?      @relation(fields: [equipementId], references: [id])
+  tauxDrop      Float            @default(0.3)
+  quantiteMin   Int              @default(1)
+  quantiteMax   Int              @default(1)
+
+  @@index([monstreId])
+}
+
+model Recette {
+  id            Int                @id @default(autoincrement())
+  nom           String             @unique
+  description   String?
+  equipementId  Int
+  equipement    Equipement         @relation(fields: [equipementId], references: [id])
+  niveauMinimum Int                @default(1)
+  coutOr        Int                @default(0)
+  ingredients   RecetteIngredient[]
+}
+
+model RecetteIngredient {
+  id          Int       @id @default(autoincrement())
+  recetteId   Int
+  recette     Recette   @relation(fields: [recetteId], references: [id], onDelete: Cascade)
+  ressourceId Int
+  ressource   Ressource @relation(fields: [ressourceId], references: [id])
+  quantite    Int       @default(1)
+
+  @@unique([recetteId, ressourceId])
+}
+
+model Panoplie {
+  id          Int              @id @default(autoincrement())
+  nom         String           @unique
+  description String?
+  equipements Equipement[]
+  bonus       PanoplieBonus[]
+}
+
+model PanoplieBonus {
+  id              Int      @id @default(autoincrement())
+  panoplieId      Int
+  panoplie        Panoplie @relation(fields: [panoplieId], references: [id], onDelete: Cascade)
+  nombrePieces    Int
+  bonusForce      Int      @default(0)
+  bonusIntelligence Int    @default(0)
+  bonusDexterite  Int      @default(0)
+  bonusAgilite    Int      @default(0)
+  bonusVie        Int      @default(0)
+  bonusChance     Int      @default(0)
+  bonusPA         Int      @default(0)
+  bonusPM         Int      @default(0)
+  bonusPO         Int      @default(0)
+  bonusCritique   Int      @default(0)
+
+  @@unique([panoplieId, nombrePieces])
 }
 
 // ==================== DONJONS ====================

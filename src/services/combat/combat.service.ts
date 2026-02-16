@@ -58,6 +58,7 @@ export class CombatService {
         status: CombatStatus.EN_COURS,
         grilleLargeur: grille.largeur,
         grilleHauteur: grille.hauteur,
+        groupeId: data.groupeId,
       },
     });
 
@@ -68,46 +69,82 @@ export class CombatService {
 
       const totalStats = await characterService.getTotalStats(char.id);
 
-      // Snapshot weapon data if character has a weapon equipped
+      // Snapshot weapon data — try inventory first, then legacy JSON
       let armeData: ArmeData | null = null;
-      const equipment = char.equipements as CharacterEquipment;
-      const armeId = equipment['ARME'];
-      if (armeId) {
-        const arme = await prisma.equipement.findUnique({
-          where: { id: armeId },
-          include: { lignesDegats: { orderBy: { ordre: 'asc' } } },
-        });
-        if (arme && arme.degatsMin != null && arme.degatsMax != null) {
-          // Snapshot damage lines
-          const lignes: LigneDegats[] = arme.lignesDegats.map(l => ({
-            ordre: l.ordre,
-            degatsMin: l.degatsMin,
-            degatsMax: l.degatsMax,
-            statUtilisee: l.statUtilisee,
-            estVolDeVie: l.estVolDeVie,
-            estSoin: l.estSoin,
-          }));
+      const equippedWeapon = await prisma.inventaireItem.findFirst({
+        where: { personnageId: char.id, estEquipe: true, equipement: { slot: 'ARME' } },
+        include: { equipement: { include: { lignesDegats: { orderBy: { ordre: 'asc' } } } } },
+      });
 
-          armeData = {
-            nom: arme.nom,
-            degatsMin: arme.degatsMin,
-            degatsMax: arme.degatsMax,
-            degatsCritMin: arme.degatsCritMin ?? arme.degatsMin,
-            degatsCritMax: arme.degatsCritMax ?? arme.degatsMax,
-            chanceCritBase: arme.chanceCritBase ?? 0.05,
-            bonusCrit: arme.bonusCrit ?? 0,
-            coutPA: arme.coutPA ?? 3,
-            porteeMin: arme.porteeMin ?? 1,
-            porteeMax: arme.porteeMax ?? 1,
-            ligneDeVue: arme.ligneDeVue ?? true,
-            zoneId: arme.zoneId,
-            statUtilisee: arme.statUtilisee ?? 'FORCE',
-            cooldown: arme.cooldown ?? 0,
-            tauxEchec: arme.tauxEchec ?? 0,
-            estVolDeVie: arme.estVolDeVie ?? false,
-            lignes,
-          };
+      const armeSource = equippedWeapon?.equipement ?? null;
+      if (!armeSource) {
+        // Fallback: legacy JSON
+        const equipment = char.equipements as CharacterEquipment;
+        const armeId = equipment['ARME'];
+        if (armeId) {
+          const arme = await prisma.equipement.findUnique({
+            where: { id: armeId },
+            include: { lignesDegats: { orderBy: { ordre: 'asc' } } },
+          });
+          if (arme && arme.degatsMin != null && arme.degatsMax != null) {
+            const lignes: LigneDegats[] = arme.lignesDegats.map(l => ({
+              ordre: l.ordre,
+              degatsMin: l.degatsMin,
+              degatsMax: l.degatsMax,
+              statUtilisee: l.statUtilisee,
+              estVolDeVie: l.estVolDeVie,
+              estSoin: l.estSoin,
+            }));
+            armeData = {
+              nom: arme.nom,
+              degatsMin: arme.degatsMin,
+              degatsMax: arme.degatsMax,
+              degatsCritMin: arme.degatsCritMin ?? arme.degatsMin,
+              degatsCritMax: arme.degatsCritMax ?? arme.degatsMax,
+              chanceCritBase: arme.chanceCritBase ?? 0.05,
+              bonusCrit: arme.bonusCrit ?? 0,
+              coutPA: arme.coutPA ?? 3,
+              porteeMin: arme.porteeMin ?? 1,
+              porteeMax: arme.porteeMax ?? 1,
+              ligneDeVue: arme.ligneDeVue ?? true,
+              zoneId: arme.zoneId,
+              statUtilisee: arme.statUtilisee ?? 'FORCE',
+              cooldown: arme.cooldown ?? 0,
+              tauxEchec: arme.tauxEchec ?? 0,
+              estVolDeVie: arme.estVolDeVie ?? false,
+              lignes,
+            };
+          }
         }
+      } else if (armeSource.degatsMin != null && armeSource.degatsMax != null) {
+        // Use inventory weapon — attack data from template, stats from instance
+        const lignes: LigneDegats[] = armeSource.lignesDegats.map(l => ({
+          ordre: l.ordre,
+          degatsMin: l.degatsMin,
+          degatsMax: l.degatsMax,
+          statUtilisee: l.statUtilisee,
+          estVolDeVie: l.estVolDeVie,
+          estSoin: l.estSoin,
+        }));
+        armeData = {
+          nom: armeSource.nom,
+          degatsMin: armeSource.degatsMin,
+          degatsMax: armeSource.degatsMax,
+          degatsCritMin: armeSource.degatsCritMin ?? armeSource.degatsMin,
+          degatsCritMax: armeSource.degatsCritMax ?? armeSource.degatsMax,
+          chanceCritBase: armeSource.chanceCritBase ?? 0.05,
+          bonusCrit: armeSource.bonusCrit ?? 0,
+          coutPA: armeSource.coutPA ?? 3,
+          porteeMin: armeSource.porteeMin ?? 1,
+          porteeMax: armeSource.porteeMax ?? 1,
+          ligneDeVue: armeSource.ligneDeVue ?? true,
+          zoneId: armeSource.zoneId,
+          statUtilisee: armeSource.statUtilisee ?? 'FORCE',
+          cooldown: armeSource.cooldown ?? 0,
+          tauxEchec: armeSource.tauxEchec ?? 0,
+          estVolDeVie: armeSource.estVolDeVie ?? false,
+          lignes,
+        };
       }
 
       await prisma.combatEntite.create({
@@ -133,6 +170,7 @@ export class CombatService {
           vie: totalStats.vie,
           chance: totalStats.chance,
           poBonus: totalStats.po,
+          bonusCritique: totalStats.bonusCritique,
           armeData: armeData ? JSON.parse(JSON.stringify(armeData)) : undefined,
         },
       });

@@ -137,6 +137,7 @@ export interface CombatEntityState {
   niveau?: number | null;
   iaType?: string | null;
   poBonus?: number;
+  bonusCritique?: number;
   sorts?: CombatSpellState[];
 }
 
@@ -228,6 +229,74 @@ export interface CharacterEquipment {
   [slot: string]: number | null;
 }
 
+// Inventory types
+export interface InventoryItemInstance {
+  id: number;
+  equipementId: number;
+  nom: string;
+  slot: string;
+  poids: number;
+  bonusForce: number;
+  bonusIntelligence: number;
+  bonusDexterite: number;
+  bonusAgilite: number;
+  bonusVie: number;
+  bonusChance: number;
+  bonusPA: number;
+  bonusPM: number;
+  bonusPO: number;
+  bonusCritique: number;
+  estEquipe: boolean;
+  panoplieId?: number | null;
+}
+
+export interface ResourceStack {
+  ressourceId: number;
+  nom: string;
+  description?: string | null;
+  poids: number;
+  quantite: number;
+}
+
+export interface InventoryState {
+  items: InventoryItemInstance[];
+  ressources: ResourceStack[];
+  poidsActuel: number;
+  poidsMax: number;
+  or: number;
+}
+
+export interface PlayerDropResult {
+  personnageId: number;
+  nom: string;
+  or: number;
+  ressources: { ressourceId: number; nom: string; quantite: number }[];
+  items: InventoryItemInstance[];
+}
+
+export interface DropResult {
+  perPlayer: PlayerDropResult[];
+  totalOr: number;
+  totalRessources: { ressourceId: number; nom: string; quantite: number }[];
+  totalItems: InventoryItemInstance[];
+}
+
+export interface SetBonusInfo {
+  panoplieId: number;
+  nom: string;
+  piecesEquipees: number;
+  bonusForce: number;
+  bonusIntelligence: number;
+  bonusDexterite: number;
+  bonusAgilite: number;
+  bonusVie: number;
+  bonusChance: number;
+  bonusPA: number;
+  bonusPM: number;
+  bonusPO: number;
+  bonusCritique: number;
+}
+
 // API request/response types
 export interface CreatePlayerRequest {
   nom: string;
@@ -283,5 +352,6 @@ export interface TotalStats {
   pa: number;
   pm: number;
   po: number;
+  bonusCritique: number;
   pvMax: number;
 }

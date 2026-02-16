@@ -19,6 +19,7 @@ interface EntityStats {
   agilite: number;
   vie: number;
   chance: number;
+  bonusCritique?: number;
 }
 
 /**
@@ -38,7 +39,7 @@ export function calculateDamage(spell: SpellData, attackerStats: EntityStats): D
   const statMultiplier = calculateStatMultiplier(statValue);
 
   // Calculate critical chance
-  const critChance = calculateCritChance(spell.chanceCritBase, attackerStats.chance);
+  const critChance = calculateCritChance(spell.chanceCritBase, attackerStats.chance, attackerStats.bonusCritique ?? 0);
 
   // Check for critical hit
   const isCritical = checkProbability(critChance);

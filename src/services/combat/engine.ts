@@ -5,13 +5,14 @@ import { calculateAlternatingInitiativeOrder, getNextEntity } from './initiative
 import { calculateDamage, applyDamage, isDead } from './damage';
 import { canMove, calculateMovementCost, hasLineOfSight } from './movement';
 import { getAffectedCells, getEntitiesInArea } from './aoe';
-import { manhattanDistance, getStatValue, calculateStatMultiplier, calculateCritChance } from '../../utils/formulas';
+import { manhattanDistance, getStatValue, calculateStatMultiplier, calculateCritChance, calculateAoEReduction } from '../../utils/formulas';
 import { progressionService } from '../progression.service';
 import { getCombatCases } from './grid';
 import { spellService } from '../spell.service';
 import { executeAITurn } from './ai';
 import { createInvocation, killInvocationsOf } from './invocation';
 import { donjonService } from '../donjon.service';
+import { dropService } from '../drop.service';
 import { getStatsWithEffects, applySpellEffects, AppliedEffect, PushPullResult, getResourceModifiers, applyPoisonDamage, removeEffectsByCaster } from './effects';
 import { checkProbability, randomInt } from '../../utils/random';
 import { addLog } from './combatLog';
@@ -198,6 +199,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
         niveau: e.niveau,
         iaType: e.iaType,
         poBonus: e.poBonus,
+        bonusCritique: e.bonusCritique,
         sorts,
       };
     })
@@ -628,6 +630,7 @@ export async function executeAction(
       chance: attacker.chance,
     };
     const attackerModifiedStats = await getStatsWithEffects(combatId, entiteId, attackerBaseStats);
+    const healStats = { ...attackerModifiedStats, bonusCritique: attacker.bonusCritique + poMods.critiqueModifier };
 
     const spellData = {
       degatsMin: attackData.degatsMin,
@@ -640,8 +643,10 @@ export async function executeAction(
 
     const heals: ActionResult['heals'] = [];
     for (const target of validTargets) {
-      const healResult = calculateDamage(spellData, attackerModifiedStats);
-      const healAmount = healResult.finalDamage;
+      const healResult = calculateDamage(spellData, healStats);
+      const aoeDistance = manhattanDistance(target.positionX, target.positionY, targetX, targetY);
+      const aoeMultiplier = calculateAoEReduction(aoeDistance);
+      const healAmount = Math.floor(healResult.finalDamage * aoeMultiplier);
       const newPV = Math.min(target.pvMax, target.pvActuels + healAmount);
 
       await prisma.combatEntite.update({
@@ -739,6 +744,7 @@ export async function executeAction(
     chance: attacker.chance,
   };
   const attackerModifiedStats = await getStatsWithEffects(combatId, entiteId, attackerBaseStats);
+  const attackerStatsWithCrit = { ...attackerModifiedStats, bonusCritique: attacker.bonusCritique + poMods.critiqueModifier };
 
   // Calculate and apply damage to each target
   const damages: ActionResult['damages'] = [];
@@ -752,21 +758,29 @@ export async function executeAction(
   // Global crit roll for weapons (one roll for all lines)
   let globalWeaponCrit = false;
   if (hasLignes) {
-    const critChance = calculateCritChance(armeDataForLines.chanceCritBase, attackerModifiedStats.chance);
+    const critChance = calculateCritChance(armeDataForLines.chanceCritBase, attackerModifiedStats.chance, attacker.bonusCritique + poMods.critiqueModifier);
     globalWeaponCrit = checkProbability(critChance);
   }
 
   // Total lifesteal accumulated across all targets and lines
   let totalLifestealAmount = 0;
 
+  // Track per-target line details for multi-line log formatting
+  const targetLineDetails: Map<number, { damage: number; stat: string; isVdV: boolean; isSoin: boolean }[]> = new Map();
+
   for (const target of validTargets) {
     let totalDamageForTarget = 0;
     let totalHealForTarget = 0;
     let anyCrit = false;
 
+    // Calculate AoE distance reduction
+    const aoeDistance = manhattanDistance(target.positionX, target.positionY, targetX, targetY);
+    const aoeMultiplier = calculateAoEReduction(aoeDistance);
+
     if (hasLignes) {
       // ===== MULTI-LINE WEAPON DAMAGE =====
       const bonusCrit = armeDataForLines.bonusCrit ?? 0;
+      const lineDetails: { damage: number; stat: string; isVdV: boolean; isSoin: boolean }[] = [];
 
       for (const ligne of armeDataForLines.lignes) {
         const statValue = getStatValue(attackerModifiedStats, ligne.statUtilisee as any);
@@ -779,7 +793,14 @@ export async function executeAction(
         } else {
           baseDmg = randomInt(ligne.degatsMin, ligne.degatsMax);
         }
-        const finalDmg = Math.floor(baseDmg * statMultiplier);
+        const finalDmg = Math.floor(Math.floor(baseDmg * statMultiplier) * aoeMultiplier);
+
+        lineDetails.push({
+          damage: finalDmg,
+          stat: ligne.statUtilisee,
+          isVdV: ligne.estVolDeVie ?? false,
+          isSoin: ligne.estSoin ?? false,
+        });
 
         if (ligne.estSoin) {
           totalHealForTarget += finalDmg;
@@ -792,6 +813,8 @@ export async function executeAction(
           totalLifestealAmount += Math.floor(finalDmg / 2);
         }
       }
+
+      targetLineDetails.set(target.id, lineDetails);
     } else {
       // ===== SINGLE-LINE DAMAGE (spells or weapons without lignes) =====
       const spellData = {
@@ -803,8 +826,8 @@ export async function executeAction(
         statUtilisee: attackData.statUtilisee as any,
       };
 
-      const damageResult = calculateDamage(spellData, attackerModifiedStats);
-      totalDamageForTarget = damageResult.finalDamage;
+      const damageResult = calculateDamage(spellData, attackerStatsWithCrit);
+      totalDamageForTarget = Math.floor(damageResult.finalDamage * aoeMultiplier);
       anyCrit = damageResult.isCritical;
     }
 
@@ -891,11 +914,41 @@ export async function executeAction(
   const dmgParts = damages.map(d => {
     const target = combat.entites.find(e => e.id === d.entiteId);
     const critStr = !hasLignes && d.isCritical ? 'CRITIQUE ! ' : '';
-    return `${critStr}${target?.nom || '?'} subit ${d.damage} dégâts (${d.pvRestants}/${target?.pvMax || '?'} PV)`;
+
+    // Build detail string for multi-line weapons
+    let detailStr = '';
+    const lineDetails = targetLineDetails.get(d.entiteId);
+    if (lineDetails && lineDetails.length > 1) {
+      const dmgDetails = lineDetails
+        .filter(l => !l.isSoin)
+        .map(l => {
+          let label = `${l.damage} ${l.stat}`;
+          if (l.isVdV) label += ' VdV';
+          return label;
+        });
+      if (dmgDetails.length > 0) {
+        detailStr = ` (${dmgDetails.join(' + ')})`;
+      }
+    }
+
+    return `${critStr}${target?.nom || '?'} subit ${d.damage} dégâts${detailStr} (${d.pvRestants}/${target?.pvMax || '?'} PV)`;
   });
   const healParts = heals.map(h => {
     const target = combat.entites.find(e => e.id === h.entiteId);
-    return `${target?.nom || '?'} récupère ${h.healAmount} PV (${h.pvRestants}/${target?.pvMax || '?'} PV)`;
+
+    // Build detail string for multi-line weapon heals
+    let detailStr = '';
+    const lineDetails = targetLineDetails.get(h.entiteId);
+    if (lineDetails && lineDetails.length > 1) {
+      const healDetails = lineDetails
+        .filter(l => l.isSoin)
+        .map(l => `${l.damage} ${l.stat} Soin`);
+      if (healDetails.length > 0) {
+        detailStr = ` (${healDetails.join(' + ')})`;
+      }
+    }
+
+    return `${target?.nom || '?'} récupère ${h.healAmount} PV${detailStr} (${h.pvRestants}/${target?.pvMax || '?'} PV)`;
   });
   const allParts = [...dmgParts, ...healParts];
   if (allParts.length > 0) {
@@ -1198,6 +1251,24 @@ async function checkCombatEnd(combatId: number): Promise<void> {
     // Players won
     if (team0Alive.length > 0 && team1Alive.length === 0) {
       await progressionService.distributeXP(combatId);
+
+      // Distribute drops (gold, resources, equipment)
+      try {
+        const drops = await dropService.distributeDrops(combatId);
+        if (drops.totalOr > 0 || drops.totalRessources.length > 0 || drops.totalItems.length > 0) {
+          const dropParts: string[] = [];
+          if (drops.totalOr > 0) dropParts.push(`${drops.totalOr} or total`);
+          if (drops.totalRessources.length > 0) {
+            dropParts.push(drops.totalRessources.map(r => `${r.quantite}x ${r.nom}`).join(', '));
+          }
+          if (drops.totalItems.length > 0) {
+            dropParts.push(drops.totalItems.map(i => i.nom).join(', '));
+          }
+          await addLog(combatId, tour, `Butin : ${dropParts.join(' | ')}`, 'FIN');
+        }
+      } catch (error) {
+        console.error('Error distributing drops:', error);
+      }
 
       // If in dungeon, advance to next room
       if (run) {
