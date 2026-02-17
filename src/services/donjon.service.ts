@@ -1,12 +1,11 @@
 import prisma from '../config/database';
-import { CombatMode, MapType } from '@prisma/client';
+import { CombatMode, MapType, Prisma } from '@prisma/client';
 import { randomInt } from '../utils/random';
-import { combatService } from './combat/combat.service';
 
 export class DonjonService {
   /**
    * Enter a dungeon with a group
-   * Creates a DonjonRun, teleports group to first room, spawns enemies
+   * Creates a DonjonRun, teleports group to first room, spawns visible enemies
    */
   async enterDungeon(donjonId: number, groupeId: number, difficulte: number) {
     // Validate difficulty (4, 6, or 8)
@@ -74,6 +73,9 @@ export class DonjonService {
       throw new Error('First room not found');
     }
 
+    // Save origin map for return after dungeon
+    const mapOrigineId = groupe.mapId;
+
     // Create the dungeon run
     const run = await prisma.donjonRun.create({
       data: {
@@ -83,6 +85,7 @@ export class DonjonService {
         difficulte,
         termine: false,
         victoire: null,
+        mapOrigineId,
       },
     });
 
@@ -96,8 +99,8 @@ export class DonjonService {
       },
     });
 
-    // Trigger the first combat
-    const combat = await this.triggerDungeonCombat(run.id);
+    // Spawn visible enemies (instead of auto-starting combat)
+    const groupeEnnemi = await this.spawnDungeonGroupeEnnemi(run.id);
 
     // Get updated run with all relations
     const updatedRun = await prisma.donjonRun.findUnique({
@@ -127,8 +130,8 @@ export class DonjonService {
 
     return {
       run: updatedRun,
-      combat,
       salle: firstRoom,
+      groupeEnnemi,
     };
   }
 
@@ -160,6 +163,12 @@ export class DonjonService {
       throw new Error('Dungeon run is already finished');
     }
 
+    // Clean up enemies from current room
+    const currentRoom = run.donjon.salles.find(s => s.ordre === run.salleActuelle);
+    if (currentRoom) {
+      await this.cleanupDungeonEnemies(currentRoom.mapId);
+    }
+
     const nextRoomNumber = run.salleActuelle + 1;
 
     // Check if dungeon is completed (was on room 4)
@@ -171,14 +180,15 @@ export class DonjonService {
           termine: true,
           victoire: true,
           combatActuel: null,
+          monstresCaches: Prisma.DbNull,
         },
       });
 
-      // Teleport group out of dungeon
+      // Teleport group back to origin map (or null if no origin)
       await prisma.groupe.update({
         where: { id: run.groupeId },
         data: {
-          mapId: null,
+          mapId: run.mapOrigineId ?? null,
           positionX: 0,
           positionY: 0,
         },
@@ -203,6 +213,7 @@ export class DonjonService {
       data: {
         salleActuelle: nextRoomNumber,
         combatActuel: null,
+        monstresCaches: Prisma.DbNull,
       },
     });
 
@@ -216,16 +227,125 @@ export class DonjonService {
       },
     });
 
-    // Trigger combat in new room
-    const combat = await this.triggerDungeonCombat(runId);
+    // Spawn visible enemies in new room
+    const groupeEnnemi = await this.spawnDungeonGroupeEnnemi(runId);
 
     return {
       completed: false,
       salleActuelle: nextRoomNumber,
       salle: nextRoom,
-      combat,
+      groupeEnnemi,
       message: `Advanced to room ${nextRoomNumber}`,
     };
+  }
+
+  /**
+   * Spawn a visible GroupeEnnemi on the current dungeon room map
+   * Stores monstresCaches in the run for later use by engageEnemyGroup
+   */
+  async spawnDungeonGroupeEnnemi(runId: number) {
+    const run = await prisma.donjonRun.findUnique({
+      where: { id: runId },
+      include: {
+        donjon: {
+          include: {
+            salles: {
+              orderBy: { ordre: 'asc' },
+              include: { map: true },
+            },
+            boss: true,
+            region: true,
+          },
+        },
+      },
+    });
+
+    if (!run) {
+      throw new Error('Dungeon run not found');
+    }
+
+    const currentRoom = run.donjon.salles.find(s => s.ordre === run.salleActuelle);
+    if (!currentRoom) {
+      throw new Error(`Room ${run.salleActuelle} not found`);
+    }
+
+    const isBoss = run.salleActuelle === 4;
+
+    // Generate monster data (with boss boost etc.)
+    const monstres = await this.spawnDungeonEnemies(
+      run.donjon,
+      run.difficulte,
+      isBoss
+    );
+
+    // Clean up any existing enemies on this room map
+    await this.cleanupDungeonEnemies(currentRoom.mapId);
+
+    // Group monsters by (monstreTemplateId, niveau) for GroupeEnnemiMembre
+    const monstreGroups = new Map<string, { monstreTemplateId: number; niveau: number; count: number }>();
+    for (const m of monstres) {
+      const key = `${m.monstreTemplateId}-${m.niveau}`;
+      const existing = monstreGroups.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        monstreGroups.set(key, { monstreTemplateId: m.monstreTemplateId, niveau: m.niveau, count: 1 });
+      }
+    }
+
+    // Create visible GroupeEnnemi on the map
+    const posX = Math.floor(currentRoom.map.largeur * 0.8);
+    const posY = Math.floor(currentRoom.map.hauteur / 2);
+
+    const groupeEnnemi = await prisma.groupeEnnemi.create({
+      data: {
+        mapId: currentRoom.mapId,
+        positionX: posX,
+        positionY: posY,
+      },
+    });
+
+    // Create members
+    for (const group of monstreGroups.values()) {
+      await prisma.groupeEnnemiMembre.create({
+        data: {
+          groupeEnnemiId: groupeEnnemi.id,
+          monstreId: group.monstreTemplateId,
+          quantite: group.count,
+          niveau: group.niveau,
+        },
+      });
+    }
+
+    // Store the full monster data in monstresCaches for combat creation
+    await prisma.donjonRun.update({
+      where: { id: runId },
+      data: {
+        monstresCaches: monstres as unknown as any,
+      },
+    });
+
+    // Return the complete group with members
+    return prisma.groupeEnnemi.findUnique({
+      where: { id: groupeEnnemi.id },
+      include: {
+        membres: {
+          include: { monstre: true },
+        },
+      },
+    });
+  }
+
+  /**
+   * Clean up all enemy groups on a dungeon room map
+   */
+  async cleanupDungeonEnemies(mapId: number) {
+    // Delete members first (cascade would handle it, but being explicit)
+    const groups = await prisma.groupeEnnemi.findMany({ where: { mapId } });
+    for (const g of groups) {
+      await prisma.groupeEnnemiMembre.deleteMany({ where: { groupeEnnemiId: g.id } });
+    }
+    await prisma.groupeEnnemi.deleteMany({ where: { mapId } });
   }
 
   /**
@@ -397,82 +517,29 @@ export class DonjonService {
   }
 
   /**
-   * Trigger a dungeon combat for the current room
-   */
-  async triggerDungeonCombat(runId: number) {
-    const run = await prisma.donjonRun.findUnique({
-      where: { id: runId },
-      include: {
-        donjon: {
-          include: {
-            salles: {
-              orderBy: { ordre: 'asc' },
-              include: { map: true },
-            },
-            boss: true,
-            region: true,
-          },
-        },
-        groupe: {
-          include: {
-            map: true,
-          },
-        },
-      },
-    });
-
-    if (!run) {
-      throw new Error('Dungeon run not found');
-    }
-
-    if (run.termine) {
-      throw new Error('Dungeon run is already finished');
-    }
-
-    // Get current room
-    const currentRoom = run.donjon.salles.find(s => s.ordre === run.salleActuelle);
-    if (!currentRoom) {
-      throw new Error(`Room ${run.salleActuelle} not found`);
-    }
-
-    const isBoss = run.salleActuelle === 4;
-
-    // Spawn enemies
-    const monstres = await this.spawnDungeonEnemies(
-      run.donjon,
-      run.difficulte,
-      isBoss
-    );
-
-    // Create combat
-    const combat = await combatService.create({
-      groupeId: run.groupeId,
-      monstres,
-      mapId: currentRoom.mapId,
-    });
-
-    // Update run with current combat ID
-    await prisma.donjonRun.update({
-      where: { id: runId },
-      data: {
-        combatActuel: combat?.id ?? null,
-      },
-    });
-
-    return combat;
-  }
-
-  /**
-   * Mark dungeon as failed and eject group
+   * Mark dungeon as failed and eject group to origin map
    */
   async failDungeon(runId: number) {
     const run = await prisma.donjonRun.findUnique({
       where: { id: runId },
-      include: { groupe: true },
+      include: {
+        groupe: true,
+        donjon: {
+          include: {
+            salles: { orderBy: { ordre: 'asc' } },
+          },
+        },
+      },
     });
 
     if (!run) {
       throw new Error('Dungeon run not found');
+    }
+
+    // Clean up enemies from current room
+    const currentRoom = run.donjon.salles.find(s => s.ordre === run.salleActuelle);
+    if (currentRoom) {
+      await this.cleanupDungeonEnemies(currentRoom.mapId);
     }
 
     // Mark run as failed
@@ -482,14 +549,15 @@ export class DonjonService {
         termine: true,
         victoire: false,
         combatActuel: null,
+        monstresCaches: Prisma.DbNull,
       },
     });
 
-    // Eject group from dungeon
+    // Eject group to origin map
     await prisma.groupe.update({
       where: { id: run.groupeId },
       data: {
-        mapId: null,
+        mapId: run.mapOrigineId ?? null,
         positionX: 0,
         positionY: 0,
       },
@@ -510,10 +578,41 @@ export class DonjonService {
         groupeId,
         termine: false,
       },
+      include: {
+        donjon: {
+          include: {
+            salles: { orderBy: { ordre: 'asc' } },
+          },
+        },
+      },
     });
 
     if (!run) {
       throw new Error('No active dungeon run found for this group');
+    }
+
+    // Cancel active combat if any
+    if (run.combatActuel) {
+      const combat = await prisma.combat.findUnique({ where: { id: run.combatActuel } });
+      if (combat && combat.status === 'EN_COURS') {
+        await prisma.combat.update({
+          where: { id: run.combatActuel },
+          data: { status: 'ABANDONNE' },
+        });
+        // Clean up combat effects, cooldowns and invocations
+        await prisma.effetActif.deleteMany({ where: { combatId: run.combatActuel } });
+        await prisma.sortCooldown.deleteMany({ where: { combatId: run.combatActuel } });
+        await prisma.combatEntite.updateMany({
+          where: { combatId: run.combatActuel, invocateurId: { not: null }, pvActuels: { gt: 0 } },
+          data: { pvActuels: 0 },
+        });
+      }
+    }
+
+    // Clean up enemies from current room
+    const currentRoom = run.donjon.salles.find(s => s.ordre === run.salleActuelle);
+    if (currentRoom) {
+      await this.cleanupDungeonEnemies(currentRoom.mapId);
     }
 
     // Mark run as abandoned (failed)
@@ -523,14 +622,15 @@ export class DonjonService {
         termine: true,
         victoire: false,
         combatActuel: null,
+        monstresCaches: Prisma.DbNull,
       },
     });
 
-    // Eject group from dungeon
+    // Eject group to origin map
     await prisma.groupe.update({
       where: { id: groupeId },
       data: {
-        mapId: null,
+        mapId: run.mapOrigineId ?? null,
         positionX: 0,
         positionY: 0,
       },
@@ -581,6 +681,22 @@ export class DonjonService {
 
     const currentRoom = run.donjon.salles.find(s => s.ordre === run.salleActuelle);
 
+    // Include active enemy group on current room
+    let groupeEnnemi = null;
+    if (currentRoom) {
+      groupeEnnemi = await prisma.groupeEnnemi.findFirst({
+        where: {
+          mapId: currentRoom.mapId,
+          vaincu: false,
+        },
+        include: {
+          membres: {
+            include: { monstre: true },
+          },
+        },
+      });
+    }
+
     return {
       run: {
         id: run.id,
@@ -595,6 +711,7 @@ export class DonjonService {
       donjon: run.donjon,
       salle: currentRoom,
       groupe: run.groupe,
+      groupeEnnemi,
     };
   }
 
@@ -607,6 +724,89 @@ export class DonjonService {
         combatActuel: combatId,
         termine: false,
       },
+    });
+  }
+
+  /**
+   * Set or update the portal (MapConnection) for a dungeon
+   */
+  async setPortail(donjonId: number, data: {
+    fromMapId: number;
+    positionX: number;
+    positionY: number;
+    nom?: string;
+  }) {
+    // Verify dungeon exists and has at least 1 room
+    const donjon = await prisma.donjon.findUnique({
+      where: { id: donjonId },
+      include: {
+        salles: { orderBy: { ordre: 'asc' } },
+      },
+    });
+
+    if (!donjon) {
+      throw new Error('Dungeon not found');
+    }
+
+    const firstRoom = donjon.salles.find(s => s.ordre === 1);
+    if (!firstRoom) {
+      throw new Error('Dungeon has no rooms configured');
+    }
+
+    const nom = data.nom ?? "Entr\u00e9e du donjon";
+
+    // Check if portal already exists for this dungeon
+    const existing = await prisma.mapConnection.findFirst({
+      where: { donjonId },
+    });
+
+    if (existing) {
+      // Update existing portal
+      return prisma.mapConnection.update({
+        where: { id: existing.id },
+        data: {
+          fromMapId: data.fromMapId,
+          toMapId: firstRoom.mapId,
+          positionX: data.positionX,
+          positionY: data.positionY,
+          nom,
+        },
+        include: {
+          donjon: { select: { id: true, nom: true, description: true, niveauMin: true, niveauMax: true } },
+        },
+      });
+    }
+
+    // Create new portal
+    return prisma.mapConnection.create({
+      data: {
+        fromMapId: data.fromMapId,
+        toMapId: firstRoom.mapId,
+        positionX: data.positionX,
+        positionY: data.positionY,
+        nom,
+        donjonId,
+      },
+      include: {
+        donjon: { select: { id: true, nom: true, description: true, niveauMin: true, niveauMax: true } },
+      },
+    });
+  }
+
+  /**
+   * Delete the portal (MapConnection) for a dungeon
+   */
+  async deletePortail(donjonId: number) {
+    const existing = await prisma.mapConnection.findFirst({
+      where: { donjonId },
+    });
+
+    if (!existing) {
+      throw new Error('No portal found for this dungeon');
+    }
+
+    return prisma.mapConnection.delete({
+      where: { id: existing.id },
     });
   }
 
@@ -642,13 +842,25 @@ export class DonjonService {
   async update(id: number, data: Partial<{
     nom: string;
     description: string | null;
+    regionId: number;
     niveauMin: number;
     niveauMax: number;
     bossId: number;
+    salles: { ordre: number; mapId: number }[];
   }>) {
+    const { salles, ...donjonData } = data;
+
+    if (salles && salles.length > 0) {
+      // Delete existing salles and recreate
+      await prisma.donjonSalle.deleteMany({ where: { donjonId: id } });
+      await prisma.donjonSalle.createMany({
+        data: salles.map(s => ({ donjonId: id, ordre: s.ordre, mapId: s.mapId })),
+      });
+    }
+
     return prisma.donjon.update({
       where: { id },
-      data,
+      data: donjonData,
       include: {
         region: true,
         boss: true,
@@ -658,6 +870,8 @@ export class DonjonService {
   }
 
   async delete(id: number) {
+    // Delete portal connections
+    await prisma.mapConnection.deleteMany({ where: { donjonId: id } });
     // DonjonSalle has onDelete: Cascade, so we just need to handle runs
     await prisma.donjonRun.deleteMany({ where: { donjonId: id } });
     return prisma.donjon.delete({ where: { id } });

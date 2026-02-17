@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { CombatMode, MapType } from '@prisma/client';
 import { CreateGroupRequest, Direction } from '../types';
 import { mapService } from './map.service';
+import { donjonService } from './donjon.service';
 
 export class GroupService {
   async create(data: CreateGroupRequest) {
@@ -242,6 +243,23 @@ export class GroupService {
       throw new Error('Map not found');
     }
 
+    // Block direct access to dungeon rooms without an active run
+    const donjonSalle = await prisma.donjonSalle.findFirst({ where: { mapId } });
+    if (donjonSalle) {
+      const activeRun = await prisma.donjonRun.findFirst({
+        where: { groupeId: groupId, termine: false, donjonId: donjonSalle.donjonId },
+      });
+      if (!activeRun) {
+        throw new Error('Cannot enter dungeon room without active run');
+      }
+      const currentSalle = await prisma.donjonSalle.findFirst({
+        where: { donjonId: donjonSalle.donjonId, ordre: activeRun.salleActuelle },
+      });
+      if (!currentSalle || currentSalle.mapId !== mapId) {
+        throw new Error('Cannot enter this dungeon room');
+      }
+    }
+
     // Auto-spawn enemy groups on MANUEL maps if none exist
     if (map.combatMode === CombatMode.MANUEL && map.groupesEnnemis.length === 0) {
       await mapService.spawnEnemyGroups(mapId);
@@ -295,7 +313,7 @@ export class GroupService {
   /**
    * Use a connection to travel to another map
    */
-  async useConnection(groupId: number, connectionId: number) {
+  async useConnection(groupId: number, connectionId: number, difficulte?: number) {
     const group = await prisma.groupe.findUnique({
       where: { id: groupId },
       include: { map: true },
@@ -326,6 +344,14 @@ export class GroupService {
       throw new Error('Group is not at the connection position');
     }
 
+    // Handle dungeon portal
+    if (connection.donjonId) {
+      if (!difficulte || ![4, 6, 8].includes(difficulte)) {
+        throw new Error('Difficulty required for dungeon portal (4, 6, or 8)');
+      }
+      return donjonService.enterDungeon(connection.donjonId, groupId, difficulte);
+    }
+
     // Move to destination map
     return this.enterMap(groupId, connection.toMapId);
   }
@@ -340,6 +366,14 @@ export class GroupService {
 
     if (!group) {
       throw new Error('Group not found');
+    }
+
+    // Block leaving during active dungeon run
+    const activeRun = await prisma.donjonRun.findFirst({
+      where: { groupeId: groupId, termine: false },
+    });
+    if (activeRun) {
+      throw new Error('Cannot leave during dungeon. Use abandon.');
     }
 
     return prisma.groupe.update({
@@ -388,6 +422,12 @@ export class GroupService {
 
     if (!destinationMapId) {
       throw new Error(`No exit in direction ${direction}`);
+    }
+
+    // Block navigation to dungeon rooms
+    const donjonSalle = await prisma.donjonSalle.findFirst({ where: { mapId: destinationMapId } });
+    if (donjonSalle) {
+      throw new Error('Cannot navigate directly to a dungeon room');
     }
 
     // Enter the destination map

@@ -54,7 +54,7 @@ backend/
 │   │   ├── character.service.ts # + stats totales, équipement
 │   │   ├── group.service.ts     # + navigation entre maps, engagement auto
 │   │   ├── region.service.ts    # + update, delete
-│   │   ├── map.service.ts       # + update, delete, deleteConnection
+│   │   ├── map.service.ts       # + update, delete, deleteConnection, updateWorldPositions
 │   │   ├── monstre.service.ts   # + update, delete, findById incl. drops
 │   │   ├── progression.service.ts  # XP, level-up, allocation stats
 │   │   ├── spell.service.ts     # Apprentissage sorts, cooldowns
@@ -117,7 +117,7 @@ POST `/` | GET `/` | GET `/:id` | POST `/:id/characters` (max 6) | DELETE `/:id/
 POST `/` | GET `/` | GET `/:id` | POST `/:id/action` (sort ou arme) | POST `/:id/move` | POST `/:id/end-turn` | POST `/:id/flee` | DELETE `/:id`
 
 ### Maps (`/api/maps`)
-GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/connections` | DELETE `/:id/connections/:connId` | POST `/:id/spawn-enemies` | POST `/:id/engage` | POST `/:id/respawn`
+PUT `/world-positions` | GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/connections` | DELETE `/:id/connections/:connId` | POST `/:id/spawn-enemies` | POST `/:id/engage` | POST `/:id/respawn`
 
 ### Grilles (`/api/grilles`)
 POST `/` | GET `/` | GET `/:id` | PUT `/:id` | DELETE `/:id` | PUT `/:id/cases` | PUT `/:id/spawns`
@@ -180,7 +180,7 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 
 ### Tables Monde & Maps
 - `Region` - Zones du monde (Forêt, Plaine, Montagne...)
-- `Map` - Cartes avec voisins directionnels (`nordMapId`, `sudMapId`, `estMapId`, `ouestMapId`)
+- `Map` - Cartes avec voisins directionnels (`nordMapId`, `sudMapId`, `estMapId`, `ouestMapId`) + position monde optionnelle (`worldX`, `worldY`)
 - `MapConnection` - Portails nommés avec position (x, y)
 - `MonstreTemplate` - Définitions monstres (+ `iaType`, `pvScalingInvocation`, `orMin`/`orMax`)
 - `RegionMonstre` - Many-to-many monstres ↔ régions avec probabilité
@@ -381,6 +381,15 @@ WILDERNESS (MANUEL, ennemis visibles) | DONJON (AUTO, rencontres aléatoires) | 
 - **Déplacement** : `PATCH /groups/:id/move { x, y }` → engagement auto si groupe ennemi
 - **Entrée map** : `POST /groups/:id/enter-map { mapId }` → spawn auto groupes ennemis (MANUEL)
 
+### Carte du monde (positions)
+- `Map.worldX` / `Map.worldY` : position optionnelle sur la grille monde (Int?)
+- `PUT /api/maps/world-positions` : batch update positions + recalcul automatique des liens directionnels
+  - Body : `{ positions: [{ mapId, worldX, worldY }] }`
+  - Transaction : update positions → clear tous liens → rebuild par adjacence (NORD=y-1, SUD=y+1, EST=x+1, OUEST=x-1)
+  - Maps absentes de la liste : worldX/worldY remis à null
+- `map.service.ts updateWorldPositions()` : logique dans une transaction Prisma
+- Les liens directionnels sont bidirectionnels et calculés automatiquement
+
 ### Groupes ennemis
 - MANUEL : 1-3 `GroupeEnnemi` par map, 1-8 `GroupeEnnemiMembre` mixtes, spawn auto via `RegionMonstre`
 - AUTO : rencontres aléatoires (`tauxRencontre`), monstres via `RegionMonstre` (pondéré)
@@ -448,7 +457,7 @@ Avant de supprimer une ressource, nettoyer les relations :
 - **2 panoplies** : avec bonus par palier
 - **6 recettes** de craft
 - **3 régions** : Forêt (niv 1-5), Plaines (niv 1-3), Montagne (niv 5-10)
-- **6 maps** : 3 WILDERNESS + 1 DONJON + 1 SAFE + 1 VILLE
+- **6 maps** : 3 WILDERNESS + 1 DONJON + 1 SAFE + 1 VILLE (avec positions monde worldX/worldY)
 - **11 monstres** : 6 normaux (Gobelin, Loup, Bandit, Araignée, Squelette, Troll) + 5 invocations
 - **6 groupes ennemis** : 2 par map WILDERNESS, composition mixte
 - **8 grilles** : 15×10, 16 spawns, 4-6 obstacles centraux

@@ -34,6 +34,9 @@ export class MapService {
             toMap: {
               select: { id: true, nom: true, type: true },
             },
+            donjon: {
+              select: { id: true, nom: true, description: true, niveauMin: true, niveauMax: true },
+            },
           },
         },
         grilles: {
@@ -126,6 +129,65 @@ export class MapService {
         positionY: data.positionY,
         nom: data.nom,
       },
+    });
+  }
+
+  async updateWorldPositions(positions: { mapId: number; worldX: number; worldY: number }[]) {
+    return prisma.$transaction(async (tx) => {
+      // Update worldX/worldY for each map in the list
+      for (const pos of positions) {
+        await tx.map.update({
+          where: { id: pos.mapId },
+          data: { worldX: pos.worldX, worldY: pos.worldY },
+        });
+      }
+
+      // Clear worldX/worldY for maps NOT in the list
+      const placedIds = positions.map(p => p.mapId);
+      if (placedIds.length > 0) {
+        await tx.map.updateMany({
+          where: { id: { notIn: placedIds }, worldX: { not: null } },
+          data: { worldX: null, worldY: null },
+        });
+      } else {
+        await tx.map.updateMany({
+          where: { worldX: { not: null } },
+          data: { worldX: null, worldY: null },
+        });
+      }
+
+      // Clear all directional links
+      await tx.map.updateMany({ data: { nordMapId: null, sudMapId: null, estMapId: null, ouestMapId: null } });
+
+      // Rebuild directional links from adjacency
+      // Build a lookup: "x,y" → mapId
+      const posMap = new Map<string, number>();
+      for (const pos of positions) {
+        posMap.set(`${pos.worldX},${pos.worldY}`, pos.mapId);
+      }
+
+      for (const pos of positions) {
+        const nord = posMap.get(`${pos.worldX},${pos.worldY - 1}`);
+        const sud = posMap.get(`${pos.worldX},${pos.worldY + 1}`);
+        const est = posMap.get(`${pos.worldX + 1},${pos.worldY}`);
+        const ouest = posMap.get(`${pos.worldX - 1},${pos.worldY}`);
+
+        const data: Record<string, number | null> = {};
+        if (nord !== undefined) data.nordMapId = nord;
+        if (sud !== undefined) data.sudMapId = sud;
+        if (est !== undefined) data.estMapId = est;
+        if (ouest !== undefined) data.ouestMapId = ouest;
+
+        if (Object.keys(data).length > 0) {
+          await tx.map.update({ where: { id: pos.mapId }, data });
+        }
+      }
+
+      // Return all maps
+      return tx.map.findMany({
+        include: { region: true, _count: { select: { grilles: true } } },
+        orderBy: { id: 'asc' },
+      });
     });
   }
 
@@ -282,7 +344,9 @@ export class MapService {
       throw new Error('Map not found');
     }
 
-    if (map.combatMode !== CombatMode.MANUEL) {
+    // Allow engage on DONJON/BOSS maps (dungeon rooms) in addition to MANUEL
+    const isDungeonRoom = map.type === MapType.DONJON || map.type === MapType.BOSS;
+    if (map.combatMode !== CombatMode.MANUEL && !isDungeonRoom) {
       throw new Error('Cannot manually engage enemies in AUTO mode');
     }
 
@@ -319,8 +383,12 @@ export class MapService {
       throw new Error('Group not found');
     }
 
-    // Create monsters array for combat from all group members
-    const monstres: {
+    // Check if this is a dungeon combat — use monstresCaches if available
+    const donjonRun = await prisma.donjonRun.findFirst({
+      where: { groupeId, termine: false },
+    });
+
+    let monstres: {
       nom: string;
       force: number;
       intelligence: number;
@@ -331,15 +399,25 @@ export class MapService {
       pvMax: number;
       paMax: number;
       pmMax: number;
-    }[] = [];
+      monstreTemplateId?: number;
+      niveau?: number;
+      iaType?: string;
+    }[];
 
-    for (const membre of groupeEnnemi.membres) {
-      const membresFromTemplate = this.createMonstersFromTemplate(
-        membre.monstre,
-        membre.quantite,
-        membre.niveau
-      );
-      monstres.push(...membresFromTemplate);
+    if (donjonRun?.monstresCaches) {
+      // Use pre-calculated monsters (with boss boost etc.)
+      monstres = donjonRun.monstresCaches as unknown as typeof monstres;
+    } else {
+      // Normal map: create monsters from GroupeEnnemiMembre templates
+      monstres = [];
+      for (const membre of groupeEnnemi.membres) {
+        const membresFromTemplate = this.createMonstersFromTemplate(
+          membre.monstre,
+          membre.quantite,
+          membre.niveau
+        );
+        monstres.push(...membresFromTemplate);
+      }
     }
 
     // Create the combat
@@ -357,6 +435,14 @@ export class MapService {
         vainquuAt: new Date(),
       },
     });
+
+    // Track combat in dungeon run
+    if (donjonRun && combat) {
+      await prisma.donjonRun.update({
+        where: { id: donjonRun.id },
+        data: { combatActuel: combat.id },
+      });
+    }
 
     return combat;
   }

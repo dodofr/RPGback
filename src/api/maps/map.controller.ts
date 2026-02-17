@@ -102,6 +102,29 @@ export class MapController {
     }
   }
 
+  // ==================== WORLD POSITIONS ====================
+
+  async updateWorldPositions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const schema = z.object({
+        positions: z.array(z.object({
+          mapId: z.number().int().positive(),
+          worldX: z.number().int(),
+          worldY: z.number().int(),
+        })),
+      });
+      const { positions } = schema.parse(req.body);
+      const maps = await mapService.updateWorldPositions(positions);
+      res.json(maps);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      next(error);
+    }
+  }
+
   // ==================== MAPS ====================
 
   async getAllMaps(req: Request, res: Response, next: NextFunction) {

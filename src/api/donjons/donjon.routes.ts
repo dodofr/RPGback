@@ -27,4 +27,10 @@ router.delete('/:id', (req, res, next) => donjonController.deleteDonjon(req, res
 // POST /api/donjons/:id/enter - Enter a dungeon
 router.post('/:id/enter', (req, res, next) => donjonController.enterDungeon(req, res, next));
 
+// PUT /api/donjons/:id/portail - Set or update dungeon portal
+router.put('/:id/portail', (req, res, next) => donjonController.setPortail(req, res, next));
+
+// DELETE /api/donjons/:id/portail - Delete dungeon portal
+router.delete('/:id/portail', (req, res, next) => donjonController.deletePortail(req, res, next));
+
 export default router;

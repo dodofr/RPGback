@@ -1937,7 +1937,7 @@ async function main() {
   // Forêt de Vertbois maps
   const oreeForet = await prisma.map.upsert({
     where: { id: 1 },
-    update: {},
+    update: { worldX: 2, worldY: 1 },
     create: {
       nom: 'Orée de la forêt',
       regionId: foretVertbois.id,
@@ -1946,12 +1946,14 @@ async function main() {
       largeur: 20,
       hauteur: 15,
       tauxRencontre: 0.2,
+      worldX: 2,
+      worldY: 1,
     },
   });
 
   const sentierForestier = await prisma.map.upsert({
     where: { id: 2 },
-    update: {},
+    update: { worldX: 3, worldY: 1 },
     create: {
       nom: 'Sentier forestier',
       regionId: foretVertbois.id,
@@ -1960,12 +1962,14 @@ async function main() {
       largeur: 25,
       hauteur: 12,
       tauxRencontre: 0.25,
+      worldX: 3,
+      worldY: 1,
     },
   });
 
   const grotteAuxGobelins = await prisma.map.upsert({
     where: { id: 3 },
-    update: {},
+    update: { worldX: 3, worldY: 0 },
     create: {
       nom: 'Grotte aux Gobelins',
       regionId: foretVertbois.id,
@@ -1974,12 +1978,14 @@ async function main() {
       largeur: 15,
       hauteur: 30,
       tauxRencontre: 0.35,
+      worldX: 3,
+      worldY: 0,
     },
   });
 
   const clairiere = await prisma.map.upsert({
     where: { id: 4 },
-    update: {},
+    update: { worldX: 3, worldY: 2 },
     create: {
       nom: 'Clairière paisible',
       regionId: foretVertbois.id,
@@ -1988,13 +1994,15 @@ async function main() {
       largeur: 10,
       hauteur: 10,
       tauxRencontre: 0,
+      worldX: 3,
+      worldY: 2,
     },
   });
 
   // Plaines du Sud maps
   const routeCommerciale = await prisma.map.upsert({
     where: { id: 5 },
-    update: {},
+    update: { worldX: 1, worldY: 1 },
     create: {
       nom: 'Route commerciale',
       regionId: plainesDuSud.id,
@@ -2003,12 +2011,14 @@ async function main() {
       largeur: 30,
       hauteur: 10,
       tauxRencontre: 0.15,
+      worldX: 1,
+      worldY: 1,
     },
   });
 
   const villageDepart = await prisma.map.upsert({
     where: { id: 6 },
-    update: {},
+    update: { worldX: 0, worldY: 1 },
     create: {
       nom: 'Village de Piedmont',
       regionId: plainesDuSud.id,
@@ -2017,6 +2027,8 @@ async function main() {
       largeur: 20,
       hauteur: 20,
       tauxRencontre: 0,
+      worldX: 0,
+      worldY: 1,
     },
   });
 
@@ -2034,7 +2046,9 @@ async function main() {
   await prisma.mapConnection.upsert({ where: { id: 9 }, update: {}, create: { fromMapId: routeCommerciale.id, toMapId: oreeForet.id, positionX: 29, positionY: 5, nom: 'Vers la Forêt de Vertbois' } });
   await prisma.mapConnection.upsert({ where: { id: 10 }, update: {}, create: { fromMapId: oreeForet.id, toMapId: routeCommerciale.id, positionX: 0, positionY: 7, nom: 'Vers les Plaines du Sud' } });
 
-  console.log('Created 10 map connections');
+  console.log('Created 10 map connections')
+
+  // Dungeon portal will be created after the dungeon (needs donjonId + salle 1 mapId)
 
   // ==================== MAP DIRECTIONAL NEIGHBORS ====================
   // Set directional links on each map (simpler than connections for navigation)
@@ -2354,6 +2368,22 @@ async function main() {
   });
 
   console.log('Created 1 dungeon with 4 rooms');
+
+  // ==================== DUNGEON PORTAL ====================
+  await prisma.mapConnection.upsert({
+    where: { id: 11 },
+    update: {},
+    create: {
+      fromMapId: oreeForet.id,
+      toMapId: donjonSalle1.id,
+      positionX: 12,
+      positionY: 5,
+      nom: 'Entr\u00e9e de la grotte aux gobelins',
+      donjonId: grotteGobelinsDonjon.id,
+    },
+  });
+
+  console.log('Created dungeon portal on map 1');
 
   // ==================== GRILLES DE COMBAT ====================
   // Helper to generate standard spawns (players left, enemies right)

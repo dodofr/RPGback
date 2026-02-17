@@ -282,6 +282,8 @@ model Map {
   largeur         Int
   hauteur         Int
   tauxRencontre   Float           @default(0.2)
+  worldX          Int?
+  worldY          Int?
   // Directional neighbors (self-referential)
   nordMapId       Int?
   nordMap         Map?            @relation("NordNeighbor", fields: [nordMapId], references: [id])
@@ -305,14 +307,16 @@ model Map {
 }
 
 model MapConnection {
-  id        Int    @id @default(autoincrement())
+  id        Int     @id @default(autoincrement())
   fromMapId Int
-  fromMap   Map    @relation("FromMap", fields: [fromMapId], references: [id])
+  fromMap   Map     @relation("FromMap", fields: [fromMapId], references: [id])
   toMapId   Int
-  toMap     Map    @relation("ToMap", fields: [toMapId], references: [id])
+  toMap     Map     @relation("ToMap", fields: [toMapId], references: [id])
   positionX Int
   positionY Int
   nom       String
+  donjonId  Int?
+  donjon    Donjon? @relation(fields: [donjonId], references: [id])
 }
 
 model MonstreTemplate {
@@ -713,17 +717,18 @@ model PanoplieBonus {
 // ==================== DONJONS ====================
 
 model Donjon {
-  id          Int           @id @default(autoincrement())
+  id          Int              @id @default(autoincrement())
   nom         String
   description String?
   regionId    Int
-  region      Region        @relation(fields: [regionId], references: [id])
-  niveauMin   Int           @default(1)
-  niveauMax   Int           @default(5)
+  region      Region           @relation(fields: [regionId], references: [id])
+  niveauMin   Int              @default(1)
+  niveauMax   Int              @default(5)
   bossId      Int
-  boss        MonstreTemplate @relation(fields: [bossId], references: [id])
+  boss        MonstreTemplate  @relation(fields: [bossId], references: [id])
   salles      DonjonSalle[]
   runs        DonjonRun[]
+  portails    MapConnection[]
 }
 
 model DonjonSalle {
@@ -739,17 +744,19 @@ model DonjonSalle {
 }
 
 model DonjonRun {
-  id            Int       @id @default(autoincrement())
-  donjonId      Int
-  donjon        Donjon    @relation(fields: [donjonId], references: [id])
-  groupeId      Int       @unique  // Un seul run actif par groupe
-  groupe        Groupe    @relation(fields: [groupeId], references: [id])
-  salleActuelle Int       @default(1)  // 1-4
-  difficulte    Int       // 4, 6 ou 8 ennemis par salle
-  termine       Boolean   @default(false)
-  victoire      Boolean?  // null = en cours, true = gagné, false = perdu
-  combatActuel  Int?      // ID du combat en cours (null si aucun)
-  createdAt     DateTime  @default(now())
+  id             Int       @id @default(autoincrement())
+  donjonId       Int
+  donjon         Donjon    @relation(fields: [donjonId], references: [id])
+  groupeId       Int       @unique  // Un seul run actif par groupe
+  groupe         Groupe    @relation(fields: [groupeId], references: [id])
+  salleActuelle  Int       @default(1)  // 1-4
+  difficulte     Int       // 4, 6 ou 8 ennemis par salle
+  termine        Boolean   @default(false)
+  victoire       Boolean?  // null = en cours, true = gagné, false = perdu
+  combatActuel   Int?      // ID du combat en cours (null si aucun)
+  mapOrigineId   Int?      // Map d'où le joueur vient (pour y retourner)
+  monstresCaches Json?     // Monstres pré-calculés avec boss boost pour la salle courante
+  createdAt      DateTime  @default(now())
 
   @@index([groupeId])
 }

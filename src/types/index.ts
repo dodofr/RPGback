@@ -91,6 +91,7 @@ export interface CombatState {
   status: CombatStatus;
   tourActuel: number;
   entiteActuelle: number;
+  groupeId: number | null;
   grille: {
     largeur: number;
     hauteur: number;

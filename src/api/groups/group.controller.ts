@@ -25,6 +25,9 @@ const enterMapSchema = z.object({
 
 const useConnectionSchema = z.object({
   connectionId: z.number().int().positive(),
+  difficulte: z.number().int().refine(val => [4, 6, 8].includes(val), {
+    message: 'Difficulty must be 4, 6, or 8',
+  }).optional(),
 });
 
 const moveDirectionSchema = z.object({
@@ -184,6 +187,10 @@ export class GroupController {
           res.status(404).json({ error: error.message });
           return;
         }
+        if (error.message.includes('Cannot enter dungeon room')) {
+          res.status(400).json({ error: error.message });
+          return;
+        }
       }
       next(error);
     }
@@ -198,20 +205,25 @@ export class GroupController {
       }
 
       const data = useConnectionSchema.parse(req.body);
-      const group = await groupService.useConnection(groupId, data.connectionId);
-      res.json(group);
+      const result = await groupService.useConnection(groupId, data.connectionId, data.difficulte);
+      res.json(result);
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Validation error', details: error.errors });
         return;
       }
       if (error instanceof Error) {
-        if (error.message === 'Group not found' || error.message === 'Connection not found') {
+        if (error.message === 'Group not found' || error.message === 'Connection not found' ||
+            error.message === 'Dungeon not found') {
           res.status(404).json({ error: error.message });
           return;
         }
         if (error.message === 'Group is not on the source map' ||
-            error.message === 'Group is not at the connection position') {
+            error.message === 'Group is not at the connection position' ||
+            error.message.includes('Difficulty required') ||
+            error.message.includes('Difficulty must be') ||
+            error.message.includes('Group already has an active dungeon run') ||
+            error.message.includes('Group has no characters')) {
           res.status(400).json({ error: error.message });
           return;
         }
@@ -231,9 +243,15 @@ export class GroupController {
       const group = await groupService.leaveMap(groupId);
       res.json(group);
     } catch (error) {
-      if (error instanceof Error && error.message === 'Group not found') {
-        res.status(404).json({ error: error.message });
-        return;
+      if (error instanceof Error) {
+        if (error.message === 'Group not found') {
+          res.status(404).json({ error: error.message });
+          return;
+        }
+        if (error.message === 'Cannot leave during dungeon. Use abandon.') {
+          res.status(400).json({ error: error.message });
+          return;
+        }
       }
       next(error);
     }
@@ -261,7 +279,8 @@ export class GroupController {
           return;
         }
         if (error.message === 'Group is not on any map' ||
-            error.message.startsWith('No exit in direction')) {
+            error.message.startsWith('No exit in direction') ||
+            error.message === 'Cannot navigate directly to a dungeon room') {
           res.status(400).json({ error: error.message });
           return;
         }

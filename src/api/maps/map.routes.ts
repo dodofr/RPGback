@@ -30,6 +30,9 @@ regionsRouter.delete('/:id/monstres/:monstreId', (req, res, next) => mapControll
 // ==================== MAPS ====================
 const mapsRouter = Router();
 
+// PUT /api/maps/world-positions - Batch update world positions + rebuild directional links
+mapsRouter.put('/world-positions', (req, res, next) => mapController.updateWorldPositions(req, res, next));
+
 // GET /api/maps - List all maps
 mapsRouter.get('/', (req, res, next) => mapController.getAllMaps(req, res, next));
 

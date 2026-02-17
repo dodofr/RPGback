@@ -210,6 +210,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
     status: combat.status,
     tourActuel: combat.tourActuel,
     entiteActuelle: combat.entiteActuelleId ?? 0,
+    groupeId: combat.groupeId,
     grille: {
       largeur: combat.grilleLargeur,
       hauteur: combat.grilleHauteur,
@@ -1256,15 +1257,20 @@ async function checkCombatEnd(combatId: number): Promise<void> {
       try {
         const drops = await dropService.distributeDrops(combatId);
         if (drops.totalOr > 0 || drops.totalRessources.length > 0 || drops.totalItems.length > 0) {
-          const dropParts: string[] = [];
-          if (drops.totalOr > 0) dropParts.push(`${drops.totalOr} or total`);
-          if (drops.totalRessources.length > 0) {
-            dropParts.push(drops.totalRessources.map(r => `${r.quantite}x ${r.nom}`).join(', '));
+          // Log per-player drops
+          for (const pr of drops.perPlayer) {
+            const parts: string[] = [];
+            if (pr.or > 0) parts.push(`${pr.or} or`);
+            if (pr.ressources.length > 0) {
+              parts.push(pr.ressources.map(r => `${r.quantite}x ${r.nom}`).join(', '));
+            }
+            if (pr.items.length > 0) {
+              parts.push(pr.items.map(i => i.nom).join(', '));
+            }
+            if (parts.length > 0) {
+              await addLog(combatId, tour, `Butin ${pr.nom} : ${parts.join(' | ')}`, 'FIN');
+            }
           }
-          if (drops.totalItems.length > 0) {
-            dropParts.push(drops.totalItems.map(i => i.nom).join(', '));
-          }
-          await addLog(combatId, tour, `Butin : ${dropParts.join(' | ')}`, 'FIN');
         }
       } catch (error) {
         console.error('Error distributing drops:', error);
@@ -1272,14 +1278,11 @@ async function checkCombatEnd(combatId: number): Promise<void> {
 
       // If in dungeon, advance to next room
       if (run) {
-        // Use setImmediate to avoid blocking and potential circular issues
-        setImmediate(async () => {
-          try {
-            await donjonService.advanceToNextRoom(run.id);
-          } catch (error) {
-            console.error('Error advancing dungeon room:', error);
-          }
-        });
+        try {
+          await donjonService.advanceToNextRoom(run.id);
+        } catch (error) {
+          console.error('Error advancing dungeon room:', error);
+        }
       }
     }
 
@@ -1287,13 +1290,11 @@ async function checkCombatEnd(combatId: number): Promise<void> {
     if (team0Alive.length === 0 && team1Alive.length > 0) {
       // If in dungeon, fail the run and eject group
       if (run) {
-        setImmediate(async () => {
-          try {
-            await donjonService.failDungeon(run.id);
-          } catch (error) {
-            console.error('Error failing dungeon:', error);
-          }
-        });
+        try {
+          await donjonService.failDungeon(run.id);
+        } catch (error) {
+          console.error('Error failing dungeon:', error);
+        }
       }
     }
   }

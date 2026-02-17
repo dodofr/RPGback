@@ -88,9 +88,14 @@ export class DonjonController {
       const updateDonjonSchema = z.object({
         nom: z.string().min(2).max(100).optional(),
         description: z.string().max(500).nullable().optional(),
+        regionId: z.number().int().positive().optional(),
         niveauMin: z.number().int().min(1).optional(),
         niveauMax: z.number().int().min(1).optional(),
         bossId: z.number().int().positive().optional(),
+        salles: z.array(z.object({
+          ordre: z.number().int().min(1).max(4),
+          mapId: z.number().int().positive(),
+        })).min(4).max(4).optional(),
       });
       const data = updateDonjonSchema.parse(req.body);
       const donjon = await donjonService.update(id, data);
@@ -199,6 +204,68 @@ export class DonjonController {
       res.json(result);
     } catch (error) {
       if (error instanceof Error && error.message.includes('No active dungeon run')) {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /api/donjons/:id/portail - Set or update dungeon portal
+   */
+  async setPortail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const donjonId = parseInt(req.params.id, 10);
+      if (isNaN(donjonId)) {
+        res.status(400).json({ error: 'Invalid dungeon ID' });
+        return;
+      }
+
+      const setPortailSchema = z.object({
+        fromMapId: z.number().int().positive(),
+        positionX: z.number().int().min(0),
+        positionY: z.number().int().min(0),
+        nom: z.string().min(1).max(200).optional(),
+      });
+
+      const data = setPortailSchema.parse(req.body);
+      const result = await donjonService.setPortail(donjonId, data);
+      res.json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.errors });
+        return;
+      }
+      if (error instanceof Error) {
+        if (error.message === 'Dungeon not found') {
+          res.status(404).json({ error: error.message });
+          return;
+        }
+        if (error.message === 'Dungeon has no rooms configured') {
+          res.status(400).json({ error: error.message });
+          return;
+        }
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE /api/donjons/:id/portail - Delete dungeon portal
+   */
+  async deletePortail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const donjonId = parseInt(req.params.id, 10);
+      if (isNaN(donjonId)) {
+        res.status(400).json({ error: 'Invalid dungeon ID' });
+        return;
+      }
+
+      await donjonService.deletePortail(donjonId);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message === 'No portal found for this dungeon') {
         res.status(404).json({ error: error.message });
         return;
       }

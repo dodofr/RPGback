@@ -4,3 +4,37 @@ Penser a un sytheme de quete et creer des pnj
 Faire tout les test front pour voir les comportement
 ameliorer les pages 
 passer au graphisme
+
+
+On a pas mal de chose a voir
+
+Equipement
+verifie le seed car j'ai l'impression que ca va pas. je vois des equipement deja creer sans étre relié a des monstre et tout les personnages peuvent les mettre alors que normalement ils doivent les drops. pareil si tu peux inspecter un peu plus le seed pour que je sache si d'autres choses ne sont pas coherente avec le code en place.
+
+Donjon
+fais en sorte que me seed creer seulement les map donjon suivantes 
+7	Grotte - Entrée	
+8	Grotte - Passage étroit	
+9	Grotte - Salle des araignées	
+10	Grotte - Antre du Troll
+je ne comprend pas a quoi sert la "3	Grotte aux Gobelins". car dans le front j'ai un icone donjon qui m'envoie au donjon et un portail qui m'envoie sur la carte grotte gobelin mais qui sert a rien
+Au niveau des entrée donjon j'ai besoin de pouvoir indiquer sur quelle map je veux placer le portail pour acceder a la premiere map du donjon. je te laisse me dire comment on pourrait faire, j'imagine que dans l'administration donjon on pourrait rajouté un champs "l'entree et la sorti du donjon se font sur la map..." et on indiquerait une map qui ne pourrait étre une map donjon mais a verifié que sa ne casse pas tout car l'icone fonctionne bien actuellement.
+J'ai testé en creant un nouveau personnage j'ai bien eu 4 monstres puis en testant 6 j'ai bien eu 6 monstres. les changements de map se sont bien passé ainsi que l'abandon. Par contre j'ai rencontré le boss troll dans plusieurs salles et plusieurs fois. ca casse un peu l'idée qu'on rencontre le boss que en salle du boss. si choix de 4 monstres alors le boss + 3 autres monstres.
+Peut étre que pour les salles du donjon on pourrait faire en sorte de fixer les monstres. on enleverait l'aléatoire et je pourrais choisir exatement les monstres qui serait dedans avec le niveau. il faudrait pouvoir faire si 4 / 6 ou 8 monstres. je te laisse me faire des propositions la dessus.
+
+
+Invocation
+dans le front Au niveau de "combat" puis "sort de race",je modifie un sort tagger invocation et je dois choisir un template id mais je prefererais que sa remonte un nom plus parlant.
+
+monstre
+Quand je creer un nouveau monstre je ne vois pas comment lui ajouter une région dans le front. pourtant je vois bien que les monstres que tu as creer sont liée a des régions mais je n'ai aucune possibilité de modifier également.
+je voudrais aussi savoir ce qui defferncie un loup lvl 1 d'un loup lvl 3. les lvl ont ils une influence sur les stats ?
+
+ville et zone safe
+
+Il faudrait que je puisse craft dans ces zones mais je n'ai rien pour le faire. Propose moi des idées pour le faire. 
+Je vois des monstres sur les villes et safe zone mais je pensais qu'on faisait pas de combat dessus ?
+
+Ergonomie
+C'est un peu lourd de retourner sur les personnages depuis la map. puis ensuite il faut retourner dans le groupe puis repartir sur la map.
+T'as pas une idée pour que se soit plus simple ? Je pensais a une liste des personnage du groupe qui sont sur la map. je clique sur le personnage ca me ferait une modale qui serait la page du personnage, je fais mes modification ou je regarde juste et je met retour
