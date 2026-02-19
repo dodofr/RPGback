@@ -211,6 +211,83 @@ export class DonjonController {
     }
   }
 
+  // ──────────────────────── COMPOSITIONS ────────────────────────
+
+  /**
+   * GET /api/donjons/:id/salles/:salleId/compositions
+   */
+  async getCompositions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const salleId = parseInt(req.params.salleId, 10);
+      if (isNaN(salleId)) { res.status(400).json({ error: 'Invalid salle ID' }); return; }
+      const compositions = await donjonService.getCompositions(salleId);
+      res.json(compositions);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/donjons/:id/salles/:salleId/compositions
+   */
+  async createComposition(req: Request, res: Response, next: NextFunction) {
+    try {
+      const salleId = parseInt(req.params.salleId, 10);
+      if (isNaN(salleId)) { res.status(400).json({ error: 'Invalid salle ID' }); return; }
+
+      const schema = z.object({
+        difficulte: z.number().int().refine(v => [4, 6, 8].includes(v), { message: 'Difficulty must be 4, 6, or 8' }),
+        monstreTemplateId: z.number().int().positive(),
+        niveau: z.number().int().min(1),
+        quantite: z.number().int().min(1).default(1),
+      });
+      const data = schema.parse(req.body);
+      const comp = await donjonService.createComposition(salleId, data);
+      res.status(201).json(comp);
+    } catch (error) {
+      if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+      if (error instanceof Error && error.message.includes('not found')) { res.status(404).json({ error: error.message }); return; }
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/donjons/:id/salles/:salleId/compositions/:compId
+   */
+  async updateComposition(req: Request, res: Response, next: NextFunction) {
+    try {
+      const compId = parseInt(req.params.compId, 10);
+      if (isNaN(compId)) { res.status(400).json({ error: 'Invalid composition ID' }); return; }
+
+      const schema = z.object({
+        difficulte: z.number().int().refine(v => [4, 6, 8].includes(v)).optional(),
+        monstreTemplateId: z.number().int().positive().optional(),
+        niveau: z.number().int().min(1).optional(),
+        quantite: z.number().int().min(1).optional(),
+      });
+      const data = schema.parse(req.body);
+      const comp = await donjonService.updateComposition(compId, data);
+      res.json(comp);
+    } catch (error) {
+      if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE /api/donjons/:id/salles/:salleId/compositions/:compId
+   */
+  async deleteComposition(req: Request, res: Response, next: NextFunction) {
+    try {
+      const compId = parseInt(req.params.compId, 10);
+      if (isNaN(compId)) { res.status(400).json({ error: 'Invalid composition ID' }); return; }
+      await donjonService.deleteComposition(compId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
    * PUT /api/donjons/:id/portail - Set or update dungeon portal
    */

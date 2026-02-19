@@ -16,9 +16,6 @@ router.get('/:id', (req, res, next) => characterController.getById(req, res, nex
 // PATCH /api/characters/:id - Update a character
 router.patch('/:id', (req, res, next) => characterController.update(req, res, next));
 
-// PUT /api/characters/:id/equipment - Equip an item
-router.put('/:id/equipment', (req, res, next) => characterController.equipItem(req, res, next));
-
 // GET /api/characters/:id/spells - Get character's available spells
 router.get('/:id/spells', (req, res, next) => characterController.getSpells(req, res, next));
 

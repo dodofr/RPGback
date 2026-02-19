@@ -271,11 +271,12 @@ export class DonjonService {
 
     const isBoss = run.salleActuelle === 4;
 
-    // Generate monster data (with boss boost etc.)
+    // Generate monster data — use fixed compositions if defined, fall back to random
     const monstres = await this.spawnDungeonEnemies(
       run.donjon,
       run.difficulte,
-      isBoss
+      isBoss,
+      currentRoom.id
     );
 
     // Clean up any existing enemies on this room map
@@ -349,14 +350,15 @@ export class DonjonService {
   }
 
   /**
-   * Spawn enemies for a dungeon combat using region monsters
-   * Rooms 1-3: monsters at region niveauMax
-   * Room 4 (boss): 1 boss surlevelé + regular monsters
+   * Spawn enemies for a dungeon combat.
+   * Priority: fixed compositions (DonjonSalleComposition) if defined for this salle+difficulte.
+   * Fallback: rooms 1-3 = region monsters at niveauMax; room 4 = 1 boss + regulars.
    */
   private async spawnDungeonEnemies(
     donjon: {
       niveauMin: number;
       niveauMax: number;
+      bossId?: number;
       boss: {
         id: number;
         nom: string;
@@ -379,7 +381,8 @@ export class DonjonService {
       };
     },
     difficulte: number,
-    isBoss: boolean
+    isBoss: boolean,
+    salleId?: number
   ) {
     const monstres: {
       nom: string;
@@ -397,6 +400,49 @@ export class DonjonService {
       iaType?: string;
     }[] = [];
 
+    // ── Priority: fixed compositions if defined for this salle + difficulte ──
+    if (salleId) {
+      const compositions = await prisma.donjonSalleComposition.findMany({
+        where: { salleId, difficulte },
+        include: { monstre: true },
+      });
+
+      if (compositions.length > 0) {
+        let entryIndex = 1;
+        for (const comp of compositions) {
+          const template = comp.monstre;
+          const niveau = comp.niveau;
+          const levelDiff = niveau - template.niveauBase;
+          const sf = Math.max(1, 1 + levelDiff * 0.1);
+          const isBossEntry = template.id === donjon.boss.id;
+          const bossBoost = isBossEntry ? 1.5 : 1;
+
+          for (let j = 0; j < comp.quantite; j++) {
+            const suffix = comp.quantite > 1 ? ` ${entryIndex}` : '';
+            const nom = isBossEntry ? `${template.nom} (Boss)` : `${template.nom}${suffix}`;
+            monstres.push({
+              nom,
+              force: Math.floor(template.force * sf * bossBoost),
+              intelligence: Math.floor(template.intelligence * sf * bossBoost),
+              dexterite: Math.floor(template.dexterite * sf * bossBoost),
+              agilite: Math.floor(template.agilite * sf * bossBoost),
+              vie: Math.floor(template.vie * sf * bossBoost),
+              chance: Math.floor(template.chance * sf * bossBoost),
+              pvMax: Math.floor(template.pvBase * sf * bossBoost),
+              paMax: template.paBase,
+              pmMax: template.pmBase,
+              monstreTemplateId: template.id,
+              niveau,
+              iaType: template.iaType,
+            });
+            if (!isBossEntry) entryIndex++;
+          }
+        }
+        return monstres;
+      }
+    }
+
+    // ── Fallback: random region-based spawning ──
     // Get region monsters
     const regionMonstres = await prisma.regionMonstre.findMany({
       where: { regionId: donjon.region.id },
@@ -895,7 +941,7 @@ export class DonjonService {
   }
 
   /**
-   * Get dungeon by ID
+   * Get dungeon by ID (includes portails and compositions per salle)
    */
   async findById(id: number) {
     return prisma.donjon.findUnique({
@@ -903,12 +949,66 @@ export class DonjonService {
       include: {
         region: true,
         boss: true,
+        portails: true,
         salles: {
           orderBy: { ordre: 'asc' },
-          include: { map: true },
+          include: {
+            map: true,
+            compositions: {
+              include: { monstre: true },
+              orderBy: [{ difficulte: 'asc' }, { id: 'asc' }],
+            },
+          },
         },
       },
     });
+  }
+
+  // ──────────────────────── COMPOSITIONS CRUD ────────────────────────
+
+  async getCompositions(salleId: number) {
+    return prisma.donjonSalleComposition.findMany({
+      where: { salleId },
+      include: { monstre: true },
+      orderBy: [{ difficulte: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  async createComposition(salleId: number, data: {
+    difficulte: number;
+    monstreTemplateId: number;
+    niveau: number;
+    quantite: number;
+  }) {
+    // Verify salle exists
+    const salle = await prisma.donjonSalle.findUnique({ where: { id: salleId } });
+    if (!salle) throw new Error('Dungeon room not found');
+    if (![4, 6, 8].includes(data.difficulte)) throw new Error('Difficulty must be 4, 6, or 8');
+
+    return prisma.donjonSalleComposition.create({
+      data: { salleId, ...data },
+      include: { monstre: true },
+    });
+  }
+
+  async updateComposition(id: number, data: Partial<{
+    difficulte: number;
+    monstreTemplateId: number;
+    niveau: number;
+    quantite: number;
+  }>) {
+    if (data.difficulte !== undefined && ![4, 6, 8].includes(data.difficulte)) {
+      throw new Error('Difficulty must be 4, 6, or 8');
+    }
+    return prisma.donjonSalleComposition.update({
+      where: { id },
+      data,
+      include: { monstre: true },
+    });
+  }
+
+  async deleteComposition(id: number) {
+    return prisma.donjonSalleComposition.delete({ where: { id } });
   }
 }
 

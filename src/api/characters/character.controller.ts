@@ -24,11 +24,6 @@ const updateCharacterSchema = z.object({
   chance: z.number().int().min(1).max(100).optional(),
 });
 
-const equipItemSchema = z.object({
-  slot: z.string(),
-  equipmentId: z.number().int().positive().nullable(),
-});
-
 const allocateStatsSchema = z.object({
   force: z.number().int().min(0).optional(),
   intelligence: z.number().int().min(0).optional(),
@@ -107,36 +102,6 @@ export class CharacterController {
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Validation error', details: error.errors });
         return;
-      }
-      next(error);
-    }
-  }
-
-  async equipItem(req: Request, res: Response, next: NextFunction) {
-    try {
-      const id = parseInt(req.params.id, 10);
-      if (isNaN(id)) {
-        res.status(400).json({ error: 'Invalid ID' });
-        return;
-      }
-
-      const data = equipItemSchema.parse(req.body);
-      const character = await characterService.equipItem(id, data.slot, data.equipmentId);
-      res.json(character);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Validation error', details: error.errors });
-        return;
-      }
-      if (error instanceof Error) {
-        if (error.message === 'Character not found' || error.message === 'Equipment not found') {
-          res.status(404).json({ error: error.message });
-          return;
-        }
-        if (error.message.startsWith('Equipment slot mismatch')) {
-          res.status(400).json({ error: error.message });
-          return;
-        }
       }
       next(error);
     }

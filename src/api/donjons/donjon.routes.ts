@@ -33,4 +33,10 @@ router.put('/:id/portail', (req, res, next) => donjonController.setPortail(req, 
 // DELETE /api/donjons/:id/portail - Delete dungeon portal
 router.delete('/:id/portail', (req, res, next) => donjonController.deletePortail(req, res, next));
 
+// Compositions CRUD
+router.get('/:id/salles/:salleId/compositions', (req, res, next) => donjonController.getCompositions(req, res, next));
+router.post('/:id/salles/:salleId/compositions', (req, res, next) => donjonController.createComposition(req, res, next));
+router.patch('/:id/salles/:salleId/compositions/:compId', (req, res, next) => donjonController.updateComposition(req, res, next));
+router.delete('/:id/salles/:salleId/compositions/:compId', (req, res, next) => donjonController.deleteComposition(req, res, next));
+
 export default router;

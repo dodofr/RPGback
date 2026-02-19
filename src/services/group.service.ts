@@ -181,8 +181,21 @@ export class GroupService {
 
     if (group.map) {
       if (group.map.combatMode === CombatMode.AUTO) {
-        // Check for random encounter if on AUTO map
-        combat = await mapService.checkRandomEncounter(group.map.id, groupId);
+        // AUTO mode: engage the closest enemy group within 4 Manhattan distance
+        const enemies = await prisma.groupeEnnemi.findMany({
+          where: { mapId: group.mapId!, vaincu: false },
+        });
+        const nearby = enemies.filter(
+          ge => Math.abs(ge.positionX - x) + Math.abs(ge.positionY - y) <= 4
+        );
+        if (nearby.length > 0) {
+          const closest = nearby.reduce((a, b) =>
+            Math.abs(a.positionX - x) + Math.abs(a.positionY - y) <=
+            Math.abs(b.positionX - x) + Math.abs(b.positionY - y)
+              ? a : b
+          );
+          combat = await mapService.engageEnemyGroup(group.map.id, closest.id, groupId);
+        }
       } else if (group.map.combatMode === CombatMode.MANUEL) {
         // Check if there's an enemy group at this position (MANUEL mode)
         const enemyGroup = await mapService.checkEnemyGroupAtPosition(group.map.id, x, y);
@@ -260,8 +273,8 @@ export class GroupService {
       }
     }
 
-    // Auto-spawn enemy groups on MANUEL maps if none exist
-    if (map.combatMode === CombatMode.MANUEL && map.groupesEnnemis.length === 0) {
+    // Auto-spawn enemy groups on MANUEL maps if none exist (skip VILLE/SAFE)
+    if (map.combatMode === CombatMode.MANUEL && map.type !== MapType.VILLE && map.type !== MapType.SAFE && map.groupesEnnemis.length === 0) {
       await mapService.spawnEnemyGroups(mapId);
     }
 

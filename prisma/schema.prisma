@@ -337,13 +337,14 @@ model MonstreTemplate {
   pvScalingInvocation Float?
   orMin          Int                  @default(0)
   orMax          Int                  @default(0)
-  groupesMembres GroupeEnnemiMembre[]
-  donjonsBoss    Donjon[]
-  regions        RegionMonstre[]
-  sorts          MonstreSort[]
-  combatEntites  CombatEntite[]
-  invocationSorts Sort[]              @relation("InvocationSort")
-  drops          MonstreDrop[]
+  groupesMembres    GroupeEnnemiMembre[]
+  donjonsBoss       Donjon[]
+  regions           RegionMonstre[]
+  sorts             MonstreSort[]
+  combatEntites     CombatEntite[]
+  invocationSorts   Sort[]                   @relation("InvocationSort")
+  drops             MonstreDrop[]
+  salleCompositions DonjonSalleComposition[]
 }
 
 model RegionMonstre {
@@ -732,15 +733,29 @@ model Donjon {
 }
 
 model DonjonSalle {
-  id        Int     @id @default(autoincrement())
-  donjonId  Int
-  donjon    Donjon  @relation(fields: [donjonId], references: [id], onDelete: Cascade)
-  ordre     Int     // 1, 2, 3, 4
-  mapId     Int
-  map       Map     @relation(fields: [mapId], references: [id])
+  id           Int                      @id @default(autoincrement())
+  donjonId     Int
+  donjon       Donjon                   @relation(fields: [donjonId], references: [id], onDelete: Cascade)
+  ordre        Int                      // 1, 2, 3, 4
+  mapId        Int
+  map          Map                      @relation(fields: [mapId], references: [id])
+  compositions DonjonSalleComposition[]
 
   @@unique([donjonId, ordre])
   @@index([donjonId])
+}
+
+model DonjonSalleComposition {
+  id                Int             @id @default(autoincrement())
+  salleId           Int
+  salle             DonjonSalle     @relation(fields: [salleId], references: [id], onDelete: Cascade)
+  difficulte        Int             // 4, 6, ou 8
+  monstreTemplateId Int
+  monstre           MonstreTemplate @relation(fields: [monstreTemplateId], references: [id])
+  niveau            Int
+  quantite          Int             @default(1)
+
+  @@index([salleId, difficulte])
 }
 
 model DonjonRun {

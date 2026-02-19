@@ -216,6 +216,11 @@ export class MapService {
       throw new Error('Map not found');
     }
 
+    // Never spawn monsters on VILLE or SAFE maps
+    if (map.type === MapType.VILLE || map.type === MapType.SAFE) {
+      return [];
+    }
+
     const regionMonstres = map.region.monstres;
     if (regionMonstres.length === 0) {
       return [];
