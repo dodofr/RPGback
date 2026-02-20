@@ -59,6 +59,7 @@ enum EffetType {
   POUSSEE
   ATTIRANCE
   POISON
+  BOUCLIER
 }
 
 enum CombatStatus {
@@ -159,6 +160,12 @@ model Sort {
   estVolDeVie          Boolean          @default(false)
   invocationTemplateId Int?
   invocationTemplate   MonstreTemplate? @relation("InvocationSort", fields: [invocationTemplateId], references: [id])
+  // Portée modifiable par équipement et buffs (false = portée fixe)
+  porteeModifiable     Boolean          @default(true)
+  // Zones posées au sol
+  estGlyphe            Boolean          @default(false)
+  estPiege             Boolean          @default(false)
+  poseDuree            Int?             // durée en tours de la zone posée (null = permanent)
   personnages         PersonnageSort[]
   cooldowns           SortCooldown[]
   monstres            MonstreSort[]
@@ -194,8 +201,6 @@ model Equipement {
   // Champs d'attaque (pour armes uniquement)
   degatsMin         Int?
   degatsMax         Int?
-  degatsCritMin     Int?
-  degatsCritMax     Int?
   chanceCritBase    Float?
   coutPA            Int?
   porteeMin         Int?
@@ -220,15 +225,18 @@ model Equipement {
 }
 
 model Effet {
-  id           Int          @id @default(autoincrement())
+  id           Int                @id @default(autoincrement())
   nom          String
   type         EffetType
   statCiblee   StatType
   valeur       Int
   valeurMin    Int?
   duree        Int
+  // Si true: plusieurs instances du même effet peuvent coexister sur la même entité
+  cumulable    Boolean            @default(false)
   sorts        SortEffet[]
   effetsActifs EffetActif[]
+  zonesActives ZonePoseeCombat[]
 }
 
 model SortEffet {
@@ -465,20 +473,47 @@ model GroupePersonnage {
 }
 
 model Combat {
-  id               Int            @id @default(autoincrement())
-  status           CombatStatus   @default(EN_COURS)
-  tourActuel       Int            @default(1)
+  id               Int               @id @default(autoincrement())
+  status           CombatStatus      @default(EN_COURS)
+  tourActuel       Int               @default(1)
   entiteActuelleId Int?
   grilleLargeur    Int
   grilleHauteur    Int
   groupeId         Int?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   entites          CombatEntite[]
   effetsActifs     EffetActif[]
   cases            CombatCase[]
   cooldowns        SortCooldown[]
   logs             CombatLog[]
+  zonesActives     ZonePoseeCombat[]
+}
+
+// Zone posée au sol : glyphe (visible, déclenche en début de tour) ou piège (invisible, déclenche au passage)
+model ZonePoseeCombat {
+  id             Int       @id @default(autoincrement())
+  combatId       Int
+  combat         Combat    @relation(fields: [combatId], references: [id], onDelete: Cascade)
+  x              Int
+  y              Int
+  poseurId       Int       // CombatEntite qui a posé la zone
+  poseurEquipe   Int       // pour la visibilité des pièges côté client
+  estPiege       Boolean   @default(false)  // false = glyphe, true = piège
+  toursRestants  Int       // tours restants avant expiration
+  // Zone d'effet au déclenchement
+  zoneTaille     Int       @default(0)
+  zoneType       String    @default("CASE")
+  // Dégâts pré-calculés (avec la stat du poseur au moment du cast)
+  degatsMinFinal Int       @default(0)
+  degatsMaxFinal Int       @default(0)
+  statUtilisee   StatType  @default(FORCE)
+  // Effet secondaire optionnel (poison, debuff PM, etc.)
+  effetId        Int?
+  effet          Effet?    @relation(fields: [effetId], references: [id])
+
+  @@index([combatId])
+  @@index([combatId, x, y])
 }
 
 model SortCooldown {
@@ -542,14 +577,16 @@ model CombatEntite {
 }
 
 model EffetActif {
-  id            Int    @id @default(autoincrement())
-  combatId      Int
-  combat        Combat @relation(fields: [combatId], references: [id], onDelete: Cascade)
-  entiteId      Int
-  effetId       Int
-  effet         Effet  @relation(fields: [effetId], references: [id])
-  toursRestants Int
-  lanceurId     Int?
+  id             Int    @id @default(autoincrement())
+  combatId       Int
+  combat         Combat @relation(fields: [combatId], references: [id], onDelete: Cascade)
+  entiteId       Int
+  effetId        Int
+  effet          Effet  @relation(fields: [effetId], references: [id])
+  toursRestants  Int
+  lanceurId      Int?
+  // Valeur pré-calculée au cast (ex: bouclier = random(min,max)*multiplicateur au lancer)
+  valeurCourante Int?
 }
 
 model CombatLog {

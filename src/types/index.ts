@@ -86,6 +86,20 @@ export interface CombatLogEntry {
   type: string;
 }
 
+export interface ZonePoseeState {
+  id: number;
+  x: number;
+  y: number;
+  poseurId: number;
+  poseurEquipe: number;
+  estPiege: boolean;
+  toursRestants: number;
+  degatsMinFinal: number;
+  degatsMaxFinal: number;
+  statUtilisee: string;
+  effetId?: number | null;
+}
+
 export interface CombatState {
   id: number;
   status: CombatStatus;
@@ -101,6 +115,7 @@ export interface CombatState {
   cases: CombatCaseState[];
   cooldowns: CombatCooldownState[];
   logs: CombatLogEntry[];
+  zonesActives: ZonePoseeState[];
 }
 
 export interface CombatCooldownState {
@@ -179,6 +194,10 @@ export interface CombatSpellState {
   estDispel: boolean;
   estInvocation: boolean;
   estVolDeVie: boolean;
+  estGlyphe: boolean;
+  estPiege: boolean;
+  poseDuree?: number | null;
+  porteeModifiable: boolean;
   tauxEchec: number;
   zone: { type: string; taille: number; nom: string } | null;
   effets: {
@@ -207,10 +226,6 @@ export interface LigneDegats {
 // Weapon attack data (snapshot in CombatEntite)
 export interface ArmeData {
   nom: string;
-  degatsMin: number;
-  degatsMax: number;
-  degatsCritMin: number;
-  degatsCritMax: number;
   chanceCritBase: number;
   bonusCrit: number;
   coutPA: number;
@@ -218,10 +233,8 @@ export interface ArmeData {
   porteeMax: number;
   ligneDeVue: boolean;
   zoneId: number | null;
-  statUtilisee: string;
   cooldown: number;
   tauxEchec: number;
-  estVolDeVie: boolean;
   lignes: LigneDegats[];
 }
 

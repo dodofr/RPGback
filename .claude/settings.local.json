@@ -54,7 +54,8 @@
       "Bash(ls -la \"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\frontend\\\\src\\\\pages\\\\admin\"\" | grep -i \"resource|craft|recipe|panop|set|drop \")",
       "Bash(bash test-gameplay.sh:*)",
       "Bash(wc -l \"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\frontend/src/pages\"/**/*.tsx)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(netstat:*)"
     ]
   }
 }

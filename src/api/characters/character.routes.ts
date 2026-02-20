@@ -19,6 +19,9 @@ router.patch('/:id', (req, res, next) => characterController.update(req, res, ne
 // GET /api/characters/:id/spells - Get character's available spells
 router.get('/:id/spells', (req, res, next) => characterController.getSpells(req, res, next));
 
+// POST /api/characters/:id/sync-spells - Learn all missing race spells up to current level
+router.post('/:id/sync-spells', (req, res, next) => characterController.syncSpells(req, res, next));
+
 // POST /api/characters/:id/allocate-stats - Allocate stat points
 router.post('/:id/allocate-stats', (req, res, next) => characterController.allocateStats(req, res, next));
 

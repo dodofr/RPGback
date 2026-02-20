@@ -9,7 +9,7 @@ import { z } from 'zod';
 const StatTypeEnum = z.enum(['FORCE', 'INTELLIGENCE', 'DEXTERITE', 'AGILITE', 'VIE', 'CHANCE', 'PA', 'PM', 'PO']);
 const SortTypeEnum = z.enum(['ARME', 'SORT']);
 const SlotTypeEnum = z.enum(['ARME', 'COIFFE', 'AMULETTE', 'BOUCLIER', 'HAUT', 'BAS', 'ANNEAU1', 'ANNEAU2', 'FAMILIER']);
-const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF', 'DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON']);
+const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF', 'DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON', 'BOUCLIER']);
 const ZoneTypeEnum = z.enum(['CASE', 'CROIX', 'LIGNE', 'CONE', 'CERCLE', 'LIGNE_PERPENDICULAIRE', 'DIAGONALE', 'CARRE', 'ANNEAU', 'CONE_INVERSE']);
 
 // Race schemas
@@ -49,6 +49,10 @@ const createSortSchema = z.object({
   estInvocation: z.boolean().default(false),
   estVolDeVie: z.boolean().default(false),
   invocationTemplateId: z.number().int().nullable().optional(),
+  porteeModifiable: z.boolean().default(true),
+  estGlyphe: z.boolean().default(false),
+  estPiege: z.boolean().default(false),
+  poseDuree: z.number().int().min(1).nullable().optional(),
 });
 
 const updateSortSchema = createSortSchema.partial();
@@ -80,8 +84,6 @@ const createEquipementSchema = z.object({
   bonusCritiqueMax: z.number().int().nullable().optional(),
   degatsMin: z.number().int().nullable().optional(),
   degatsMax: z.number().int().nullable().optional(),
-  degatsCritMin: z.number().int().nullable().optional(),
-  degatsCritMax: z.number().int().nullable().optional(),
   chanceCritBase: z.number().nullable().optional(),
   coutPA: z.number().int().nullable().optional(),
   porteeMin: z.number().int().nullable().optional(),

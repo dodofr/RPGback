@@ -86,7 +86,7 @@ export class CombatService {
             where: { id: armeId },
             include: { lignesDegats: { orderBy: { ordre: 'asc' } } },
           });
-          if (arme && arme.degatsMin != null && arme.degatsMax != null) {
+          if (arme && arme.coutPA != null) {
             const lignes: LigneDegats[] = arme.lignesDegats.map(l => ({
               ordre: l.ordre,
               degatsMin: l.degatsMin,
@@ -97,10 +97,6 @@ export class CombatService {
             }));
             armeData = {
               nom: arme.nom,
-              degatsMin: arme.degatsMin,
-              degatsMax: arme.degatsMax,
-              degatsCritMin: arme.degatsCritMin || arme.degatsMin,
-              degatsCritMax: arme.degatsCritMax || arme.degatsMax,
               chanceCritBase: arme.chanceCritBase ?? 0.05,
               bonusCrit: arme.bonusCrit ?? 0,
               coutPA: arme.coutPA ?? 3,
@@ -108,16 +104,14 @@ export class CombatService {
               porteeMax: arme.porteeMax ?? 1,
               ligneDeVue: arme.ligneDeVue ?? true,
               zoneId: arme.zoneId,
-              statUtilisee: arme.statUtilisee ?? 'FORCE',
               cooldown: arme.cooldown ?? 0,
               tauxEchec: arme.tauxEchec ?? 0,
-              estVolDeVie: arme.estVolDeVie ?? false,
               lignes,
             };
           }
         }
-      } else if (armeSource.degatsMin != null && armeSource.degatsMax != null) {
-        // Use inventory weapon — attack data from template, stats from instance
+      } else {
+        // Use inventory weapon — attack data from template
         const lignes: LigneDegats[] = armeSource.lignesDegats.map(l => ({
           ordre: l.ordre,
           degatsMin: l.degatsMin,
@@ -128,10 +122,6 @@ export class CombatService {
         }));
         armeData = {
           nom: armeSource.nom,
-          degatsMin: armeSource.degatsMin,
-          degatsMax: armeSource.degatsMax,
-          degatsCritMin: armeSource.degatsCritMin || armeSource.degatsMin,
-          degatsCritMax: armeSource.degatsCritMax || armeSource.degatsMax,
           chanceCritBase: armeSource.chanceCritBase ?? 0.05,
           bonusCrit: armeSource.bonusCrit ?? 0,
           coutPA: armeSource.coutPA ?? 3,
@@ -139,10 +129,8 @@ export class CombatService {
           porteeMax: armeSource.porteeMax ?? 1,
           ligneDeVue: armeSource.ligneDeVue ?? true,
           zoneId: armeSource.zoneId,
-          statUtilisee: armeSource.statUtilisee ?? 'FORCE',
           cooldown: armeSource.cooldown ?? 0,
           tauxEchec: armeSource.tauxEchec ?? 0,
-          estVolDeVie: armeSource.estVolDeVie ?? false,
           lignes,
         };
       }

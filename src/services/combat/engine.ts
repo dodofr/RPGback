@@ -1,6 +1,6 @@
 import { CombatStatus, Sort, ZoneType, IAType } from '@prisma/client';
 import prisma from '../../config/database';
-import { CombatState, ActionResult, Position, CombatCaseState, ArmeData, LigneDegats, ActiveEffectStateWithDetails, CombatSpellState } from '../../types';
+import { CombatState, ActionResult, Position, CombatCaseState, ArmeData, LigneDegats, ActiveEffectStateWithDetails, CombatSpellState, ZonePoseeState } from '../../types';
 import { calculateAlternatingInitiativeOrder, getNextEntity } from './initiative';
 import { calculateDamage, applyDamage, isDead } from './damage';
 import { canMove, calculateMovementCost, hasLineOfSight } from './movement';
@@ -13,7 +13,8 @@ import { executeAITurn } from './ai';
 import { createInvocation, killInvocationsOf } from './invocation';
 import { donjonService } from '../donjon.service';
 import { dropService } from '../drop.service';
-import { getStatsWithEffects, applySpellEffects, AppliedEffect, PushPullResult, getResourceModifiers, applyPoisonDamage, removeEffectsByCaster } from './effects';
+import { getStatsWithEffects, applySpellEffects, applyShieldEffect, calculateShieldReduction, AppliedEffect, PushPullResult, getResourceModifiers, applyPoisonDamage, removeEffectsByCaster } from './effects';
+import { createZone, triggerGlyphesForEntity, triggerPiegesForEntity, decrementZones, cleanupZones } from './zones';
 import { checkProbability, randomInt } from '../../utils/random';
 import { addLog } from './combatLog';
 
@@ -35,6 +36,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       logs: {
         orderBy: { id: 'asc' },
       },
+      zonesActives: true,
     },
   });
 
@@ -90,6 +92,10 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             estDispel: ps.sort.estDispel,
             estInvocation: ps.sort.estInvocation,
             estVolDeVie: ps.sort.estVolDeVie,
+            estGlyphe: ps.sort.estGlyphe,
+            estPiege: ps.sort.estPiege,
+            poseDuree: ps.sort.poseDuree,
+            porteeModifiable: ps.sort.porteeModifiable,
             tauxEchec: ps.sort.tauxEchec,
             zone: ps.sort.zone
               ? { type: ps.sort.zone.type, taille: ps.sort.zone.taille, nom: ps.sort.zone.nom }
@@ -151,6 +157,10 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             estDispel: ms.sort.estDispel,
             estInvocation: ms.sort.estInvocation,
             estVolDeVie: ms.sort.estVolDeVie,
+            estGlyphe: ms.sort.estGlyphe,
+            estPiege: ms.sort.estPiege,
+            poseDuree: ms.sort.poseDuree,
+            porteeModifiable: ms.sort.porteeModifiable,
             tauxEchec: ms.sort.tauxEchec,
             zone: ms.sort.zone
               ? { type: ms.sort.zone.type, taille: ms.sort.zone.taille, nom: ms.sort.zone.nom }
@@ -244,6 +254,19 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       message: l.message,
       type: l.type,
     })),
+    zonesActives: combat.zonesActives.map((z): ZonePoseeState => ({
+      id: z.id,
+      x: z.x,
+      y: z.y,
+      poseurId: z.poseurId,
+      poseurEquipe: z.poseurEquipe,
+      estPiege: z.estPiege,
+      toursRestants: z.toursRestants,
+      degatsMinFinal: z.degatsMinFinal,
+      degatsMaxFinal: z.degatsMaxFinal,
+      statUtilisee: z.statUtilisee,
+      effetId: z.effetId,
+    })),
   };
 }
 
@@ -324,8 +347,8 @@ export async function executeAction(
     ligneDeVue: boolean;
     degatsMin: number;
     degatsMax: number;
-    degatsCritMin: number;
-    degatsCritMax: number;
+    degatsCritMin?: number;
+    degatsCritMax?: number;
     chanceCritBase: number;
     statUtilisee: string;
     zone: { type: ZoneType; taille: number };
@@ -359,12 +382,10 @@ export async function executeAction(
       porteeMin: armeData.porteeMin,
       porteeMax: armeData.porteeMax,
       ligneDeVue: armeData.ligneDeVue,
-      degatsMin: armeData.degatsMin,
-      degatsMax: armeData.degatsMax,
-      degatsCritMin: armeData.degatsCritMin || armeData.degatsMin,
-      degatsCritMax: armeData.degatsCritMax || armeData.degatsMax,
+      degatsMin: 0,
+      degatsMax: 0,
       chanceCritBase: armeData.chanceCritBase,
-      statUtilisee: armeData.statUtilisee,
+      statUtilisee: 'FORCE',
       zone: weaponZone,
     };
     actionType = 'ARME';
@@ -427,14 +448,17 @@ export async function executeAction(
     return { success: false, message: `Not enough PA (need ${attackData.coutPA}, have ${attacker.paActuels})` };
   }
 
-  // Check range (with PO bonus from equipment + effects)
+  // Check range (with PO bonus from equipment + effects, unless porteeModifiable is false)
   const distance = manhattanDistance(attacker.positionX, attacker.positionY, targetX, targetY);
   const poMods = await getResourceModifiers(combatId, entiteId);
-  const effectivePorteeMax = attackData.porteeMax + (attacker.poBonus ?? 0) + poMods.poModifier;
-  if (distance < attackData.porteeMin || distance > effectivePorteeMax) {
+  const isPorteeModifiable = useArme ? true : (spell?.porteeModifiable ?? true);
+  const poBonus = isPorteeModifiable ? ((attacker.poBonus ?? 0) + poMods.poModifier) : 0;
+  const effectivePorteeMax = attackData.porteeMax + poBonus;
+  const effectivePorteeMin = Math.max(0, attackData.porteeMin);
+  if (distance < effectivePorteeMin || distance > effectivePorteeMax) {
     return {
       success: false,
-      message: `Target out of range (distance: ${distance}, range: ${attackData.porteeMin}-${effectivePorteeMax})`,
+      message: `Target out of range (distance: ${distance}, range: ${effectivePorteeMin}-${effectivePorteeMax})`,
     };
   }
 
@@ -507,6 +531,73 @@ export async function executeAction(
       actionType,
       damages: [],
       missed: true,
+    };
+  }
+
+  // ===== GLYPHE BRANCH =====
+  if (spell?.estGlyphe) {
+    const attackerBaseStats = {
+      force: attacker.force, intelligence: attacker.intelligence, dexterite: attacker.dexterite,
+      agilite: attacker.agilite, vie: attacker.vie, chance: attacker.chance,
+    };
+
+    // Look up secondary effect from SortEffet if any
+    const sortEffet = await prisma.sortEffet.findFirst({
+      where: { sortId: sortId!, surCible: true },
+      include: { effet: true },
+    });
+
+    await createZone(
+      combatId, entiteId, attacker.equipe, targetX, targetY, false,
+      spell.poseDuree ?? 3,
+      spell.degatsMin, spell.degatsMax, spell.statUtilisee as any,
+      attackerBaseStats,
+      spell.zone?.taille ?? 0,
+      spell.zone?.type ?? 'CASE',
+      sortEffet?.effetId ?? undefined
+    );
+
+    const dureeMsg = spell.poseDuree ? `${spell.poseDuree} tours` : 'permanent';
+    await addLog(combatId, combat.tourActuel, `${attacker.nom} pose un glyphe en (${targetX},${targetY}) [${dureeMsg}]`, 'ACTION');
+
+    return {
+      success: true,
+      message: `Glyphe posé en (${targetX}, ${targetY})`,
+      actionType,
+      damages: [],
+    };
+  }
+
+  // ===== PIÈGE BRANCH =====
+  if (spell?.estPiege) {
+    const attackerBaseStats = {
+      force: attacker.force, intelligence: attacker.intelligence, dexterite: attacker.dexterite,
+      agilite: attacker.agilite, vie: attacker.vie, chance: attacker.chance,
+    };
+
+    const sortEffet = await prisma.sortEffet.findFirst({
+      where: { sortId: sortId!, surCible: true },
+      include: { effet: true },
+    });
+
+    await createZone(
+      combatId, entiteId, attacker.equipe, targetX, targetY, true,
+      spell.poseDuree ?? 5,
+      spell.degatsMin, spell.degatsMax, spell.statUtilisee as any,
+      attackerBaseStats,
+      spell.zone?.taille ?? 0,
+      spell.zone?.type ?? 'CASE',
+      sortEffet?.effetId ?? undefined
+    );
+
+    // Log visible pour le lanceur seulement (le message existe mais côté client c'est invisible pour l'ennemi)
+    await addLog(combatId, combat.tourActuel, `${attacker.nom} pose un piège en (${targetX},${targetY})`, 'ACTION');
+
+    return {
+      success: true,
+      message: `Piège posé en (${targetX}, ${targetY})`,
+      actionType,
+      damages: [],
     };
   }
 
@@ -636,8 +727,8 @@ export async function executeAction(
     const spellData = {
       degatsMin: attackData.degatsMin,
       degatsMax: attackData.degatsMax,
-      degatsCritMin: attackData.degatsCritMin,
-      degatsCritMax: attackData.degatsCritMax,
+      degatsCritMin: attackData.degatsCritMin!,
+      degatsCritMax: attackData.degatsCritMax!,
       chanceCritBase: attackData.chanceCritBase,
       statUtilisee: attackData.statUtilisee as any,
     };
@@ -752,13 +843,19 @@ export async function executeAction(
   const heals: ActionResult['heals'] = [];
   const entitesMortes: number[] = [];
 
-  // Check if weapon has multi-line damage
+  // Build effective lignes for weapon (lines-only)
   const armeDataForLines = useArme ? (attacker.armeData as unknown as ArmeData) : null;
-  const hasLignes = armeDataForLines && armeDataForLines.lignes && armeDataForLines.lignes.length > 0;
+  const effectiveLignes: LigneDegats[] = useArme && armeDataForLines
+    ? armeDataForLines.lignes
+    : [];
 
-  // Global crit roll for weapons (one roll for all lines)
+  if (useArme && effectiveLignes.length === 0) {
+    return { success: false, message: 'Cette arme n\'a pas de ligne de dégâts configurée' };
+  }
+
+  // Global crit roll for ALL weapons (one roll per attack, covers mono and multi-line)
   let globalWeaponCrit = false;
-  if (hasLignes) {
+  if (useArme && armeDataForLines) {
     const critChance = calculateCritChance(armeDataForLines.chanceCritBase, attackerModifiedStats.chance, attacker.bonusCritique + poMods.critiqueModifier);
     globalWeaponCrit = checkProbability(critChance);
   }
@@ -778,12 +875,12 @@ export async function executeAction(
     const aoeDistance = manhattanDistance(target.positionX, target.positionY, targetX, targetY);
     const aoeMultiplier = calculateAoEReduction(aoeDistance);
 
-    if (hasLignes) {
-      // ===== MULTI-LINE WEAPON DAMAGE =====
-      const bonusCrit = armeDataForLines.bonusCrit ?? 0;
+    if (useArme) {
+      // ===== WEAPON DAMAGE (unified mono/multi-line) =====
+      const bonusCrit = armeDataForLines!.bonusCrit ?? 0;
       const lineDetails: { damage: number; stat: string; isVdV: boolean; isSoin: boolean }[] = [];
 
-      for (const ligne of armeDataForLines.lignes) {
+      for (const ligne of effectiveLignes) {
         const statValue = getStatValue(attackerModifiedStats, ligne.statUtilisee as any);
         const statMultiplier = calculateStatMultiplier(statValue);
 
@@ -817,12 +914,12 @@ export async function executeAction(
 
       targetLineDetails.set(target.id, lineDetails);
     } else {
-      // ===== SINGLE-LINE DAMAGE (spells or weapons without lignes) =====
+      // ===== SPELL DAMAGE =====
       const spellData = {
         degatsMin: attackData.degatsMin,
         degatsMax: attackData.degatsMax,
-        degatsCritMin: attackData.degatsCritMin,
-        degatsCritMax: attackData.degatsCritMax,
+        degatsCritMin: attackData.degatsCritMin!,
+        degatsCritMax: attackData.degatsCritMax!,
         chanceCritBase: attackData.chanceCritBase,
         statUtilisee: attackData.statUtilisee as any,
       };
@@ -853,6 +950,19 @@ export async function executeAction(
       // Re-read current PV after heal
       const afterHeal = await prisma.combatEntite.findUnique({ where: { id: target.id } });
       if (afterHeal) target.pvActuels = afterHeal.pvActuels;
+    }
+
+    // Apply shield reduction before damage (bouclier absorbs damage of matching stat)
+    if (totalDamageForTarget > 0) {
+      const shieldStat = useArme && effectiveLignes.length > 0
+        ? effectiveLignes[0].statUtilisee
+        : attackData.statUtilisee;
+      const shieldAbsorb = await calculateShieldReduction(combatId, target.id, shieldStat);
+      if (shieldAbsorb > 0) {
+        const absorbed = Math.min(shieldAbsorb, totalDamageForTarget);
+        totalDamageForTarget = Math.max(0, totalDamageForTarget - absorbed);
+        await addLog(combatId, combat.tourActuel, `${target.nom} : bouclier absorbe ${absorbed} dégâts`, 'EFFET');
+      }
     }
 
     // Apply damage
@@ -911,10 +1021,10 @@ export async function executeAction(
   const actionLabel = useArme
     ? `${attacker.nom} utilise ${(attacker.armeData as unknown as ArmeData).nom} (${attackData.coutPA} PA)`
     : `${attacker.nom} lance ${spell!.nom} (${attackData.coutPA} PA)`;
-  const critPrefix = hasLignes && globalWeaponCrit ? 'CRITIQUE ! ' : '';
+  const critPrefix = useArme && globalWeaponCrit ? 'CRITIQUE ! ' : '';
   const dmgParts = damages.map(d => {
     const target = combat.entites.find(e => e.id === d.entiteId);
-    const critStr = !hasLignes && d.isCritical ? 'CRITIQUE ! ' : '';
+    const critStr = !useArme && d.isCritical ? 'CRITIQUE ! ' : '';
 
     // Build detail string for multi-line weapons
     let detailStr = '';
@@ -1060,6 +1170,15 @@ export async function moveEntity(
     },
   });
 
+  // Trigger traps on the new position (traps are one-shot, invisible to enemy)
+  await triggerPiegesForEntity(combatId, entiteId, targetX, targetY);
+
+  // Check if entity died from trap
+  const entityAfterTrap = await prisma.combatEntite.findUnique({ where: { id: entiteId } });
+  if (entityAfterTrap && entityAfterTrap.pvActuels <= 0) {
+    await checkCombatEnd(combatId);
+  }
+
   return {
     success: true,
     message: `Moved to (${targetX}, ${targetY}), ${pmUsed} PM used`,
@@ -1121,6 +1240,9 @@ export async function endTurn(combatId: number, entiteId: number): Promise<Actio
     });
 
     await addLog(combatId, combat.tourActuel + 1, `Tour ${combat.tourActuel + 1} commence`, 'TOUR');
+
+    // Decrement zone durations at new round
+    await decrementZones(combatId);
   } else {
     // Update current entity for the next turn
     await prisma.combat.update({
@@ -1129,13 +1251,28 @@ export async function endTurn(combatId: number, entiteId: number): Promise<Actio
     });
   }
 
+  // Trigger glyphs at next entity's position at the start of their turn
+  await triggerGlyphesForEntity(combatId, nextEntity.id, nextEntity.positionX, nextEntity.positionY);
+
+  // Check if entity died from glyph
+  const nextEntityAfterGlyph = await prisma.combatEntite.findUnique({ where: { id: nextEntity.id } });
+  if (nextEntityAfterGlyph && nextEntityAfterGlyph.pvActuels <= 0) {
+    await checkCombatEnd(combatId);
+    const combatAfterGlyph = await prisma.combat.findUnique({ where: { id: combatId } });
+    if (combatAfterGlyph && combatAfterGlyph.status === CombatStatus.EN_COURS) {
+      return endTurn(combatId, nextEntity.id);
+    }
+    return { success: true, message: `${nextEntity.nom} died from glyph.` };
+  }
+
   // Decrement effects, cooldowns and weapon cooldown for the next entity at the start of their turn
   await decrementEffects(combatId, nextEntity.id);
 
   // Check if entity died from poison — if so, skip to next entity
   const nextEntityAfterPoison = await prisma.combatEntite.findUnique({ where: { id: nextEntity.id } });
   if (nextEntityAfterPoison && nextEntityAfterPoison.pvActuels <= 0) {
-    // Entity died from poison, check if combat ended
+    // Entity died from poison/effect, check if combat ended
+    await checkCombatEnd(combatId);
     const combatAfterPoison = await prisma.combat.findUnique({ where: { id: combatId } });
     if (combatAfterPoison && combatAfterPoison.status === CombatStatus.EN_COURS) {
       // Skip to next entity
@@ -1201,9 +1338,10 @@ export async function fleeCombat(combatId: number): Promise<ActionResult> {
     data: { status: CombatStatus.ABANDONNE },
   });
 
-  // Clean up combat effects, cooldowns and surviving invocations
+  // Clean up combat effects, cooldowns, zones and surviving invocations
   await prisma.effetActif.deleteMany({ where: { combatId } });
   await prisma.sortCooldown.deleteMany({ where: { combatId } });
+  await cleanupZones(combatId);
   await prisma.combatEntite.updateMany({
     where: { combatId, invocateurId: { not: null }, pvActuels: { gt: 0 } },
     data: { pvActuels: 0 },
@@ -1236,9 +1374,10 @@ async function checkCombatEnd(combatId: number): Promise<void> {
     const isVictory = team0Alive.length > 0;
     await addLog(combatId, tour, `Combat terminé ! ${isVictory ? 'Victoire' : 'Défaite'}`, 'FIN');
 
-    // Clean up combat effects and cooldowns
+    // Clean up combat effects, cooldowns and zones
     await prisma.effetActif.deleteMany({ where: { combatId } });
     await prisma.sortCooldown.deleteMany({ where: { combatId } });
+    await cleanupZones(combatId);
 
     // Kill surviving invocations (they don't persist beyond combat)
     await prisma.combatEntite.updateMany({

@@ -477,14 +477,18 @@ async function main() {
   await prisma.effet.upsert({ where: { id: 6 }, update: {}, create: { nom: 'Dispel', type: EffetType.DISPEL, statCiblee: StatType.VIE, valeur: 0, duree: 0 } });
   await prisma.effet.upsert({ where: { id: 7 }, update: {}, create: { nom: 'Souffle', type: EffetType.POUSSEE, statCiblee: StatType.FORCE, valeur: 2, duree: 0 } });
   await prisma.effet.upsert({ where: { id: 8 }, update: {}, create: { nom: 'Attraction', type: EffetType.ATTIRANCE, statCiblee: StatType.FORCE, valeur: 3, duree: 0 } });
-  await prisma.effet.upsert({ where: { id: 9 }, update: {}, create: { nom: 'Poison', type: EffetType.POISON, statCiblee: StatType.FORCE, valeurMin: 10, valeur: 20, duree: 2 } });
+  // Poison: cumulable = true pour permettre l'empilement de plusieurs sources
+  await prisma.effet.upsert({ where: { id: 9 }, update: { cumulable: true }, create: { nom: 'Poison', type: EffetType.POISON, statCiblee: StatType.FORCE, valeurMin: 10, valeur: 20, duree: 2, cumulable: true } });
   await prisma.effet.upsert({ where: { id: 10 }, update: {}, create: { nom: 'Jambes lourdes', type: EffetType.DEBUFF, statCiblee: StatType.PA, valeur: -2, duree: 2 } });
   await prisma.effet.upsert({ where: { id: 11 }, update: {}, create: { nom: 'Enracinement', type: EffetType.DEBUFF, statCiblee: StatType.PM, valeur: -3, duree: 1 } });
   await prisma.effet.upsert({ where: { id: 12 }, update: {}, create: { nom: 'Vue brouillée', type: EffetType.DEBUFF, statCiblee: StatType.PO, valeur: -2, duree: 2 } });
   await prisma.effet.upsert({ where: { id: 13 }, update: {}, create: { nom: 'Précision', type: EffetType.BUFF, statCiblee: StatType.CRITIQUE, valeur: 10, duree: 3 } });
   await prisma.effet.upsert({ where: { id: 14 }, update: {}, create: { nom: 'Maladresse', type: EffetType.DEBUFF, statCiblee: StatType.CRITIQUE, valeur: -10, duree: 2 } });
+  // Boucliers: réduisent les dégâts d'une stat donnée (valeur calculée au cast via stat du lanceur)
+  await prisma.effet.upsert({ where: { id: 15 }, update: {}, create: { nom: 'Bouclier de force', type: EffetType.BOUCLIER, statCiblee: StatType.FORCE, valeurMin: 10, valeur: 20, duree: 3 } });
+  await prisma.effet.upsert({ where: { id: 16 }, update: {}, create: { nom: 'Bouclier arcanique', type: EffetType.BOUCLIER, statCiblee: StatType.INTELLIGENCE, valeurMin: 8, valeur: 15, duree: 3 } });
 
-  console.log('Created 14 effects');
+  console.log('Created 16 effects (dont 2 boucliers, poison cumulable)');
 
   // ==================== SORT EFFETS ====================
   // Cri de rage (20) → Rage (1) sur lanceur
@@ -627,43 +631,139 @@ async function main() {
 
   // ==================== INVOCATION RACE SPELLS (IDs 34-36) ====================
   // Must be created after monster templates (need invocationTemplateId)
+  // Invocations: porteeModifiable: false (portée fixe, non influencée par buffs/équipement)
   await prisma.sort.upsert({
-    where: { id: 34 }, update: {},
+    where: { id: 34 }, update: { porteeModifiable: false },
     create: {
       nom: 'Invoquer Golem', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
       coutPA: 5, porteeMin: 1, porteeMax: 3, ligneDeVue: true,
       degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
       chanceCritBase: 0, cooldown: 5,
       estInvocation: true, invocationTemplateId: golemArcanique.id,
+      porteeModifiable: false,
       niveauApprentissage: 5, raceId: humain.id, zoneId: zoneCase.id,
     },
   });
 
   await prisma.sort.upsert({
-    where: { id: 35 }, update: {},
+    where: { id: 35 }, update: { porteeModifiable: false },
     create: {
       nom: 'Invoquer Esprit', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
       coutPA: 4, porteeMin: 1, porteeMax: 3, ligneDeVue: true,
       degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
       chanceCritBase: 0, cooldown: 5,
       estInvocation: true, invocationTemplateId: espritLumiere.id,
+      porteeModifiable: false,
       niveauApprentissage: 5, raceId: elfe.id, zoneId: zoneCase.id,
     },
   });
 
   await prisma.sort.upsert({
-    where: { id: 36 }, update: {},
+    where: { id: 36 }, update: { porteeModifiable: false },
     create: {
       nom: 'Invoquer Gardien', type: SortType.SORT, statUtilisee: StatType.FORCE,
       coutPA: 5, porteeMin: 1, porteeMax: 2, ligneDeVue: true,
       degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
       chanceCritBase: 0, cooldown: 5,
       estInvocation: true, invocationTemplateId: gardienPierre.id,
+      porteeModifiable: false,
       niveauApprentissage: 5, raceId: nain.id, zoneId: zoneCase.id,
     },
   });
 
-  console.log('Created 3 invocation race spells (IDs 34-36)');
+  console.log('Created 3 invocation race spells (IDs 34-36, porteeModifiable: false)');
+
+  // --- BOUCLIERS (IDs 37-39) — un par race, niv 7 ---
+  // 37: Bouclier de roc (Nain) — pose un bouclier FORCE sur le lanceur
+  await prisma.sort.upsert({
+    where: { id: 37 }, update: {},
+    create: {
+      nom: 'Bouclier de roc', type: SortType.SORT, statUtilisee: StatType.FORCE,
+      coutPA: 3, porteeMin: 0, porteeMax: 0, ligneDeVue: false,
+      degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
+      chanceCritBase: 0, cooldown: 4, porteeModifiable: false,
+      niveauApprentissage: 7, raceId: nain.id, zoneId: zoneCase.id,
+    },
+  });
+
+  // 38: Bouclier de lumière (Elfe) — bouclier arcanique sur une cible alliée (portée 3)
+  await prisma.sort.upsert({
+    where: { id: 38 }, update: {},
+    create: {
+      nom: 'Bouclier de lumière', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 3, porteeMin: 0, porteeMax: 3, ligneDeVue: true,
+      degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
+      chanceCritBase: 0, cooldown: 3,
+      niveauApprentissage: 7, raceId: elfe.id, zoneId: zoneCase.id,
+    },
+  });
+
+  // 39: Garde du corps (Humain) — bouclier FORCE sur une cible alliée (portée 2)
+  await prisma.sort.upsert({
+    where: { id: 39 }, update: {},
+    create: {
+      nom: 'Garde du corps', type: SortType.SORT, statUtilisee: StatType.FORCE,
+      coutPA: 3, porteeMin: 0, porteeMax: 2, ligneDeVue: true,
+      degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
+      chanceCritBase: 0, cooldown: 3,
+      niveauApprentissage: 7, raceId: humain.id, zoneId: zoneCase.id,
+    },
+  });
+
+  console.log('Created 3 bouclier spells (IDs 37-39)');
+
+  // --- GLYPHE (ID 40) — Elfe niv 8, dégâts INT au sol ---
+  // 40: Marque ardente (Elfe) — pose un glyphe pendant 3 tours, dégâts INTELLIGENCE
+  await prisma.sort.upsert({
+    where: { id: 40 }, update: {},
+    create: {
+      nom: 'Marque ardente', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
+      coutPA: 4, porteeMin: 1, porteeMax: 5, ligneDeVue: true,
+      degatsMin: 12, degatsMax: 20, degatsCritMin: 0, degatsCritMax: 0,
+      chanceCritBase: 0, cooldown: 3,
+      estGlyphe: true, poseDuree: 3,
+      niveauApprentissage: 8, raceId: elfe.id, zoneId: zoneCase.id,
+    },
+  });
+
+  // --- PIÈGE (ID 41) — Nain niv 8, dégâts FORCE + Enracinement ---
+  // 41: Piège à ours (Nain) — pose un piège invisible pendant 5 tours, dégâts FORCE + enracinement
+  await prisma.sort.upsert({
+    where: { id: 41 }, update: {},
+    create: {
+      nom: 'Piège à ours', type: SortType.SORT, statUtilisee: StatType.FORCE,
+      coutPA: 3, porteeMin: 1, porteeMax: 3, ligneDeVue: false,
+      degatsMin: 15, degatsMax: 25, degatsCritMin: 0, degatsCritMax: 0,
+      chanceCritBase: 0, cooldown: 2,
+      estPiege: true, poseDuree: 5,
+      niveauApprentissage: 8, raceId: nain.id, zoneId: zoneCroix.id,
+    },
+  });
+
+  console.log('Created 2 zone spells: glyphe (40) + piège (41)');
+
+  // SortEffets pour les nouveaux sorts (après leur création)
+  // Bouclier de roc (37) → Bouclier de force (15) sur le lanceur
+  await prisma.sortEffet.upsert({
+    where: { sortId_effetId: { sortId: 37, effetId: 15 } }, update: {},
+    create: { sortId: 37, effetId: 15, chanceDeclenchement: 1.0, surCible: false },
+  });
+  // Bouclier de lumière (38) → Bouclier arcanique (16) sur la cible
+  await prisma.sortEffet.upsert({
+    where: { sortId_effetId: { sortId: 38, effetId: 16 } }, update: {},
+    create: { sortId: 38, effetId: 16, chanceDeclenchement: 1.0, surCible: true },
+  });
+  // Garde du corps (39) → Bouclier de force (15) sur la cible
+  await prisma.sortEffet.upsert({
+    where: { sortId_effetId: { sortId: 39, effetId: 15 } }, update: {},
+    create: { sortId: 39, effetId: 15, chanceDeclenchement: 1.0, surCible: true },
+  });
+  // Piège à ours (41) → Enracinement (11) sur la cible déclenchante
+  await prisma.sortEffet.upsert({
+    where: { sortId_effetId: { sortId: 41, effetId: 11 } }, update: {},
+    create: { sortId: 41, effetId: 11, chanceDeclenchement: 1.0, surCible: true },
+  });
+  console.log('Created sort-effet links for new spells (boucliers + piège)');
 
   // ==================== MAPS (10) ====================
   const oreeForet = await prisma.map.upsert({
@@ -1059,7 +1159,7 @@ async function main() {
     create: {
       nom: 'Épée en fer', slot: SlotType.ARME,
       bonusForce: 10, bonusDexterite: 5, niveauMinimum: 1, bonusCritique: 5,
-      degatsMin: 12, degatsMax: 20, degatsCritMin: 30, degatsCritMax: 40,
+      degatsMin: 12, degatsMax: 20,
       chanceCritBase: 0.05, coutPA: 3, porteeMin: 1, porteeMax: 1,
       ligneDeVue: true, zoneId: zoneCase.id, statUtilisee: StatType.FORCE, cooldown: 0,
     },
@@ -1070,7 +1170,7 @@ async function main() {
     create: {
       nom: 'Bâton de mage', slot: SlotType.ARME,
       bonusIntelligence: 15, bonusChance: 5, niveauMinimum: 1, bonusCritique: 3,
-      degatsMin: 10, degatsMax: 18, degatsCritMin: 25, degatsCritMax: 35,
+      degatsMin: 10, degatsMax: 18,
       chanceCritBase: 0.08, coutPA: 3, porteeMin: 1, porteeMax: 2,
       ligneDeVue: true, zoneId: zoneCase.id, statUtilisee: StatType.INTELLIGENCE, cooldown: 0,
     },
@@ -1138,7 +1238,7 @@ async function main() {
     create: {
       nom: 'Marteau vampirique', slot: SlotType.ARME,
       bonusForce: 12, bonusVie: 5, niveauMinimum: 7,
-      degatsMin: 15, degatsMax: 25, degatsCritMin: 25, degatsCritMax: 40,
+      degatsMin: 15, degatsMax: 25,
       chanceCritBase: 0.08, bonusCrit: 10,
       coutPA: 4, porteeMin: 1, porteeMax: 1,
       ligneDeVue: true, zoneId: zoneCase.id, statUtilisee: StatType.FORCE, cooldown: 0,
@@ -1155,7 +1255,19 @@ async function main() {
     create: { equipementId: 10, ordre: 2, degatsMin: 5, degatsMax: 10, statUtilisee: StatType.FORCE, estVolDeVie: true },
   });
 
-  console.log('Created 10 equipment items');
+  // Damage lines for Épée en fer (equipement 1)
+  await prisma.ligneDegatsArme.upsert({
+    where: { id: 3 }, update: {},
+    create: { equipementId: 1, ordre: 1, degatsMin: 12, degatsMax: 20, statUtilisee: StatType.FORCE },
+  });
+
+  // Damage lines for Bâton de mage (equipement 2)
+  await prisma.ligneDegatsArme.upsert({
+    where: { id: 4 }, update: {},
+    create: { equipementId: 2, ordre: 1, degatsMin: 10, degatsMax: 18, statUtilisee: StatType.INTELLIGENCE },
+  });
+
+  console.log('Created 10 equipment items + damage lines for all weapons');
 
   // ==================== PANOPLIES ====================
   const panoplieGuerrier = await prisma.panoplie.upsert({

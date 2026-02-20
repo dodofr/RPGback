@@ -5,12 +5,11 @@ Faire tout les test front pour voir les comportement
 ameliorer les pages 
 passer au graphisme
 
+
 Voir pour mettre des pnj
 
 Page du personnage
 gerer la suppression des ressources, si je clique sur supprimer laine alors ca supprime toute les laines, il faudrait choisir un nombre
 Passe egalement le poid que peuvent porter les personnages a 2000 au lieu de 100
 
-gestion PO et nouveaux sorts
-mettre en place des sorts avec ligne de vue modifiable. par exemple un sort a 1PO pour gagner en po grace aux equipements ou a un buff voir en perdre si l'equipement en retire ou si debuff. une arme a toujours une po non modifiable
-voir pour mettre en place des pieges et des glyphe. a voir comment
+A l'air ok pour piege, bouclier et glyphe. a tester avec le poison et le cumul des buff

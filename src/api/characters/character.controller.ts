@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { characterService } from '../../services/character.service';
+import { spellService } from '../../services/spell.service';
+import prisma from '../../config/database';
 
 const createCharacterSchema = z.object({
   nom: z.string().min(2).max(50),
@@ -122,6 +124,25 @@ export class CharacterController {
         res.status(404).json({ error: error.message });
         return;
       }
+      next(error);
+    }
+  }
+
+  async syncSpells(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      const personnage = await prisma.personnage.findUnique({ where: { id } });
+      if (!personnage) {
+        res.status(404).json({ error: 'Character not found' });
+        return;
+      }
+      const newSpells = await spellService.learnSpellsForLevel(id, personnage.niveau);
+      res.json({ message: `${newSpells.length} nouveau(x) sort(s) appris`, sorts: newSpells });
+    } catch (error) {
       next(error);
     }
   }

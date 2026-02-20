@@ -82,7 +82,7 @@ export async function getStatsWithEffects(
 
   // Apply each active effect (skip non-stat effects — they don't modify stats)
   for (const effect of activeEffects) {
-    if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON') continue;
+    if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON' || effect.type === 'BOUCLIER') continue;
     const statKey = statTypeToKey(effect.statCiblee);
     if (!statKey || !(statKey in modifiedStats)) continue; // Skip PA/PM/PO — handled by getResourceModifiers
     if (statKey && statKey in modifiedStats) {
@@ -98,13 +98,16 @@ export async function getStatsWithEffects(
 }
 
 /**
- * Apply an effect to an entity
+ * Apply an effect to an entity.
+ * If the effect is cumulable, always creates a new EffetActif instance.
+ * Otherwise, refreshes duration of the existing instance.
  */
 export async function applyEffect(
   combatId: number,
   entiteId: number,
   effetId: number,
-  lanceurId?: number
+  lanceurId?: number,
+  valeurCourante?: number
 ): Promise<void> {
   const effet = await prisma.effet.findUnique({
     where: { id: effetId },
@@ -114,23 +117,8 @@ export async function applyEffect(
     throw new Error(`Effect ${effetId} not found`);
   }
 
-  // Check if effect already exists on this entity
-  const existingEffect = await prisma.effetActif.findFirst({
-    where: {
-      combatId,
-      entiteId,
-      effetId,
-    },
-  });
-
-  if (existingEffect) {
-    // Refresh duration if effect already exists
-    await prisma.effetActif.update({
-      where: { id: existingEffect.id },
-      data: { toursRestants: effet.duree, lanceurId: lanceurId ?? existingEffect.lanceurId },
-    });
-  } else {
-    // Create new active effect
+  if (effet.cumulable) {
+    // Cumulable: always create a new instance (e.g. poison from multiple sources)
     await prisma.effetActif.create({
       data: {
         combatId,
@@ -138,9 +126,90 @@ export async function applyEffect(
         effetId,
         toursRestants: effet.duree,
         lanceurId: lanceurId ?? null,
+        valeurCourante: valeurCourante ?? null,
       },
     });
+  } else {
+    // Non-cumulable: refresh duration if already active, else create
+    const existingEffect = await prisma.effetActif.findFirst({
+      where: { combatId, entiteId, effetId },
+    });
+
+    if (existingEffect) {
+      await prisma.effetActif.update({
+        where: { id: existingEffect.id },
+        data: {
+          toursRestants: effet.duree,
+          lanceurId: lanceurId ?? existingEffect.lanceurId,
+          valeurCourante: valeurCourante ?? existingEffect.valeurCourante,
+        },
+      });
+    } else {
+      await prisma.effetActif.create({
+        data: {
+          combatId,
+          entiteId,
+          effetId,
+          toursRestants: effet.duree,
+          lanceurId: lanceurId ?? null,
+          valeurCourante: valeurCourante ?? null,
+        },
+      });
+    }
   }
+}
+
+/**
+ * Apply a BOUCLIER effect: calculates shield value from caster stats and stores it as valeurCourante.
+ * The shield reduces damage from a specific stat (effet.statCiblee) for effet.duree turns.
+ */
+export async function applyShieldEffect(
+  combatId: number,
+  targetId: number,
+  effetId: number,
+  lanceurId: number,
+  casterStats: { force: number; intelligence: number; dexterite: number; agilite: number; vie: number; chance: number }
+): Promise<number> {
+  const effet = await prisma.effet.findUnique({ where: { id: effetId } });
+  if (!effet) throw new Error(`Effect ${effetId} not found`);
+
+  const { getStatValue, calculateStatMultiplier } = await import('../../utils/formulas');
+  const { randomInt } = await import('../../utils/random');
+
+  const statValue = getStatValue(casterStats, effet.statCiblee as any);
+  const multiplier = calculateStatMultiplier(statValue);
+
+  const valMin = effet.valeurMin ?? effet.valeur;
+  const valMax = effet.valeur;
+  const baseValue = randomInt(Math.min(valMin, valMax), Math.max(valMin, valMax));
+  const calculatedValue = Math.floor(baseValue * multiplier);
+
+  await applyEffect(combatId, targetId, effetId, lanceurId, calculatedValue);
+  return calculatedValue;
+}
+
+/**
+ * Calculate total shield reduction against a specific stat attack for a target entity.
+ * Returns the total damage to absorb (sum of all active BOUCLIER effects matching the attack stat).
+ */
+export async function calculateShieldReduction(
+  combatId: number,
+  targetId: number,
+  statUtilisee: string
+): Promise<number> {
+  const boucliers = await prisma.effetActif.findMany({
+    where: { combatId, entiteId: targetId },
+    include: { effet: true },
+  });
+
+  let totalReduction = 0;
+  for (const b of boucliers) {
+    if (b.effet.type !== 'BOUCLIER') continue;
+    // Use pre-calculated value if available, otherwise use effet.valeur
+    totalReduction += b.valeurCourante ?? b.effet.valeur;
+  }
+
+  return totalReduction;
 }
 
 /**
@@ -343,6 +412,28 @@ export async function applySpellEffects(
       continue;
     }
 
+    if (sortEffet.effet.type === 'BOUCLIER') {
+      // BOUCLIER: needs caster stats to compute shield value at cast time
+      const caster = await prisma.combatEntite.findUnique({ where: { id: casterId } });
+      if (!caster) continue;
+      const casterStats = {
+        force: caster.force, intelligence: caster.intelligence, dexterite: caster.dexterite,
+        agilite: caster.agilite, vie: caster.vie, chance: caster.chance,
+      };
+
+      const targets = sortEffet.surCible ? targetIds : [casterId];
+      for (const targetId of targets) {
+        const calculatedValue = await applyShieldEffect(combatId, targetId, sortEffet.effetId, casterId, casterStats);
+        appliedEffects.push({
+          entiteId: targetId,
+          effetId: sortEffet.effetId,
+          effetNom: `${sortEffet.effet.nom} (${calculatedValue} pts)`,
+          duree: sortEffet.effet.duree,
+        });
+      }
+      continue;
+    }
+
     if (sortEffet.surCible) {
       // Apply to all targets
       for (const targetId of targetIds) {
@@ -418,7 +509,7 @@ export async function getResourceModifiers(
   let critiqueModifier = 0;
 
   for (const effect of activeEffects) {
-    if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON') continue;
+    if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON' || effect.type === 'BOUCLIER') continue;
     if (effect.statCiblee === 'PA') paModifier += effect.valeur;
     else if (effect.statCiblee === 'PM') pmModifier += effect.valeur;
     else if (effect.statCiblee === 'PO') poModifier += effect.valeur;
