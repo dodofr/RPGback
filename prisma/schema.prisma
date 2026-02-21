@@ -287,8 +287,8 @@ model Map {
   region          Region          @relation(fields: [regionId], references: [id])
   type            MapType
   combatMode      CombatMode
-  largeur         Int
-  hauteur         Int
+  largeur         Int             @default(16)
+  hauteur         Int             @default(18)
   tauxRencontre   Float           @default(0.2)
   worldX          Int?
   worldY          Int?
@@ -311,7 +311,8 @@ model Map {
   connectionsTo   MapConnection[] @relation("ToMap")
   groupes         Groupe[]
   donjonSalles    DonjonSalle[]
-  grilles         GrilleCombat[]
+  cases           MapCase[]
+  spawns          MapSpawn[]
 }
 
 model MapConnection {
@@ -428,7 +429,7 @@ model Personnage {
   vie                    Int
   chance                 Int
   or                     Int                @default(0)
-  poidsMaxInventaire     Int                @default(100)
+  poidsMaxInventaire     Int                @default(2000)
   joueurId               Int
   joueur                 Joueur             @relation(fields: [joueurId], references: [id])
   raceId                 Int
@@ -601,44 +602,32 @@ model CombatLog {
   @@index([combatId])
 }
 
-// ==================== GRILLES DE COMBAT ====================
+// ==================== GRILLES DE COMBAT (liées aux Maps) ====================
 
-model GrilleCombat {
-  id        Int            @id @default(autoincrement())
-  nom       String
-  mapId     Int
-  map       Map            @relation(fields: [mapId], references: [id])
-  largeur   Int
-  hauteur   Int
-  cases     GrilleCase[]
-  spawns    GrilleSpawn[]
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-}
-
-model GrilleCase {
-  id                Int           @id @default(autoincrement())
-  grilleId          Int
-  grille            GrilleCombat  @relation(fields: [grilleId], references: [id], onDelete: Cascade)
+model MapCase {
+  id                Int     @id @default(autoincrement())
+  mapId             Int
+  map               Map     @relation(fields: [mapId], references: [id], onDelete: Cascade)
   x                 Int
   y                 Int
-  bloqueDeplacement Boolean       @default(false)
-  bloqueLigneDeVue  Boolean       @default(false)
+  bloqueDeplacement Boolean @default(false)
+  bloqueLigneDeVue  Boolean @default(false)
+  estExclue         Boolean @default(false)
 
-  @@unique([grilleId, x, y])
+  @@unique([mapId, x, y])
 }
 
-model GrilleSpawn {
-  id        Int           @id @default(autoincrement())
-  grilleId  Int
-  grille    GrilleCombat  @relation(fields: [grilleId], references: [id], onDelete: Cascade)
-  x         Int
-  y         Int
-  equipe    Int           // 0 = joueurs, 1 = ennemis
-  ordre     Int           // 1-8
+model MapSpawn {
+  id     Int @id @default(autoincrement())
+  mapId  Int
+  map    Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  x      Int
+  y      Int
+  equipe Int // 0 = joueurs, 1 = ennemis
+  ordre  Int // 1-8
 
-  @@unique([grilleId, equipe, ordre])
-  @@unique([grilleId, x, y])
+  @@unique([mapId, equipe, ordre])
+  @@unique([mapId, x, y])
 }
 
 // ==================== INVENTAIRE & ÉCONOMIE ====================

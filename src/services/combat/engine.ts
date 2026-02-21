@@ -266,6 +266,8 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       degatsMaxFinal: z.degatsMaxFinal,
       statUtilisee: z.statUtilisee,
       effetId: z.effetId,
+      zoneTaille: z.zoneTaille,
+      zoneType: z.zoneType,
     })),
   };
 }

@@ -8,7 +8,6 @@ export class MapService {
     return prisma.map.findMany({
       include: {
         region: true,
-        _count: { select: { grilles: true } },
       },
       orderBy: { id: 'asc' },
     });
@@ -38,16 +37,6 @@ export class MapService {
               select: { id: true, nom: true, description: true, niveauMin: true, niveauMax: true },
             },
           },
-        },
-        grilles: {
-          select: {
-            id: true,
-            nom: true,
-            largeur: true,
-            hauteur: true,
-            _count: { select: { cases: true, spawns: true } },
-          },
-          orderBy: { id: 'asc' },
         },
       },
     });
@@ -101,7 +90,7 @@ export class MapService {
     // Delete related data
     await prisma.mapConnection.deleteMany({ where: { OR: [{ fromMapId: id }, { toMapId: id }] } });
     await prisma.groupeEnnemi.deleteMany({ where: { mapId: id } });
-    await prisma.grilleCombat.deleteMany({ where: { mapId: id } });
+    // MapCase and MapSpawn are deleted via Cascade
     // Nullify directional references
     await prisma.map.updateMany({ where: { nordMapId: id }, data: { nordMapId: null } });
     await prisma.map.updateMany({ where: { sudMapId: id }, data: { sudMapId: null } });
@@ -185,7 +174,7 @@ export class MapService {
 
       // Return all maps
       return tx.map.findMany({
-        include: { region: true, _count: { select: { grilles: true } } },
+        include: { region: true },
         orderBy: { id: 'asc' },
       });
     });

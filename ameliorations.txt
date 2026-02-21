@@ -8,8 +8,8 @@ passer au graphisme
 
 Voir pour mettre des pnj
 
-Page du personnage
-gerer la suppression des ressources, si je clique sur supprimer laine alors ca supprime toute les laines, il faudrait choisir un nombre
-Passe egalement le poid que peuvent porter les personnages a 2000 au lieu de 100
-
+verifier arme et sort
 A l'air ok pour piege, bouclier et glyphe. a tester avec le poison et le cumul des buff
+
+
+

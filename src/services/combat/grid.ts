@@ -7,16 +7,31 @@ export interface CombatCaseState {
   bloqueLigneDeVue: boolean;
 }
 
+export interface MapCaseRaw {
+  x: number;
+  y: number;
+  bloqueDeplacement: boolean;
+  bloqueLigneDeVue: boolean;
+  estExclue: boolean;
+}
+
 /**
- * Load a grid template's obstacles into a combat instance
+ * Load map cases (obstacles + excluded zones) into a combat instance.
+ * Cases with estExclue=true are treated as fully blocking (movement + LOS).
  */
 export async function loadGridTemplate(
   combatId: number,
-  grille: {
-    cases: { x: number; y: number; bloqueDeplacement: boolean; bloqueLigneDeVue: boolean }[];
-  }
+  mapCases: MapCaseRaw[]
 ): Promise<CombatCaseState[]> {
-  const obstacles = grille.cases.filter(c => c.bloqueDeplacement || c.bloqueLigneDeVue);
+  // Normalize: excluded cases become fully blocking
+  const obstacles = mapCases
+    .filter(c => c.bloqueDeplacement || c.bloqueLigneDeVue || c.estExclue)
+    .map(c => ({
+      x: c.x,
+      y: c.y,
+      bloqueDeplacement: c.estExclue ? true : c.bloqueDeplacement,
+      bloqueLigneDeVue: c.estExclue ? true : c.bloqueLigneDeVue,
+    }));
 
   if (obstacles.length > 0) {
     await prisma.combatCase.createMany({

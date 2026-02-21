@@ -4,7 +4,6 @@ import prisma from '../../config/database';
 import { mapService } from '../../services/map.service';
 import { regionService } from '../../services/region.service';
 import { monstreService } from '../../services/monstre.service';
-import { grilleService } from '../../services/grille.service';
 
 // Validation schemas
 const createMapSchema = z.object({
@@ -262,25 +261,82 @@ export class MapController {
     }
   }
 
-  // ==================== MAP GRILLES ====================
+  // ==================== MAP GRID (cases + spawns) ====================
 
-  async getMapGrilles(req: Request, res: Response, next: NextFunction) {
+  async getMapGrid(req: Request, res: Response, next: NextFunction) {
     try {
       const mapId = parseInt(req.params.id, 10);
-      if (isNaN(mapId)) {
-        res.status(400).json({ error: 'Invalid map ID' });
-        return;
-      }
-
-      const map = await prisma.map.findUnique({ where: { id: mapId } });
-      if (!map) {
-        res.status(404).json({ error: 'Map not found' });
-        return;
-      }
-
-      const grilles = await grilleService.findByMapId(mapId);
-      res.json(grilles);
+      if (isNaN(mapId)) { res.status(400).json({ error: 'Invalid map ID' }); return; }
+      const map = await prisma.map.findUnique({
+        where: { id: mapId },
+        include: {
+          cases: true,
+          spawns: { orderBy: [{ equipe: 'asc' }, { ordre: 'asc' }] },
+        },
+      });
+      if (!map) { res.status(404).json({ error: 'Map not found' }); return; }
+      res.json({ cases: map.cases, spawns: map.spawns });
     } catch (error) {
+      next(error);
+    }
+  }
+
+  async setMapCases(req: Request, res: Response, next: NextFunction) {
+    try {
+      const mapId = parseInt(req.params.id, 10);
+      if (isNaN(mapId)) { res.status(400).json({ error: 'Invalid map ID' }); return; }
+      const schema = z.object({
+        cases: z.array(z.object({
+          x: z.number().int().min(0),
+          y: z.number().int().min(0),
+          bloqueDeplacement: z.boolean().default(false),
+          bloqueLigneDeVue: z.boolean().default(false),
+          estExclue: z.boolean().default(false),
+        })),
+      });
+      const { cases } = schema.parse(req.body);
+      const map = await prisma.map.findUnique({ where: { id: mapId } });
+      if (!map) { res.status(404).json({ error: 'Map not found' }); return; }
+      await prisma.mapCase.deleteMany({ where: { mapId } });
+      if (cases.length > 0) {
+        await prisma.mapCase.createMany({ data: cases.map(c => ({ ...c, mapId })) });
+      }
+      const updated = await prisma.mapCase.findMany({ where: { mapId } });
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+      next(error);
+    }
+  }
+
+  async setMapSpawns(req: Request, res: Response, next: NextFunction) {
+    try {
+      const mapId = parseInt(req.params.id, 10);
+      if (isNaN(mapId)) { res.status(400).json({ error: 'Invalid map ID' }); return; }
+      const schema = z.object({
+        spawns: z.array(z.object({
+          x: z.number().int().min(0),
+          y: z.number().int().min(0),
+          equipe: z.number().int().min(0).max(1),
+          ordre: z.number().int().min(1).max(8),
+        })),
+      });
+      const { spawns } = schema.parse(req.body);
+      const playerSpawns = spawns.filter(s => s.equipe === 0);
+      const enemySpawns = spawns.filter(s => s.equipe === 1);
+      if (playerSpawns.length !== 8) { res.status(400).json({ error: 'Exactly 8 player spawns (equipe=0) required' }); return; }
+      if (enemySpawns.length !== 8) { res.status(400).json({ error: 'Exactly 8 enemy spawns (equipe=1) required' }); return; }
+      const map = await prisma.map.findUnique({ where: { id: mapId } });
+      if (!map) { res.status(404).json({ error: 'Map not found' }); return; }
+      await prisma.mapSpawn.deleteMany({ where: { mapId } });
+      await prisma.mapSpawn.createMany({ data: spawns.map(s => ({ ...s, mapId })) });
+      const updated = await prisma.mapSpawn.findMany({
+        where: { mapId },
+        orderBy: [{ equipe: 'asc' }, { ordre: 'asc' }],
+      });
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
       next(error);
     }
   }

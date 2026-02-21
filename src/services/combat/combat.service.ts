@@ -2,7 +2,6 @@ import prisma from '../../config/database';
 import { CombatStatus } from '@prisma/client';
 import { CreateCombatRequest, CharacterEquipment, ArmeData, LigneDegats } from '../../types';
 import { characterService } from '../character.service';
-import { grilleService } from '../grille.service';
 import { initializeInitiative, getCombatState, executeAction, moveEntity, endTurn, fleeCombat } from './engine';
 import { loadGridTemplate } from './grid';
 import { addLog } from './combatLog';
@@ -33,14 +32,21 @@ export class CombatService {
       throw new Error('Group has no characters');
     }
 
-    // Get a random grid template for this map
-    const grille = await grilleService.getRandomGridForMap(data.mapId);
+    // Get map with cases and spawns
+    const map = await prisma.map.findUnique({
+      where: { id: data.mapId },
+      include: {
+        cases: true,
+        spawns: { orderBy: [{ equipe: 'asc' }, { ordre: 'asc' }] },
+      },
+    });
+    if (!map) throw new Error('Map not found');
 
     // Get spawn positions sorted by ordre
-    const playerSpawns = grille.spawns
+    const playerSpawns = map.spawns
       .filter(s => s.equipe === 0)
       .sort((a, b) => a.ordre - b.ordre);
-    const enemySpawns = grille.spawns
+    const enemySpawns = map.spawns
       .filter(s => s.equipe === 1)
       .sort((a, b) => a.ordre - b.ordre);
 
@@ -56,8 +62,8 @@ export class CombatService {
     const combat = await prisma.combat.create({
       data: {
         status: CombatStatus.EN_COURS,
-        grilleLargeur: grille.largeur,
-        grilleHauteur: grille.hauteur,
+        grilleLargeur: map.largeur,
+        grilleHauteur: map.hauteur,
         groupeId: data.groupeId,
       },
     });
@@ -198,8 +204,8 @@ export class CombatService {
       });
     }
 
-    // Load grid template obstacles into CombatCase
-    await loadGridTemplate(combat.id, grille);
+    // Load map cases (obstacles + excluded) into CombatCase
+    await loadGridTemplate(combat.id, map.cases);
 
     // Initialize initiative order
     await initializeInitiative(combat.id);

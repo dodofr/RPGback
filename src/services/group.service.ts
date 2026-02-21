@@ -154,6 +154,19 @@ export class GroupService {
       if (x < 0 || x >= group.map.largeur || y < 0 || y >= group.map.hauteur) {
         throw new Error('Position out of map bounds');
       }
+
+      // Vérifier si la case est bloquée (obstacle ou zone exclue)
+      const blockedCase = await prisma.mapCase.findFirst({
+        where: {
+          mapId: group.mapId!,
+          x,
+          y,
+          OR: [{ bloqueDeplacement: true }, { estExclue: true }],
+        },
+      });
+      if (blockedCase) {
+        throw new Error('Cette case est bloquée');
+      }
     }
 
     // Update position

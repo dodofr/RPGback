@@ -98,6 +98,8 @@ export interface ZonePoseeState {
   degatsMaxFinal: number;
   statUtilisee: string;
   effetId?: number | null;
+  zoneTaille: number;
+  zoneType: string;
 }
 
 export interface CombatState {
