@@ -338,12 +338,6 @@ export class MapService {
       throw new Error('Map not found');
     }
 
-    // Allow engage on DONJON/BOSS maps (dungeon rooms) in addition to MANUEL
-    const isDungeonRoom = map.type === MapType.DONJON || map.type === MapType.BOSS;
-    if (map.combatMode !== CombatMode.MANUEL && !isDungeonRoom) {
-      throw new Error('Cannot manually engage enemies in AUTO mode');
-    }
-
     const groupeEnnemi = await prisma.groupeEnnemi.findUnique({
       where: { id: groupeEnnemiId },
       include: {

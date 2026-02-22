@@ -193,13 +193,13 @@ export interface CombatSpellState {
   cooldown: number;
   cooldownRestant: number;
   estSoin: boolean;
-  estDispel: boolean;
   estInvocation: boolean;
   estVolDeVie: boolean;
   estGlyphe: boolean;
   estPiege: boolean;
   poseDuree?: number | null;
   porteeModifiable: boolean;
+  ligneDirecte: boolean;
   tauxEchec: number;
   zone: { type: string; taille: number; nom: string } | null;
   effets: {

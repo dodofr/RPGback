@@ -89,13 +89,13 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             cooldown: ps.sort.cooldown,
             cooldownRestant: cd ? cd.toursRestants : 0,
             estSoin: ps.sort.estSoin,
-            estDispel: ps.sort.estDispel,
             estInvocation: ps.sort.estInvocation,
             estVolDeVie: ps.sort.estVolDeVie,
             estGlyphe: ps.sort.estGlyphe,
             estPiege: ps.sort.estPiege,
             poseDuree: ps.sort.poseDuree,
             porteeModifiable: ps.sort.porteeModifiable,
+            ligneDirecte: ps.sort.ligneDirecte,
             tauxEchec: ps.sort.tauxEchec,
             zone: ps.sort.zone
               ? { type: ps.sort.zone.type, taille: ps.sort.zone.taille, nom: ps.sort.zone.nom }
@@ -154,13 +154,13 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             cooldown: ms.sort.cooldown,
             cooldownRestant: cd ? cd.toursRestants : 0,
             estSoin: ms.sort.estSoin,
-            estDispel: ms.sort.estDispel,
             estInvocation: ms.sort.estInvocation,
             estVolDeVie: ms.sort.estVolDeVie,
             estGlyphe: ms.sort.estGlyphe,
             estPiege: ms.sort.estPiege,
             poseDuree: ms.sort.poseDuree,
             porteeModifiable: ms.sort.porteeModifiable,
+            ligneDirecte: ms.sort.ligneDirecte,
             tauxEchec: ms.sort.tauxEchec,
             zone: ms.sort.zone
               ? { type: ms.sort.zone.type, taille: ms.sort.zone.taille, nom: ms.sort.zone.nom }
@@ -347,6 +347,7 @@ export async function executeAction(
     porteeMin: number;
     porteeMax: number;
     ligneDeVue: boolean;
+    ligneDirecte?: boolean;
     degatsMin: number;
     degatsMax: number;
     degatsCritMin?: number;
@@ -434,6 +435,7 @@ export async function executeAction(
       porteeMin: spell.porteeMin,
       porteeMax: spell.porteeMax,
       ligneDeVue: spell.ligneDeVue,
+      ligneDirecte: spell.ligneDirecte,
       degatsMin: spell.degatsMin,
       degatsMax: spell.degatsMax,
       degatsCritMin: spell.degatsCritMin,
@@ -448,6 +450,15 @@ export async function executeAction(
   // Check PA cost
   if (attacker.paActuels < attackData.coutPA) {
     return { success: false, message: `Not enough PA (need ${attackData.coutPA}, have ${attacker.paActuels})` };
+  }
+
+  // Check ligne droite (horizontal ou vertical uniquement)
+  if (attackData.ligneDirecte) {
+    const dx = Math.abs(targetX - attacker.positionX);
+    const dy = Math.abs(targetY - attacker.positionY);
+    if (dx !== 0 && dy !== 0) {
+      return { success: false, message: 'Ce sort ne peut être ciblé qu\'en ligne droite (horizontal ou vertical)' };
+    }
   }
 
   // Check range (with PO bonus from equipment + effects, unless porteeModifiable is false)

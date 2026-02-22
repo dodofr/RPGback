@@ -194,7 +194,7 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 
 ### Tables référentielles
 - `Race` - Bonus de stats
-- `Sort` - Sorts avec `degatsCritMin`/`degatsCritMax`, `estSoin`/`estDispel`/`estInvocation`/`estVolDeVie`, `tauxEchec`, `invocationTemplateId`
+- `Sort` - Sorts avec `degatsCritMin`/`degatsCritMax`, `estSoin`/`estInvocation`/`estVolDeVie`, `tauxEchec`, `invocationTemplateId`, `ligneDirecte` (Boolean, ciblage axe strict)
 - `SortEffet` - Liaison sort → effet (`chanceDeclenchement`, `surCible`/`surLanceur`)
 - `Zone` - Types de zones d'effet
 - `Equipement` - Items avec bonus stats. Armes : données d'attaque + `tauxEchec` + `estVolDeVie` + `bonusCrit` (crit global) + `LigneDegatsArme[]` (multi-lignes optionnel)
@@ -239,8 +239,8 @@ type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST'
 - **Ciblage libre** : touche TOUTES entités dans zone (alliés ET ennemis)
 - **tauxEchec** : vérifié après PA déduits. Sort raté = PA perdus. Arme ratée = tour perdu (endTurn)
 - **estSoin** : heal (même formule que dégâts, +PV plafonné à pvMax)
-- **estDispel** : supprime tous effets actifs de la cible
 - **estInvocation** : invoque entité à position libre (0 dégâts)
+- **ligneDirecte** : si `true`, la cible doit être sur le même axe X ou Y que le lanceur (diagonales refusées). Vérifié dans `engine.ts` avant le check de portée. Sort id=6 "Vent tranchant" : `porteeMax: 4, ligneDirecte: true`
 - **estVolDeVie** : après dégâts, le lanceur récupère 50% des dégâts totaux en PV (plafonné pvMax). Sur Sort = flag global, sur arme = par ligne
 
 ### Armes multi-lignes
@@ -436,8 +436,9 @@ Avant de supprimer une ressource, nettoyer les relations :
 ### Ajouter un sort (dans seed.ts)
 - Standard : `raceId, niveauRequis, coutPA, portee, zoneId, degatsMin/Max, cooldown`
 - Soin : `estSoin: true` (degatsMin/Max = montant soin)
-- Dispel : `estDispel: true` (degatsMin/Max à 0)
+- Dispel : via `SortEffet → EffetType.DISPEL` (plus de flag `estDispel` sur Sort)
 - Invocation : `estInvocation: true`, `invocationTemplateId: N`, degats à 0
+- Ligne droite : `ligneDirecte: true` (ciblage axe H/V uniquement)
 - Risqué : `tauxEchec: 0.xx`
 
 ### Modifier l'IA

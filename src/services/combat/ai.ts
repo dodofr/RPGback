@@ -36,7 +36,6 @@ interface SpellInfo {
   degatsMax: number;
   cooldown: number;
   estSoin: boolean;
-  estDispel: boolean;
   tauxEchec: number;
   hasDispelEffect?: boolean;
 }
@@ -115,10 +114,10 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
     }));
   }
 
-  // Separate spells by category (use estDispel OR hasDispelEffect for backward compat)
+  // Separate spells by category
   const healSpells = monsterSpells.filter((s) => s.estSoin);
-  const dispelSpells = monsterSpells.filter((s) => s.estDispel || s.hasDispelEffect);
-  const damageSpells = monsterSpells.filter((s) => !s.estSoin && !s.estDispel && !s.hasDispelEffect);
+  const dispelSpells = monsterSpells.filter((s) => s.hasDispelEffect);
+  const damageSpells = monsterSpells.filter((s) => !s.estSoin && !s.hasDispelEffect);
 
   const ctx: AIContext = {
     combatId,

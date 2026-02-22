@@ -218,6 +218,18 @@ export class MapController {
 
       const data = engageSchema.parse(req.body);
 
+      // Prevent manual engage on AUTO maps (proximity auto-engage is handled by move())
+      const map = await mapService.findById(mapId);
+      if (!map) {
+        res.status(404).json({ error: 'Map not found' });
+        return;
+      }
+      const isDungeonRoom = map.type === 'DONJON' || map.type === 'BOSS';
+      if (map.combatMode !== 'MANUEL' && !isDungeonRoom) {
+        res.status(400).json({ error: 'Cannot manually engage enemies in AUTO mode' });
+        return;
+      }
+
       const combat = await mapService.engageEnemyGroup(mapId, data.groupeEnnemiId, data.groupeId);
 
       res.status(201).json(combat);
@@ -232,7 +244,7 @@ export class MapController {
           res.status(404).json({ error: error.message });
           return;
         }
-        const badRequestErrors = ['Cannot manually engage enemies in AUTO mode', 'Enemy group already defeated'];
+        const badRequestErrors = ['Enemy group already defeated'];
         if (badRequestErrors.includes(error.message)) {
           res.status(400).json({ error: error.message });
           return;

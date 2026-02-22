@@ -128,10 +128,10 @@ async function main() {
   });
 
   await prisma.sort.upsert({
-    where: { id: 6 }, update: {},
+    where: { id: 6 }, update: { porteeMax: 4, ligneDirecte: true },
     create: {
       nom: 'Vent tranchant', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
-      coutPA: 4, porteeMin: 2, porteeMax: 5, ligneDeVue: true,
+      coutPA: 4, porteeMin: 2, porteeMax: 4, ligneDeVue: true, ligneDirecte: true,
       degatsMin: 12, degatsMax: 20, degatsCritMin: 30, degatsCritMax: 40,
       chanceCritBase: 0.05, cooldown: 0,
       niveauApprentissage: 4, raceId: elfe.id, zoneId: zoneLigne.id,
@@ -340,7 +340,7 @@ async function main() {
       nom: 'Purification', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
       coutPA: 3, porteeMin: 1, porteeMax: 5, ligneDeVue: true,
       degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
-      chanceCritBase: 0, cooldown: 2, estDispel: true,
+      chanceCritBase: 0, cooldown: 2,
       niveauApprentissage: 1, raceId: humain.id, zoneId: zoneCase.id,
     },
   });
@@ -351,7 +351,7 @@ async function main() {
       nom: 'Dissipation', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
       coutPA: 3, porteeMin: 1, porteeMax: 5, ligneDeVue: true,
       degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
-      chanceCritBase: 0, cooldown: 2, estDispel: true,
+      chanceCritBase: 0, cooldown: 2,
       niveauApprentissage: 1, raceId: elfe.id, zoneId: zoneCase.id,
     },
   });
@@ -362,7 +362,7 @@ async function main() {
       nom: 'Briseur de sorts', type: SortType.SORT, statUtilisee: StatType.FORCE,
       coutPA: 3, porteeMin: 1, porteeMax: 5, ligneDeVue: true,
       degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
-      chanceCritBase: 0, cooldown: 2, estDispel: true,
+      chanceCritBase: 0, cooldown: 2,
       niveauApprentissage: 1, raceId: nain.id, zoneId: zoneCase.id,
     },
   });

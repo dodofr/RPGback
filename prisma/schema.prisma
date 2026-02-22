@@ -149,7 +149,6 @@ model Sort {
   chanceCritBase      Float            @default(0.01)
   cooldown            Int              @default(0)
   estSoin             Boolean          @default(false)
-  estDispel           Boolean          @default(false)
   tauxEchec           Float            @default(0)
   niveauApprentissage Int              @default(1)
   zoneId              Int?
@@ -162,6 +161,8 @@ model Sort {
   invocationTemplate   MonstreTemplate? @relation("InvocationSort", fields: [invocationTemplateId], references: [id])
   // Portée modifiable par équipement et buffs (false = portée fixe)
   porteeModifiable     Boolean          @default(true)
+  // Ciblage en ligne droite uniquement (horizontal ou vertical)
+  ligneDirecte         Boolean          @default(false)
   // Zones posées au sol
   estGlyphe            Boolean          @default(false)
   estPiege             Boolean          @default(false)

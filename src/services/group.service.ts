@@ -286,8 +286,8 @@ export class GroupService {
       }
     }
 
-    // Auto-spawn enemy groups on MANUEL maps if none exist (skip VILLE/SAFE)
-    if (map.combatMode === CombatMode.MANUEL && map.type !== MapType.VILLE && map.type !== MapType.SAFE && map.groupesEnnemis.length === 0) {
+    // Auto-spawn enemy groups on WILDERNESS maps if all groups are defeated (covers both MANUEL and AUTO)
+    if (map.type === MapType.WILDERNESS && map.groupesEnnemis.filter(g => !g.vaincu).length === 0) {
       await mapService.spawnEnemyGroups(mapId);
     }
 
