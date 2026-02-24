@@ -30,6 +30,7 @@ export class GroupService {
       where: { id },
       include: {
         joueur: true,
+        map: true,
         personnages: {
           include: {
             personnage: {

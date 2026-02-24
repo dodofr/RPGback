@@ -167,6 +167,8 @@ model Sort {
   estGlyphe            Boolean          @default(false)
   estPiege             Boolean          @default(false)
   poseDuree            Int?             // durée en tours de la zone posée (null = permanent)
+  // Téléportation : déplace instantanément le lanceur vers la case ciblée (sans PM, ignore les obstacles de chemin)
+  estTeleportation     Boolean          @default(false)
   personnages         PersonnageSort[]
   cooldowns           SortCooldown[]
   monstres            MonstreSort[]

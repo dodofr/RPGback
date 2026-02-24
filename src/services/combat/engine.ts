@@ -93,6 +93,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             estVolDeVie: ps.sort.estVolDeVie,
             estGlyphe: ps.sort.estGlyphe,
             estPiege: ps.sort.estPiege,
+            estTeleportation: ps.sort.estTeleportation,
             poseDuree: ps.sort.poseDuree,
             porteeModifiable: ps.sort.porteeModifiable,
             ligneDirecte: ps.sort.ligneDirecte,
@@ -158,6 +159,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             estVolDeVie: ms.sort.estVolDeVie,
             estGlyphe: ms.sort.estGlyphe,
             estPiege: ms.sort.estPiege,
+            estTeleportation: ms.sort.estTeleportation,
             poseDuree: ms.sort.poseDuree,
             porteeModifiable: ms.sort.porteeModifiable,
             ligneDirecte: ms.sort.ligneDirecte,
@@ -461,6 +463,19 @@ export async function executeAction(
     }
   }
 
+  // Check destination for teleportation BEFORE PA deduction
+  if (spell?.estTeleportation) {
+    const destBlocked = combat.cases.some(
+      (c) => c.x === targetX && c.y === targetY && c.bloqueDeplacement
+    );
+    const destOccupied = combat.entites.some(
+      (e) => e.pvActuels > 0 && e.id !== entiteId && e.positionX === targetX && e.positionY === targetY
+    );
+    if (destBlocked || destOccupied) {
+      return { success: false, message: 'Cette case est bloquée ou occupée' };
+    }
+  }
+
   // Check range (with PO bonus from equipment + effects, unless porteeModifiable is false)
   const distance = manhattanDistance(attacker.positionX, attacker.positionY, targetX, targetY);
   const poMods = await getResourceModifiers(combatId, entiteId);
@@ -695,6 +710,185 @@ export async function executeAction(
     };
   }
 
+  // ===== TÉLÉPORTATION BRANCH =====
+  if (spell?.estTeleportation) {
+    const oldX = attacker.positionX;
+    const oldY = attacker.positionY;
+
+    // 1. Move caster to destination (no PM cost)
+    await prisma.combatEntite.update({
+      where: { id: entiteId },
+      data: { positionX: targetX, positionY: targetY },
+    });
+
+    // 2. Log teleportation
+    await addLog(combatId, combat.tourActuel, `${attacker.nom} se téléporte en (${targetX},${targetY})`, 'DEPLACEMENT');
+
+    // 3. Trigger traps at landing position
+    await triggerPiegesForEntity(combatId, entiteId, targetX, targetY);
+
+    // 4. AoE at landing point (if zone + damage/effects configured)
+    const hasDamageOrEffects = (spell.degatsMin > 0 || spell.degatsMax > 0) || spell.estVolDeVie;
+    const hasSortEffets = await prisma.sortEffet.count({ where: { sortId: sortId! } });
+
+    const damages: ActionResult['damages'] = [];
+    const entitesMortes: number[] = [];
+    let appliedEffectsTeleport: AppliedEffect[] = [];
+    let totalLifestealTeleport = 0;
+
+    if (spell.zone && (hasDamageOrEffects || hasSortEffets > 0)) {
+      // Use old position as "source" for directional zones (so direction is caster's arrival direction)
+      const affectedCells = getAffectedCells(
+        { x: targetX, y: targetY },
+        { type: spell.zone.type, taille: spell.zone.taille },
+        { width: combat.grilleLargeur, height: combat.grilleHauteur },
+        { x: oldX, y: oldY }
+      );
+
+      // Get all alive entities in zone EXCEPT the caster
+      const allInArea = getEntitiesInArea(affectedCells, combat.entites);
+      const aoeTargets = allInArea.filter((e) => e.id !== entiteId);
+
+      if (aoeTargets.length > 0) {
+        // Apply spell effects (poison, debuff, etc.)
+        const targetIds = aoeTargets.map((t) => t.id);
+        appliedEffectsTeleport = await applySpellEffects(combatId, sortId!, entiteId, targetIds, {
+          gridWidth: combat.grilleLargeur,
+          gridHeight: combat.grilleHauteur,
+          entities: combat.entites.map((e) => ({
+            id: e.id,
+            // Use updated position for caster (already teleported)
+            positionX: e.id === entiteId ? targetX : e.positionX,
+            positionY: e.id === entiteId ? targetY : e.positionY,
+            pvActuels: e.pvActuels,
+          })),
+          blockedCases,
+        });
+
+        if (hasDamageOrEffects) {
+          const attackerBaseStats = {
+            force: attacker.force, intelligence: attacker.intelligence, dexterite: attacker.dexterite,
+            agilite: attacker.agilite, vie: attacker.vie, chance: attacker.chance,
+          };
+          const attackerModifiedStats = await getStatsWithEffects(combatId, entiteId, attackerBaseStats);
+          const attackerStatsWithCrit = { ...attackerModifiedStats, bonusCritique: attacker.bonusCritique + poMods.critiqueModifier };
+
+          const spellData = {
+            degatsMin: spell.degatsMin,
+            degatsMax: spell.degatsMax,
+            degatsCritMin: spell.degatsCritMin,
+            degatsCritMax: spell.degatsCritMax,
+            chanceCritBase: spell.chanceCritBase,
+            statUtilisee: spell.statUtilisee as any,
+          };
+
+          for (const target of aoeTargets) {
+            const aoeDistance = manhattanDistance(target.positionX, target.positionY, targetX, targetY);
+            const aoeMultiplier = calculateAoEReduction(aoeDistance);
+            const damageResult = calculateDamage(spellData, attackerStatsWithCrit);
+            let totalDmg = Math.floor(damageResult.finalDamage * aoeMultiplier);
+
+            // Shield reduction
+            const shieldAbsorb = await calculateShieldReduction(combatId, target.id, spell.statUtilisee);
+            if (shieldAbsorb > 0) {
+              const absorbed = Math.min(shieldAbsorb, totalDmg);
+              totalDmg = Math.max(0, totalDmg - absorbed);
+              await addLog(combatId, combat.tourActuel, `${target.nom} : bouclier absorbe ${absorbed} dégâts`, 'EFFET');
+            }
+
+            const newPV = applyDamage(target.pvActuels, totalDmg);
+            await prisma.combatEntite.update({ where: { id: target.id }, data: { pvActuels: newPV } });
+
+            damages.push({
+              entiteId: target.id,
+              damage: totalDmg,
+              isCritical: damageResult.isCritical,
+              pvRestants: newPV,
+            });
+
+            // Lifesteal
+            if (spell.estVolDeVie && totalDmg > 0) {
+              totalLifestealTeleport += Math.floor(totalDmg / 2);
+            }
+
+            if (isDead(newPV)) {
+              entitesMortes.push(target.id);
+              const killedInvocations = await killInvocationsOf(combatId, target.id);
+              entitesMortes.push(...killedInvocations);
+              const allDeadIds = [target.id, ...killedInvocations];
+              await prisma.effetActif.deleteMany({ where: { combatId, entiteId: { in: allDeadIds } } });
+              for (const deadId of allDeadIds) {
+                await removeEffectsByCaster(combatId, deadId);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Lifesteal for teleport
+    let lifestealResult: ActionResult['lifesteal'] = undefined;
+    if (totalLifestealTeleport > 0) {
+      const currentAttacker = await prisma.combatEntite.findUnique({ where: { id: entiteId } });
+      if (currentAttacker && currentAttacker.pvActuels > 0) {
+        const newPV = Math.min(currentAttacker.pvMax, currentAttacker.pvActuels + totalLifestealTeleport);
+        const actualHeal = newPV - currentAttacker.pvActuels;
+        await prisma.combatEntite.update({ where: { id: entiteId }, data: { pvActuels: newPV } });
+        lifestealResult = { healAmount: actualHeal, pvRestants: newPV };
+      }
+    }
+
+    // Log AoE action
+    if (damages.length > 0) {
+      const dmgParts = damages.map((d) => {
+        const t = combat.entites.find((e) => e.id === d.entiteId);
+        const critStr = d.isCritical ? 'CRITIQUE ! ' : '';
+        return `${critStr}${t?.nom || '?'} subit ${d.damage} dégâts (${d.pvRestants}/${t?.pvMax || '?'} PV)`;
+      });
+      await addLog(combatId, combat.tourActuel, `${attacker.nom} arrive en (${targetX},${targetY}) — ${dmgParts.join(', ')}`, 'ACTION');
+    }
+
+    if (lifestealResult && lifestealResult.healAmount > 0) {
+      await addLog(combatId, combat.tourActuel, `${attacker.nom} vole ${lifestealResult.healAmount} PV (${lifestealResult.pvRestants}/${attacker.pvMax} PV)`, 'ACTION');
+    }
+
+    for (const ef of appliedEffectsTeleport) {
+      const target = combat.entites.find((e) => e.id === ef.entiteId);
+      if (ef.isDispel) {
+        await addLog(combatId, combat.tourActuel, `Dispel ! ${target?.nom || '?'} perd ${ef.removedCount || 0} effet(s)`, 'ACTION');
+      } else if (ef.isPushPull && ef.pushPullResult) {
+        const r = ef.pushPullResult;
+        if (r.moved) {
+          const verb = ef.effetNom.toLowerCase().includes('attir') ? 'attiré' : 'repoussé';
+          await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} est ${verb} de ${r.distanceReelle} case(s) (${r.from.x},${r.from.y}) → (${r.to.x},${r.to.y})`, 'ACTION');
+          await triggerPiegesForEntity(combatId, ef.entiteId, r.to.x, r.to.y);
+        } else {
+          await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} résiste au déplacement`, 'ACTION');
+        }
+      } else {
+        await addLog(combatId, combat.tourActuel, `${target?.nom || '?'}: ${ef.effetNom} (${ef.duree}t)`, 'EFFET');
+      }
+    }
+
+    for (const deadId of entitesMortes) {
+      const dead = combat.entites.find((e) => e.id === deadId);
+      if (dead) await addLog(combatId, combat.tourActuel, `${dead.nom} est mort !`, 'MORT');
+    }
+
+    await checkCombatEnd(combatId);
+
+    return {
+      success: true,
+      message: `Téléportation vers (${targetX}, ${targetY})`,
+      actionType,
+      damages,
+      entiteMorte: entitesMortes.length > 0 ? entitesMortes : undefined,
+      appliedEffects: appliedEffectsTeleport.length > 0 ? appliedEffectsTeleport : undefined,
+      lifesteal: lifestealResult,
+      newPosition: { x: targetX, y: targetY },
+    } as ActionResult & { newPosition: { x: number; y: number } };
+  }
+
   // Get affected cells
   const affectedCells = getAffectedCells(
     { x: targetX, y: targetY },
@@ -786,6 +980,7 @@ export async function executeAction(
         if (r.moved) {
           const verb = ef.effetNom.toLowerCase().includes('attir') ? 'attiré' : 'repoussé';
           await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} est ${verb} de ${r.distanceReelle} case(s) (${r.from.x},${r.from.y}) → (${r.to.x},${r.to.y})`, 'ACTION');
+          await triggerPiegesForEntity(combatId, ef.entiteId, r.to.x, r.to.y);
         } else {
           await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} résiste au déplacement`, 'ACTION');
         }
@@ -1091,6 +1286,15 @@ export async function executeAction(
     const target = combat.entites.find(e => e.id === ef.entiteId);
     if (ef.isDispel) {
       await addLog(combatId, combat.tourActuel, `Dispel ! ${target?.nom || '?'} perd ${ef.removedCount || 0} effet(s)`, 'ACTION');
+    } else if (ef.isPushPull && ef.pushPullResult) {
+      const r = ef.pushPullResult;
+      if (r.moved) {
+        const verb = ef.effetNom.toLowerCase().includes('attir') ? 'attiré' : 'repoussé';
+        await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} est ${verb} de ${r.distanceReelle} case(s) (${r.from.x},${r.from.y}) → (${r.to.x},${r.to.y})`, 'ACTION');
+        await triggerPiegesForEntity(combatId, ef.entiteId, r.to.x, r.to.y);
+      } else {
+        await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} résiste au déplacement`, 'ACTION');
+      }
     } else {
       await addLog(combatId, combat.tourActuel, `${target?.nom || '?'}: ${ef.effetNom} (${ef.duree}t)`, 'EFFET');
     }
@@ -1368,6 +1572,10 @@ export async function fleeCombat(combatId: number): Promise<ActionResult> {
  * Handles dungeon progression automatically
  */
 async function checkCombatEnd(combatId: number): Promise<void> {
+  // Guard: avoid double-processing if combat is already terminated
+  const existing = await prisma.combat.findUnique({ where: { id: combatId }, select: { status: true } });
+  if (!existing || existing.status !== CombatStatus.EN_COURS) return;
+
   const entities = await prisma.combatEntite.findMany({
     where: { combatId },
   });
@@ -1474,7 +1682,8 @@ async function decrementEffects(combatId: number, entiteId?: number): Promise<vo
         });
         const poisons = poisonEffects.filter(e => e.effet.type === 'POISON');
         if (poisons.length > 0) {
-          await addLog(combatId, tour, `${entity.nom} subit ${poisonResult.totalDamage} dégâts de poison (${entity.pvActuels}/${entity.pvMax} PV)`, 'EFFET');
+          const stackSuffix = poisons.length > 1 ? ` [${poisons.length} stacks]` : '';
+          await addLog(combatId, tour, `${entity.nom} subit ${poisonResult.totalDamage} dégâts de poison${stackSuffix} (${entity.pvActuels}/${entity.pvMax} PV)`, 'EFFET');
         }
       }
 

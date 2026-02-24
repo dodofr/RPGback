@@ -487,8 +487,10 @@ async function main() {
   // Boucliers: réduisent les dégâts d'une stat donnée (valeur calculée au cast via stat du lanceur)
   await prisma.effet.upsert({ where: { id: 15 }, update: {}, create: { nom: 'Bouclier de force', type: EffetType.BOUCLIER, statCiblee: StatType.FORCE, valeurMin: 10, valeur: 20, duree: 3 } });
   await prisma.effet.upsert({ where: { id: 16 }, update: {}, create: { nom: 'Bouclier arcanique', type: EffetType.BOUCLIER, statCiblee: StatType.INTELLIGENCE, valeurMin: 8, valeur: 15, duree: 3 } });
+  // Empoisonnement: poison cumulable pour le surgissement toxique
+  await prisma.effet.upsert({ where: { id: 17 }, update: { cumulable: true }, create: { nom: 'Empoisonnement', type: EffetType.POISON, statCiblee: StatType.FORCE, valeurMin: 5, valeur: 8, duree: 3, cumulable: true } });
 
-  console.log('Created 16 effects (dont 2 boucliers, poison cumulable)');
+  console.log('Created 17 effects (dont 2 boucliers, 2 poisons cumulables)');
 
   // ==================== SORT EFFETS ====================
   // Cri de rage (20) → Rage (1) sur lanceur
@@ -742,6 +744,35 @@ async function main() {
 
   console.log('Created 2 zone spells: glyphe (40) + piège (41)');
 
+  // --- TÉLÉPORTATION (IDs 42-43) — sorts neutres (raceId: null), assignables via admin ---
+  // 42: Pas de l'ombre — téléportation pure (déplacement instantané, 3 PA, portée 1-6, sans LDV)
+  await prisma.sort.upsert({
+    where: { id: 42 }, update: { estTeleportation: true, porteeModifiable: false },
+    create: {
+      nom: "Pas de l'ombre", type: SortType.SORT, statUtilisee: StatType.AGILITE,
+      coutPA: 3, porteeMin: 1, porteeMax: 6, ligneDeVue: false,
+      degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
+      chanceCritBase: 0, cooldown: 2,
+      estTeleportation: true, porteeModifiable: false,
+      niveauApprentissage: 1, raceId: null, zoneId: null,
+    },
+  });
+
+  // 43: Surgissement toxique — téléport + AoE CROIX (dégâts AGI + empoisonnement)
+  await prisma.sort.upsert({
+    where: { id: 43 }, update: { estTeleportation: true, porteeModifiable: false },
+    create: {
+      nom: 'Surgissement toxique', type: SortType.SORT, statUtilisee: StatType.AGILITE,
+      coutPA: 4, porteeMin: 1, porteeMax: 4, ligneDeVue: false,
+      degatsMin: 6, degatsMax: 10, degatsCritMin: 12, degatsCritMax: 18,
+      chanceCritBase: 0.05, cooldown: 3,
+      estTeleportation: true, porteeModifiable: false,
+      niveauApprentissage: 5, raceId: null, zoneId: zoneCroix.id,
+    },
+  });
+
+  console.log('Created 2 teleportation spells (IDs 42-43)');
+
   // SortEffets pour les nouveaux sorts (après leur création)
   // Bouclier de roc (37) → Bouclier de force (15) sur le lanceur
   await prisma.sortEffet.upsert({
@@ -763,7 +794,12 @@ async function main() {
     where: { sortId_effetId: { sortId: 41, effetId: 11 } }, update: {},
     create: { sortId: 41, effetId: 11, chanceDeclenchement: 1.0, surCible: true },
   });
-  console.log('Created sort-effet links for new spells (boucliers + piège)');
+  // Surgissement toxique (43) → Empoisonnement (17) sur les cibles de la zone
+  await prisma.sortEffet.upsert({
+    where: { sortId_effetId: { sortId: 43, effetId: 17 } }, update: {},
+    create: { sortId: 43, effetId: 17, chanceDeclenchement: 1.0, surCible: true },
+  });
+  console.log('Created sort-effet links for new spells (boucliers + piège + téléportation)');
 
   // ==================== MAPS ====================
   // IDs réels en BDD : 1=Orée, 2=Sentier, 4=Route, 5=Village, 6-9=salles donjon

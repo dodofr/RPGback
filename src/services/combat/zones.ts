@@ -15,6 +15,16 @@ interface CasterStats {
   chance: number;
 }
 
+function formatEffetLog(effet: { type: string; statCiblee: string | null; valeur: number; valeurMin: number | null; duree: number }): string {
+  if (effet.type === 'POISON') {
+    return ` (${effet.valeurMin ?? effet.valeur}-${effet.valeur} dgts/tour, ${effet.duree} tours)`;
+  }
+  if ((effet.type === 'BUFF' || effet.type === 'DEBUFF') && effet.statCiblee) {
+    return ` (${effet.valeur > 0 ? '+' : ''}${effet.valeur} ${effet.statCiblee}, ${effet.duree} tours)`;
+  }
+  return '';
+}
+
 /**
  * Crée une zone posée au sol (glyphe ou piège) à partir d'un sort.
  * Les dégâts sont pré-calculés avec les stats du poseur au moment du cast.
@@ -99,6 +109,8 @@ async function applyZoneDamage(
     const freshTarget = await prisma.combatEntite.findUnique({ where: { id: target.id } });
     if (!freshTarget || freshTarget.pvActuels <= 0) continue;
 
+    const triggerVerb = freshTarget.id === triggerEntityId ? `déclenche un ${zoneName}` : `est dans la zone d'un ${zoneName}`;
+
     if (zone.degatsMinFinal > 0 || zone.degatsMaxFinal > 0) {
       const damage = randomInt(
         Math.min(zone.degatsMinFinal, zone.degatsMaxFinal),
@@ -113,7 +125,6 @@ async function applyZoneDamage(
       const idx = allEntities.findIndex((e) => e.id === target.id);
       if (idx >= 0) allEntities[idx].pvActuels = newPV;
 
-      const triggerVerb = freshTarget.id === triggerEntityId ? `déclenche un ${zoneName}` : `est dans la zone d'un ${zoneName}`;
       await addLog(
         combatId,
         tour,
@@ -133,16 +144,19 @@ async function applyZoneDamage(
         await applyEffect(combatId, target.id, zone.effetId, poseurEntite?.id);
         const effet = await prisma.effet.findUnique({ where: { id: zone.effetId } });
         if (effet) {
-          await addLog(combatId, tour, `${freshTarget.nom} est affecté par : ${effet.nom}`, 'EFFET');
+          const desc = formatEffetLog(effet);
+          await addLog(combatId, tour, `${freshTarget.nom} est affecté par : ${effet.nom}${desc}`, 'EFFET');
         }
       }
     } else if (zone.effetId) {
-      // No damage but there is a secondary effect
+      // No damage but there is an effect — log the trigger then the effect
+      await addLog(combatId, tour, `${freshTarget.nom} ${triggerVerb} !`, 'EFFET');
       const poseurEntite = await prisma.combatEntite.findUnique({ where: { id: zone.poseurId } });
       await applyEffect(combatId, target.id, zone.effetId, poseurEntite?.id);
       const effet = await prisma.effet.findUnique({ where: { id: zone.effetId } });
       if (effet) {
-        await addLog(combatId, tour, `${freshTarget.nom} est affecté par : ${effet.nom} (${zoneName})`, 'EFFET');
+        const desc = formatEffetLog(effet);
+        await addLog(combatId, tour, `${freshTarget.nom} est affecté par : ${effet.nom}${desc}`, 'EFFET');
       }
     }
   }

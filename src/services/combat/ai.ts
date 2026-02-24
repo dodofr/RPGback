@@ -217,8 +217,8 @@ async function executeEquilibreTurn(ctx: AIContext): Promise<void> {
       }
     }
 
-    // 3. Attack closest enemy
-    const target = findClosestEnemy(updatedEntity, aliveEnemies);
+    // 3. Attack best target (weakest first)
+    const target = findBestTarget(updatedEntity, aliveEnemies);
     if (!target) break;
 
     const usableSpell = await findUsableSpell(
@@ -233,15 +233,17 @@ async function executeEquilibreTurn(ctx: AIContext): Promise<void> {
       continue;
     }
 
-    // 4. Move closer
+    // 4. Move to optimal range (stop when already in range)
     if (currentPM > 0) {
-      const moveResult = await moveTowardsTarget(
+      const optRange = getOptimalRange(ctx.damageSpells);
+      const moveResult = await moveToOptimalRange(
         ctx.combatId, ctx.entiteId,
         { x: currentX, y: currentY },
         { x: target.positionX, y: target.positionY },
         currentPM,
         { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
-        currentCombat.entites, ctx.blockedCases
+        currentCombat.entites, ctx.blockedCases,
+        optRange
       );
       if (moveResult) continue;
     }
@@ -366,8 +368,8 @@ async function executeSoutienTurn(ctx: AIContext): Promise<void> {
       }
     }
 
-    // 3. Attack as last resort
-    const target = findClosestEnemy(updatedEntity, aliveEnemies);
+    // 3. Attack as last resort (weakest target first)
+    const target = findBestTarget(updatedEntity, aliveEnemies);
     if (target) {
       const usableSpell = await findUsableSpell(
         ctx.combatId, ctx.entiteId, ctx.damageSpells,
@@ -378,6 +380,21 @@ async function executeSoutienTurn(ctx: AIContext): Promise<void> {
       if (usableSpell) {
         await executeAction(ctx.combatId, ctx.entiteId, usableSpell.id, target.positionX, target.positionY);
         continue;
+      }
+
+      // Move to optimal range if can't attack yet
+      if (currentPM > 0) {
+        const optRange = getOptimalRange(ctx.damageSpells);
+        const moveResult = await moveToOptimalRange(
+          ctx.combatId, ctx.entiteId,
+          { x: currentX, y: currentY },
+          { x: target.positionX, y: target.positionY },
+          currentPM,
+          { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
+          currentCombat.entites, ctx.blockedCases,
+          optRange
+        );
+        if (moveResult) continue;
       }
     }
 
@@ -406,17 +423,19 @@ async function executeDistanceTurn(ctx: AIContext): Promise<void> {
     const currentX = updatedEntity.positionX;
     const currentY = updatedEntity.positionY;
 
-    const target = findClosestEnemy(updatedEntity, aliveEnemies);
-    if (!target) break;
+    // Closest enemy for retreat decision, best target (weakest) for attack
+    const closestEnemy = findClosestEnemy(updatedEntity, aliveEnemies);
+    if (!closestEnemy) break;
+    const target = findBestTarget(updatedEntity, aliveEnemies) ?? closestEnemy;
 
-    const distToTarget = manhattanDistance(currentX, currentY, target.positionX, target.positionY);
+    const distToClosest = manhattanDistance(currentX, currentY, closestEnemy.positionX, closestEnemy.positionY);
 
-    // 1. If enemy is adjacent (dist <= 1), retreat first
-    if (distToTarget <= 1 && currentPM > 0) {
+    // 1. If closest enemy is adjacent (dist <= 1), retreat first
+    if (distToClosest <= 1 && currentPM > 0) {
       const retreated = await moveAwayFromTarget(
         ctx.combatId, ctx.entiteId,
         { x: currentX, y: currentY },
-        { x: target.positionX, y: target.positionY },
+        { x: closestEnemy.positionX, y: closestEnemy.positionY },
         currentPM,
         { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
         currentCombat.entites, ctx.blockedCases
@@ -424,7 +443,7 @@ async function executeDistanceTurn(ctx: AIContext): Promise<void> {
       if (retreated) continue;
     }
 
-    // 2. Try ranged attack (sorted by longest range first)
+    // 2. Try ranged attack on best target (sorted by longest range first)
     const usableSpell = await findUsableSpell(
       ctx.combatId, ctx.entiteId, rangedSpells,
       { x: currentX, y: currentY },
@@ -437,20 +456,19 @@ async function executeDistanceTurn(ctx: AIContext): Promise<void> {
       continue;
     }
 
-    // 3. Move towards target if out of range, but stop when in max range
+    // 3. Move to optimal range (stop when already in range, back away if too close)
     if (currentPM > 0 && rangedSpells.length > 0) {
-      const bestRange = rangedSpells[0].porteeMax;
-      if (distToTarget > bestRange) {
-        const moveResult = await moveTowardsTarget(
-          ctx.combatId, ctx.entiteId,
-          { x: currentX, y: currentY },
-          { x: target.positionX, y: target.positionY },
-          currentPM,
-          { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
-          currentCombat.entites, ctx.blockedCases
-        );
-        if (moveResult) continue;
-      }
+      const optRange = getOptimalRange(rangedSpells);
+      const moveResult = await moveToOptimalRange(
+        ctx.combatId, ctx.entiteId,
+        { x: currentX, y: currentY },
+        { x: target.positionX, y: target.positionY },
+        currentPM,
+        { width: currentCombat.grilleLargeur, height: currentCombat.grilleHauteur },
+        currentCombat.entites, ctx.blockedCases,
+        optRange
+      );
+      if (moveResult) continue;
     }
 
     break;
@@ -549,6 +567,77 @@ function findClosestEnemy(entity: EntityState, enemies: EntityState[]): EntitySt
   }
 
   return closest;
+}
+
+/**
+ * Find the best target: weakest HP ratio first, distance as tiebreak (if ratio diff < 20%)
+ */
+function findBestTarget(entity: EntityState, enemies: EntityState[]): EntityState | null {
+  if (enemies.length === 0) return null;
+  return [...enemies].sort((a, b) => {
+    const ratioA = a.pvActuels / a.pvMax;
+    const ratioB = b.pvActuels / b.pvMax;
+    if (Math.abs(ratioA - ratioB) > 0.2) return ratioA - ratioB;
+    const distA = manhattanDistance(entity.positionX, entity.positionY, a.positionX, a.positionY);
+    const distB = manhattanDistance(entity.positionX, entity.positionY, b.positionX, b.positionY);
+    return distA - distB;
+  })[0];
+}
+
+/**
+ * Get optimal range from damage spells (based on highest-priority spell)
+ */
+function getOptimalRange(damageSorts: SpellInfo[]): { min: number; max: number } {
+  if (damageSorts.length === 0) return { min: 1, max: 1 };
+  const best = damageSorts[0]; // sorted by priorité ASC
+  return { min: best.porteeMin, max: best.porteeMax };
+}
+
+/**
+ * Find a virtual target position at `distance` cases from `target` in the direction of `from`
+ */
+function findVirtualTarget(from: Position, target: Position, distance: number): Position {
+  const dx = from.x - target.x;
+  const dy = from.y - target.y;
+  if (dx === 0 && dy === 0) return { x: target.x, y: target.y + distance };
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return { x: target.x + Math.sign(dx) * distance, y: target.y };
+  }
+  return { x: target.x, y: target.y + Math.sign(dy) * distance };
+}
+
+/**
+ * Move to optimal attack range:
+ * - Already in [optMin, optMax] → don't move (return false)
+ * - Too close → back away
+ * - Too far → approach virtual position at porteeMax from target
+ */
+async function moveToOptimalRange(
+  combatId: number,
+  entiteId: number,
+  from: Position,
+  target: Position,
+  availablePM: number,
+  grid: { width: number; height: number },
+  entities: EntityState[],
+  blockedCases: CombatCaseState[],
+  optRange: { min: number; max: number }
+): Promise<boolean> {
+  const currentDist = manhattanDistance(from.x, from.y, target.x, target.y);
+
+  // Already in optimal range → don't move
+  if (currentDist >= optRange.min && currentDist <= optRange.max) {
+    return false;
+  }
+
+  // Too close → back away
+  if (currentDist < optRange.min) {
+    return moveAwayFromTarget(combatId, entiteId, from, target, availablePM, grid, entities, blockedCases);
+  }
+
+  // Too far → move towards virtual position at porteeMax from target
+  const virtualTarget = findVirtualTarget(from, target, optRange.max);
+  return moveTowardsTarget(combatId, entiteId, from, virtualTarget, availablePM, grid, entities, blockedCases);
 }
 
 /**

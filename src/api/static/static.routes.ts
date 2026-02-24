@@ -53,6 +53,7 @@ const createSortSchema = z.object({
   estGlyphe: z.boolean().default(false),
   estPiege: z.boolean().default(false),
   poseDuree: z.number().int().min(1).nullable().optional(),
+  estTeleportation: z.boolean().default(false),
 });
 
 const updateSortSchema = createSortSchema.partial();
@@ -108,6 +109,7 @@ const createEffetSchema = z.object({
   valeur: z.number().int(),
   valeurMin: z.number().int().nullable().optional(),
   duree: z.number().int().min(0),
+  cumulable: z.boolean().optional(),
 });
 
 const updateEffetSchema = createEffetSchema.partial();
