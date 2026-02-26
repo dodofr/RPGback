@@ -25,6 +25,9 @@ router.post('/:id/sync-spells', (req, res, next) => characterController.syncSpel
 // POST /api/characters/:id/allocate-stats - Allocate stat points
 router.post('/:id/allocate-stats', (req, res, next) => characterController.allocateStats(req, res, next));
 
+// POST /api/characters/:id/reset-stats - Reset all allocated stat points to base (10)
+router.post('/:id/reset-stats', (req, res, next) => characterController.resetStats(req, res, next));
+
 // GET /api/characters/:id/progression - Get progression info (XP, level, etc.)
 router.get('/:id/progression', (req, res, next) => characterController.getProgression(req, res, next));
 

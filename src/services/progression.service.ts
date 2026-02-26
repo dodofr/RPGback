@@ -208,6 +208,38 @@ export class ProgressionService {
   }
 
   /**
+   * Reset all allocated stat points back to base (10 per stat)
+   */
+  async resetStats(personnageId: number): Promise<{ success: boolean; pointsRecuperes: number }> {
+    const personnage = await prisma.personnage.findUnique({ where: { id: personnageId } });
+    if (!personnage) throw new Error('Character not found');
+
+    const BASE = 10;
+    const pointsRecuperes =
+      (personnage.force - BASE) +
+      (personnage.intelligence - BASE) +
+      (personnage.dexterite - BASE) +
+      (personnage.agilite - BASE) +
+      (personnage.vie - BASE) +
+      (personnage.chance - BASE);
+
+    await prisma.personnage.update({
+      where: { id: personnageId },
+      data: {
+        force: BASE,
+        intelligence: BASE,
+        dexterite: BASE,
+        agilite: BASE,
+        vie: BASE,
+        chance: BASE,
+        pointsStatsDisponibles: personnage.pointsStatsDisponibles + pointsRecuperes,
+      },
+    });
+
+    return { success: true, pointsRecuperes };
+  }
+
+  /**
    * Get progression info for a character
    */
   async getProgressionInfo(personnageId: number) {

@@ -5,7 +5,7 @@ import { calculateAlternatingInitiativeOrder, getNextEntity } from './initiative
 import { calculateDamage, applyDamage, isDead } from './damage';
 import { canMove, calculateMovementCost, hasLineOfSight } from './movement';
 import { getAffectedCells, getEntitiesInArea } from './aoe';
-import { manhattanDistance, getStatValue, calculateStatMultiplier, calculateCritChance, calculateAoEReduction } from '../../utils/formulas';
+import { manhattanDistance, getStatValue, calculateStatMultiplier, calculateCritChance, calculateAoEReduction, applyResistance } from '../../utils/formulas';
 import { progressionService } from '../progression.service';
 import { getCombatCases } from './grid';
 import { spellService } from '../spell.service';
@@ -13,10 +13,44 @@ import { executeAITurn } from './ai';
 import { createInvocation, killInvocationsOf } from './invocation';
 import { donjonService } from '../donjon.service';
 import { dropService } from '../drop.service';
-import { getStatsWithEffects, applySpellEffects, applyShieldEffect, calculateShieldReduction, AppliedEffect, PushPullResult, getResourceModifiers, applyPoisonDamage, removeEffectsByCaster } from './effects';
+import { getStatsWithEffects, applySpellEffects, applyShieldEffect, calculateShieldReduction, AppliedEffect, PushPullResult, getResourceModifiers, applyPoisonDamage, removeEffectsByCaster, getEffectiveResistance } from './effects';
 import { createZone, triggerGlyphesForEntity, triggerPiegesForEntity, decrementZones, cleanupZones } from './zones';
 import { checkProbability, randomInt } from '../../utils/random';
 import { addLog } from './combatLog';
+
+/**
+ * Apply PA/PM effects immediately to entities (on new effect creation only, not refresh)
+ */
+async function applyImmediateResourceEffects(
+  combatId: number,
+  appliedEffects: AppliedEffect[]
+): Promise<void> {
+  const NON_STAT_TYPES = ['DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON', 'BOUCLIER', 'RESISTANCE'];
+  const deltas = new Map<number, { pa: number; pm: number }>();
+
+  for (const ae of appliedEffects) {
+    if (!ae.isNew || !ae.statCiblee || ae.valeur === undefined) continue;
+    if (NON_STAT_TYPES.includes(ae.statCiblee)) continue;
+    if (ae.statCiblee !== 'PA' && ae.statCiblee !== 'PM') continue;
+    if (!deltas.has(ae.entiteId)) deltas.set(ae.entiteId, { pa: 0, pm: 0 });
+    const d = deltas.get(ae.entiteId)!;
+    if (ae.statCiblee === 'PA') d.pa += ae.valeur;
+    else d.pm += ae.valeur;
+  }
+
+  for (const [entiteId, delta] of deltas) {
+    if (delta.pa === 0 && delta.pm === 0) continue;
+    const entity = await prisma.combatEntite.findUnique({ where: { id: entiteId } });
+    if (!entity || entity.pvActuels <= 0) continue;
+    await prisma.combatEntite.update({
+      where: { id: entiteId },
+      data: {
+        ...(delta.pa !== 0 ? { paActuels: Math.max(0, entity.paActuels + delta.pa) } : {}),
+        ...(delta.pm !== 0 ? { pmActuels: Math.max(0, entity.pmActuels + delta.pm) } : {}),
+      },
+    });
+  }
+}
 
 /**
  * Get the current state of a combat
@@ -98,6 +132,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             porteeModifiable: ps.sort.porteeModifiable,
             ligneDirecte: ps.sort.ligneDirecte,
             tauxEchec: ps.sort.tauxEchec,
+            coefficient: ps.sort.coefficient,
             zone: ps.sort.zone
               ? { type: ps.sort.zone.type, taille: ps.sort.zone.taille, nom: ps.sort.zone.nom }
               : null,
@@ -164,6 +199,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             porteeModifiable: ms.sort.porteeModifiable,
             ligneDirecte: ms.sort.ligneDirecte,
             tauxEchec: ms.sort.tauxEchec,
+            coefficient: ms.sort.coefficient,
             zone: ms.sort.zone
               ? { type: ms.sort.zone.type, taille: ms.sort.zone.taille, nom: ms.sort.zone.nom }
               : null,
@@ -210,8 +246,18 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
         monstreTemplateId: e.monstreTemplateId,
         niveau: e.niveau,
         iaType: e.iaType,
-        poBonus: e.poBonus,
+        poBonus: e.poBonus + combat.effetsActifs
+          .filter(ea =>
+            ea.entiteId === e.id &&
+            ['BUFF', 'DEBUFF'].includes(ea.effet.type) &&
+            ea.effet.statCiblee === 'PO'
+          )
+          .reduce((sum, ea) => sum + ea.effet.valeur, 0),
         bonusCritique: e.bonusCritique,
+        resistanceForce: e.resistanceForce,
+        resistanceIntelligence: e.resistanceIntelligence,
+        resistanceDexterite: e.resistanceDexterite,
+        resistanceAgilite: e.resistanceAgilite,
         sorts,
       };
     })
@@ -582,7 +628,8 @@ export async function executeAction(
       attackerBaseStats,
       spell.zone?.taille ?? 0,
       spell.zone?.type ?? 'CASE',
-      sortEffet?.effetId ?? undefined
+      sortEffet?.effetId ?? undefined,
+      spell.coefficient ?? 1.0
     );
 
     const dureeMsg = spell.poseDuree ? `${spell.poseDuree} tours` : 'permanent';
@@ -615,7 +662,8 @@ export async function executeAction(
       attackerBaseStats,
       spell.zone?.taille ?? 0,
       spell.zone?.type ?? 'CASE',
-      sortEffet?.effetId ?? undefined
+      sortEffet?.effetId ?? undefined,
+      spell.coefficient ?? 1.0
     );
 
     // Log visible pour le lanceur seulement (le message existe mais côté client c'est invisible pour l'ennemi)
@@ -764,6 +812,7 @@ export async function executeAction(
           })),
           blockedCases,
         });
+        await applyImmediateResourceEffects(combatId, appliedEffectsTeleport);
 
         if (hasDamageOrEffects) {
           const attackerBaseStats = {
@@ -780,13 +829,17 @@ export async function executeAction(
             degatsCritMax: spell.degatsCritMax,
             chanceCritBase: spell.chanceCritBase,
             statUtilisee: spell.statUtilisee as any,
+            coefficient: spell.coefficient ?? 1.0,
           };
 
           for (const target of aoeTargets) {
             const aoeDistance = manhattanDistance(target.positionX, target.positionY, targetX, targetY);
             const aoeMultiplier = calculateAoEReduction(aoeDistance);
             const damageResult = calculateDamage(spellData, attackerStatsWithCrit);
-            let totalDmg = Math.floor(damageResult.finalDamage * aoeMultiplier);
+            const rawTeleDmg = Math.floor(damageResult.finalDamage * aoeMultiplier);
+            // Apply resistance based on spell's stat
+            const teleResistance = await getEffectiveResistance(combatId, target.id, target, spell.statUtilisee as any);
+            let totalDmg = applyResistance(rawTeleDmg, teleResistance);
 
             // Shield reduction
             const shieldAbsorb = await calculateShieldReduction(combatId, target.id, spell.statUtilisee);
@@ -916,6 +969,7 @@ export async function executeAction(
       })),
       blockedCases,
     });
+    await applyImmediateResourceEffects(combatId, appliedEffects);
   }
 
   // ===== HEAL BRANCH =====
@@ -938,6 +992,7 @@ export async function executeAction(
       degatsCritMax: attackData.degatsCritMax!,
       chanceCritBase: attackData.chanceCritBase,
       statUtilisee: attackData.statUtilisee as any,
+      coefficient: spell?.coefficient ?? 1.0,
     };
 
     const heals: ActionResult['heals'] = [];
@@ -1099,7 +1154,10 @@ export async function executeAction(
         } else {
           baseDmg = randomInt(ligne.degatsMin, ligne.degatsMax);
         }
-        const finalDmg = Math.floor(Math.floor(baseDmg * statMultiplier) * aoeMultiplier);
+        const preFinalDmg = Math.floor(Math.floor(baseDmg * statMultiplier) * aoeMultiplier);
+        // Apply resistance based on this line's stat
+        const lineResistance = await getEffectiveResistance(combatId, target.id, target, ligne.statUtilisee as any);
+        const finalDmg = applyResistance(preFinalDmg, lineResistance);
 
         lineDetails.push({
           damage: finalDmg,
@@ -1130,10 +1188,14 @@ export async function executeAction(
         degatsCritMax: attackData.degatsCritMax!,
         chanceCritBase: attackData.chanceCritBase,
         statUtilisee: attackData.statUtilisee as any,
+        coefficient: spell?.coefficient ?? 1.0,
       };
 
       const damageResult = calculateDamage(spellData, attackerStatsWithCrit);
-      totalDamageForTarget = Math.floor(damageResult.finalDamage * aoeMultiplier);
+      const rawSpellDmg = Math.floor(damageResult.finalDamage * aoeMultiplier);
+      // Apply resistance based on the spell's stat
+      const spellResistance = await getEffectiveResistance(combatId, target.id, target, attackData.statUtilisee as any);
+      totalDamageForTarget = applyResistance(rawSpellDmg, spellResistance);
       anyCrit = damageResult.isCritical;
     }
 
@@ -1729,15 +1791,37 @@ async function decrementEffects(combatId: number, entiteId?: number): Promise<vo
     const tour = combat?.tourActuel ?? 0;
 
     // Get entity names
-    const entiteIds = [...new Set(expired.map(e => e.entiteId))];
+    const expiredEntiteIds = [...new Set(expired.map(e => e.entiteId))];
     const entites = await prisma.combatEntite.findMany({
-      where: { id: { in: entiteIds } },
+      where: { id: { in: expiredEntiteIds } },
     });
     const nameMap = new Map(entites.map(e => [e.id, e.nom]));
 
     for (const ef of expired) {
       const nom = nameMap.get(ef.entiteId) || '?';
       await addLog(combatId, tour, `${nom}: ${ef.effet.nom} expire`, 'EFFET_EXPIRE');
+    }
+
+    // Roll back PA/PM that were credited immediately on cast
+    const NON_STAT_TYPES = ['DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON', 'BOUCLIER', 'RESISTANCE'];
+    for (const entId of expiredEntiteIds) {
+      const expiredForEnt = expired.filter(ef => ef.entiteId === entId && !NON_STAT_TYPES.includes(ef.effet.type));
+      const paRemove = expiredForEnt
+        .filter(ef => ef.effet.statCiblee === 'PA')
+        .reduce((sum, ef) => sum + ef.effet.valeur, 0);
+      const pmRemove = expiredForEnt
+        .filter(ef => ef.effet.statCiblee === 'PM')
+        .reduce((sum, ef) => sum + ef.effet.valeur, 0);
+      if (paRemove === 0 && pmRemove === 0) continue;
+      const ent = entites.find(e => e.id === entId);
+      if (!ent || ent.pvActuels <= 0) continue;
+      await prisma.combatEntite.update({
+        where: { id: entId },
+        data: {
+          ...(paRemove !== 0 ? { paActuels: Math.max(0, ent.paActuels - paRemove) } : {}),
+          ...(pmRemove !== 0 ? { pmActuels: Math.max(0, ent.pmActuels - pmRemove) } : {}),
+        },
+      });
     }
   }
 

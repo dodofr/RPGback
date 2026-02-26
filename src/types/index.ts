@@ -156,6 +156,10 @@ export interface CombatEntityState {
   iaType?: string | null;
   poBonus?: number;
   bonusCritique?: number;
+  resistanceForce?: number;
+  resistanceIntelligence?: number;
+  resistanceDexterite?: number;
+  resistanceAgilite?: number;
   sorts?: CombatSpellState[];
 }
 
@@ -202,6 +206,7 @@ export interface CombatSpellState {
   porteeModifiable: boolean;
   ligneDirecte: boolean;
   tauxEchec: number;
+  coefficient: number;
   zone: { type: string; taille: number; nom: string } | null;
   effets: {
     effetId: number;
@@ -263,6 +268,10 @@ export interface InventoryItemInstance {
   bonusPM: number;
   bonusPO: number;
   bonusCritique: number;
+  resistanceForce: number;
+  resistanceIntelligence: number;
+  resistanceDexterite: number;
+  resistanceAgilite: number;
   estEquipe: boolean;
   panoplieId?: number | null;
 }
@@ -371,4 +380,8 @@ export interface TotalStats {
   po: number;
   bonusCritique: number;
   pvMax: number;
+  resistanceForce: number;
+  resistanceIntelligence: number;
+  resistanceDexterite: number;
+  resistanceAgilite: number;
 }

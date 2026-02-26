@@ -41,6 +41,10 @@ export class InventoryService {
       bonusPM: item.bonusPM,
       bonusPO: item.bonusPO,
       bonusCritique: item.bonusCritique,
+      resistanceForce: item.resistanceForce,
+      resistanceIntelligence: item.resistanceIntelligence,
+      resistanceDexterite: item.resistanceDexterite,
+      resistanceAgilite: item.resistanceAgilite,
       estEquipe: item.estEquipe,
       panoplieId: item.equipement.panoplieId,
     }));
@@ -89,6 +93,14 @@ export class InventoryService {
     bonusPMMax?: number | null;
     bonusPOMax?: number | null;
     bonusCritiqueMax?: number | null;
+    resistanceForce?: number;
+    resistanceIntelligence?: number;
+    resistanceDexterite?: number;
+    resistanceAgilite?: number;
+    resistanceForceMax?: number | null;
+    resistanceIntelligenceMax?: number | null;
+    resistanceDexteriteMax?: number | null;
+    resistanceAgiliteMax?: number | null;
   }) {
     return {
       bonusForce: equipement.bonusForceMax != null
@@ -121,6 +133,18 @@ export class InventoryService {
       bonusCritique: equipement.bonusCritiqueMax != null
         ? randomInt(equipement.bonusCritique, equipement.bonusCritiqueMax)
         : equipement.bonusCritique,
+      resistanceForce: equipement.resistanceForceMax != null
+        ? randomInt(equipement.resistanceForce ?? 0, equipement.resistanceForceMax)
+        : (equipement.resistanceForce ?? 0),
+      resistanceIntelligence: equipement.resistanceIntelligenceMax != null
+        ? randomInt(equipement.resistanceIntelligence ?? 0, equipement.resistanceIntelligenceMax)
+        : (equipement.resistanceIntelligence ?? 0),
+      resistanceDexterite: equipement.resistanceDexteriteMax != null
+        ? randomInt(equipement.resistanceDexterite ?? 0, equipement.resistanceDexteriteMax)
+        : (equipement.resistanceDexterite ?? 0),
+      resistanceAgilite: equipement.resistanceAgiliteMax != null
+        ? randomInt(equipement.resistanceAgilite ?? 0, equipement.resistanceAgiliteMax)
+        : (equipement.resistanceAgilite ?? 0),
     };
   }
 

@@ -2,7 +2,7 @@ import { EffetType, StatType } from '@prisma/client';
 import prisma from '../../config/database';
 import { checkProbability, randomInt } from '../../utils/random';
 import { CombatCaseState } from './grid';
-import { isInBounds } from '../../utils/formulas';
+import { isInBounds, applyResistance, getResistanceForStat } from '../../utils/formulas';
 
 export interface EffectDetails {
   id: number;
@@ -29,6 +29,9 @@ export interface AppliedEffect {
   removedCount?: number;
   isPushPull?: boolean;
   pushPullResult?: PushPullResult;
+  isNew?: boolean;
+  statCiblee?: string;
+  valeur?: number;
 }
 
 export interface ModifiedStats {
@@ -82,7 +85,7 @@ export async function getStatsWithEffects(
 
   // Apply each active effect (skip non-stat effects — they don't modify stats)
   for (const effect of activeEffects) {
-    if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON' || effect.type === 'BOUCLIER') continue;
+    if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON' || effect.type === 'BOUCLIER' || effect.type === 'RESISTANCE') continue;
     const statKey = statTypeToKey(effect.statCiblee);
     if (!statKey || !(statKey in modifiedStats)) continue; // Skip PA/PM/PO — handled by getResourceModifiers
     if (statKey && statKey in modifiedStats) {
@@ -98,6 +101,32 @@ export async function getStatsWithEffects(
 }
 
 /**
+ * Calculate the effective resistance for a stat, including RESISTANCE effects.
+ * = base snapshot resistance + sum of active RESISTANCE effects for that stat
+ */
+export async function getEffectiveResistance(
+  combatId: number,
+  entiteId: number,
+  entity: { resistanceForce: number; resistanceIntelligence: number; resistanceDexterite: number; resistanceAgilite: number },
+  statUtilisee: StatType
+): Promise<number> {
+  const base = getResistanceForStat(entity, statUtilisee);
+
+  const activeEffects = await prisma.effetActif.findMany({
+    where: { combatId, entiteId },
+    include: { effet: true },
+  });
+
+  let modifier = 0;
+  for (const ae of activeEffects) {
+    if (ae.effet.type !== 'RESISTANCE') continue;
+    if (ae.effet.statCiblee === statUtilisee) modifier += ae.effet.valeur;
+  }
+
+  return base + modifier;
+}
+
+/**
  * Apply an effect to an entity.
  * If the effect is cumulable, always creates a new EffetActif instance.
  * Otherwise, refreshes duration of the existing instance.
@@ -108,7 +137,7 @@ export async function applyEffect(
   effetId: number,
   lanceurId?: number,
   valeurCourante?: number
-): Promise<void> {
+): Promise<'created' | 'refreshed'> {
   const effet = await prisma.effet.findUnique({
     where: { id: effetId },
   });
@@ -129,6 +158,7 @@ export async function applyEffect(
         valeurCourante: valeurCourante ?? null,
       },
     });
+    return 'created';
   } else {
     // Non-cumulable: refresh duration if already active, else create
     const existingEffect = await prisma.effetActif.findFirst({
@@ -144,6 +174,7 @@ export async function applyEffect(
           valeurCourante: valeurCourante ?? existingEffect.valeurCourante,
         },
       });
+      return 'refreshed';
     } else {
       await prisma.effetActif.create({
         data: {
@@ -155,6 +186,7 @@ export async function applyEffect(
           valeurCourante: valeurCourante ?? null,
         },
       });
+      return 'created';
     }
   }
 }
@@ -437,22 +469,28 @@ export async function applySpellEffects(
     if (sortEffet.surCible) {
       // Apply to all targets
       for (const targetId of targetIds) {
-        await applyEffect(combatId, targetId, sortEffet.effetId, casterId);
+        const result = await applyEffect(combatId, targetId, sortEffet.effetId, casterId);
         appliedEffects.push({
           entiteId: targetId,
           effetId: sortEffet.effetId,
           effetNom: sortEffet.effet.nom,
           duree: sortEffet.effet.duree,
+          isNew: result === 'created',
+          statCiblee: sortEffet.effet.statCiblee ?? undefined,
+          valeur: sortEffet.effet.valeur,
         });
       }
     } else {
       // Apply to caster
-      await applyEffect(combatId, casterId, sortEffet.effetId, casterId);
+      const result = await applyEffect(combatId, casterId, sortEffet.effetId, casterId);
       appliedEffects.push({
         entiteId: casterId,
         effetId: sortEffet.effetId,
         effetNom: sortEffet.effet.nom,
         duree: sortEffet.effet.duree,
+        isNew: result === 'created',
+        statCiblee: sortEffet.effet.statCiblee ?? undefined,
+        valeur: sortEffet.effet.valeur,
       });
     }
   }
@@ -462,9 +500,39 @@ export async function applySpellEffects(
 
 /**
  * Remove all active effects from an entity (dispel)
+ * Rolls back any immediate PA/PM that were credited on cast.
  * Returns the number of effects removed
  */
 export async function dispelEffects(combatId: number, entiteId: number): Promise<number> {
+  // Fetch active effects before deleting to compute PA/PM rollback
+  const activeEffects = await prisma.effetActif.findMany({
+    where: { combatId, entiteId },
+    include: { effet: true },
+  });
+
+  const NON_STAT_TYPES = ['DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON', 'BOUCLIER', 'RESISTANCE'];
+
+  let paDelta = 0;
+  let pmDelta = 0;
+  for (const ae of activeEffects) {
+    if (NON_STAT_TYPES.includes(ae.effet.type)) continue;
+    if (ae.effet.statCiblee === 'PA') paDelta += ae.effet.valeur;
+    else if (ae.effet.statCiblee === 'PM') pmDelta += ae.effet.valeur;
+  }
+
+  if (paDelta !== 0 || pmDelta !== 0) {
+    const entity = await prisma.combatEntite.findUnique({ where: { id: entiteId } });
+    if (entity && entity.pvActuels > 0) {
+      await prisma.combatEntite.update({
+        where: { id: entiteId },
+        data: {
+          ...(paDelta !== 0 ? { paActuels: Math.max(0, entity.paActuels - paDelta) } : {}),
+          ...(pmDelta !== 0 ? { pmActuels: Math.max(0, entity.pmActuels - pmDelta) } : {}),
+        },
+      });
+    }
+  }
+
   const result = await prisma.effetActif.deleteMany({
     where: { combatId, entiteId },
   });
@@ -509,7 +577,7 @@ export async function getResourceModifiers(
   let critiqueModifier = 0;
 
   for (const effect of activeEffects) {
-    if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON' || effect.type === 'BOUCLIER') continue;
+    if (effect.type === 'DISPEL' || effect.type === 'POUSSEE' || effect.type === 'ATTIRANCE' || effect.type === 'POISON' || effect.type === 'BOUCLIER' || effect.type === 'RESISTANCE') continue;
     if (effect.statCiblee === 'PA') paModifier += effect.valeur;
     else if (effect.statCiblee === 'PM') pmModifier += effect.valeur;
     else if (effect.statCiblee === 'PO') poModifier += effect.valeur;
@@ -542,7 +610,10 @@ export async function applyPoisonDamage(
   for (const poison of poisons) {
     const min = poison.effet.valeurMin ?? poison.effet.valeur;
     const max = poison.effet.valeur;
-    const damage = randomInt(Math.min(min, max), Math.max(min, max));
+    let damage = randomInt(Math.min(min, max), Math.max(min, max));
+    // Apply effective resistance (snapshot + RESISTANCE effects) based on the poison's attack stat
+    const resistance = await getEffectiveResistance(combatId, entiteId, entity, poison.effet.statCiblee);
+    damage = applyResistance(damage, resistance);
     totalDamage += damage;
   }
 

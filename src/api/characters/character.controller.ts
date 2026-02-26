@@ -192,6 +192,24 @@ export class CharacterController {
     }
   }
 
+  async resetStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid ID' });
+        return;
+      }
+      const result = await characterService.resetStatPoints(id);
+      res.json(result);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Character not found') {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      next(error);
+    }
+  }
+
   async getProgression(req: Request, res: Response, next: NextFunction) {
     try {
       const id = parseInt(req.params.id, 10);

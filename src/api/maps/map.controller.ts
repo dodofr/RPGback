@@ -41,6 +41,10 @@ const createMonstreSchema = z.object({
   orMax: z.number().int().min(0).default(0),
   iaType: z.enum(['EQUILIBRE', 'AGGRESSIF', 'SOUTIEN', 'DISTANCE']).default('EQUILIBRE'),
   pvScalingInvocation: z.number().min(0).max(1).nullable().optional(),
+  resistanceForce: z.number().int().min(0).default(0),
+  resistanceIntelligence: z.number().int().min(0).default(0),
+  resistanceDexterite: z.number().int().min(0).default(0),
+  resistanceAgilite: z.number().int().min(0).default(0),
 });
 
 const addConnectionSchema = z.object({
@@ -422,6 +426,10 @@ export class MapController {
         orMax: z.number().int().min(0).optional(),
         iaType: z.enum(['EQUILIBRE', 'AGGRESSIF', 'SOUTIEN', 'DISTANCE']).optional(),
         pvScalingInvocation: z.number().min(0).max(1).nullable().optional(),
+        resistanceForce: z.number().int().min(0).optional(),
+        resistanceIntelligence: z.number().int().min(0).optional(),
+        resistanceDexterite: z.number().int().min(0).optional(),
+        resistanceAgilite: z.number().int().min(0).optional(),
       });
       const data = updateMonstreSchema.parse(req.body);
       const monstre = await monstreService.update(id, data);

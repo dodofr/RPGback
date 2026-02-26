@@ -110,7 +110,7 @@ export function canLevelUp(niveau: number, experience: number): boolean {
  * Get stat points earned per level
  */
 export function statsPointsPerLevel(): number {
-  return 10;
+  return 5;
 }
 
 /**
@@ -125,4 +125,39 @@ export function manhattanDistance(x1: number, y1: number, x2: number, y2: number
  */
 export function isInBounds(x: number, y: number, width: number, height: number): boolean {
   return x >= 0 && x < width && y >= 0 && y < height;
+}
+
+/**
+ * Calculate resistance damage reduction coefficient (0 to 0.75)
+ * Formula: min(0.75, resistance / 100)
+ * resistance = valeur directement en % (0-75). Ex: 50 → 50% de réduction, 75 = cap.
+ */
+export function calculateResistanceReduction(resistance: number): number {
+  return Math.min(0.75, Math.max(-0.75, resistance / 100));
+}
+
+/**
+ * Apply resistance reduction to a damage amount
+ * Returns floor(damage * (1 - reductionCoeff))
+ * Supports negative resistance (amplification up to ×1.75)
+ */
+export function applyResistance(damage: number, resistance: number): number {
+  if (resistance === 0) return damage;
+  return Math.floor(damage * (1 - calculateResistanceReduction(resistance)));
+}
+
+/**
+ * Get resistance value corresponding to an attack stat type
+ */
+export function getResistanceForStat(
+  entity: { resistanceForce: number; resistanceIntelligence: number; resistanceDexterite: number; resistanceAgilite: number },
+  statUtilisee: StatType
+): number {
+  switch (statUtilisee) {
+    case StatType.FORCE: return entity.resistanceForce;
+    case StatType.INTELLIGENCE: return entity.resistanceIntelligence;
+    case StatType.DEXTERITE: return entity.resistanceDexterite;
+    case StatType.AGILITE: return entity.resistanceAgilite;
+    default: return 0;
+  }
 }

@@ -10,6 +10,7 @@ interface SpellData {
   degatsCritMax: number;
   chanceCritBase: number;
   statUtilisee: StatType;
+  coefficient?: number;
 }
 
 interface EntityStats {
@@ -44,17 +45,19 @@ export function calculateDamage(spell: SpellData, attackerStats: EntityStats): D
   // Check for critical hit
   const isCritical = checkProbability(critChance);
 
+  const coeff = spell.coefficient ?? 1.0;
+
   let baseDamage: number;
   let finalDamage: number;
 
   if (isCritical) {
     // Critical hit: roll between crit min and max
     baseDamage = randomInt(spell.degatsCritMin, spell.degatsCritMax);
-    finalDamage = Math.floor(baseDamage * statMultiplier);
+    finalDamage = Math.floor(baseDamage * statMultiplier * coeff);
   } else {
     // Normal hit: roll between min and max
     baseDamage = randomInt(spell.degatsMin, spell.degatsMax);
-    finalDamage = Math.floor(baseDamage * statMultiplier);
+    finalDamage = Math.floor(baseDamage * statMultiplier * coeff);
   }
 
   return {

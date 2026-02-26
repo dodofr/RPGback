@@ -94,7 +94,7 @@ async function main() {
   });
 
   await prisma.sort.upsert({
-    where: { id: 3 }, update: {},
+    where: { id: 3 }, update: { coefficient: 0.6 },
     create: {
       nom: 'Tourbillon', type: SortType.SORT, statUtilisee: StatType.FORCE,
       coutPA: 5, porteeMin: 0, porteeMax: 1, ligneDeVue: false,
@@ -105,7 +105,7 @@ async function main() {
   });
 
   await prisma.sort.upsert({
-    where: { id: 4 }, update: {},
+    where: { id: 4 }, update: { coefficient: 0.6 },
     create: {
       nom: 'Explosion arcanique', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
       coutPA: 6, porteeMin: 2, porteeMax: 6, ligneDeVue: true,
@@ -128,7 +128,7 @@ async function main() {
   });
 
   await prisma.sort.upsert({
-    where: { id: 6 }, update: { porteeMax: 4, ligneDirecte: true },
+    where: { id: 6 }, update: { porteeMax: 4, ligneDirecte: true, coefficient: 0.75 },
     create: {
       nom: 'Vent tranchant', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
       coutPA: 4, porteeMin: 2, porteeMax: 4, ligneDeVue: true, ligneDirecte: true,
@@ -139,7 +139,7 @@ async function main() {
   });
 
   await prisma.sort.upsert({
-    where: { id: 7 }, update: {},
+    where: { id: 7 }, update: { coefficient: 0.6 },
     create: {
       nom: 'Boule de feu', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
       coutPA: 5, porteeMin: 3, porteeMax: 7, ligneDeVue: true,
@@ -150,7 +150,7 @@ async function main() {
   });
 
   await prisma.sort.upsert({
-    where: { id: 8 }, update: {},
+    where: { id: 8 }, update: { coefficient: 0.6 },
     create: {
       nom: 'Tempête arcanique', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
       coutPA: 6, porteeMin: 2, porteeMax: 8, ligneDeVue: true,
@@ -195,7 +195,7 @@ async function main() {
   });
 
   await prisma.sort.upsert({
-    where: { id: 12 }, update: {},
+    where: { id: 12 }, update: { coefficient: 0.6 },
     create: {
       nom: 'Séisme', type: SortType.SORT, statUtilisee: StatType.FORCE,
       coutPA: 6, porteeMin: 0, porteeMax: 2, ligneDeVue: false,
@@ -631,6 +631,12 @@ async function main() {
   await prisma.monstreTemplate.update({ where: { id: bandit.id }, data: { orMin: 3, orMax: 10 } });
   await prisma.monstreTemplate.update({ where: { id: trollDesForets.id }, data: { orMin: 10, orMax: 25 } });
 
+  // Monster resistances
+  await prisma.monstreTemplate.update({ where: { id: gobelin.id }, data: { resistanceForce: 0, resistanceIntelligence: 3, resistanceDexterite: 0, resistanceAgilite: 0 } });
+  await prisma.monstreTemplate.update({ where: { id: loup.id }, data: { resistanceForce: 5, resistanceIntelligence: 0, resistanceDexterite: 8, resistanceAgilite: 0 } });
+  await prisma.monstreTemplate.update({ where: { id: bandit.id }, data: { resistanceForce: 8, resistanceIntelligence: 4, resistanceDexterite: 0, resistanceAgilite: 0 } });
+  await prisma.monstreTemplate.update({ where: { id: trollDesForets.id }, data: { resistanceForce: 50, resistanceIntelligence: 10, resistanceDexterite: 20, resistanceAgilite: 10 } });
+
   // ==================== INVOCATION RACE SPELLS (IDs 34-36) ====================
   // Must be created after monster templates (need invocationTemplateId)
   // Invocations: porteeModifiable: false (portée fixe, non influencée par buffs/équipement)
@@ -717,7 +723,7 @@ async function main() {
   // --- GLYPHE (ID 40) — Elfe niv 8, dégâts INT au sol ---
   // 40: Marque ardente (Elfe) — pose un glyphe pendant 3 tours, dégâts INTELLIGENCE
   await prisma.sort.upsert({
-    where: { id: 40 }, update: {},
+    where: { id: 40 }, update: { coefficient: 0.65 },
     create: {
       nom: 'Marque ardente', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
       coutPA: 4, porteeMin: 1, porteeMax: 5, ligneDeVue: true,
@@ -731,7 +737,7 @@ async function main() {
   // --- PIÈGE (ID 41) — Nain niv 8, dégâts FORCE + Enracinement ---
   // 41: Piège à ours (Nain) — pose un piège invisible pendant 5 tours, dégâts FORCE + enracinement
   await prisma.sort.upsert({
-    where: { id: 41 }, update: {},
+    where: { id: 41 }, update: { coefficient: 0.7 },
     create: {
       nom: 'Piège à ours', type: SortType.SORT, statUtilisee: StatType.FORCE,
       coutPA: 3, porteeMin: 1, porteeMax: 3, ligneDeVue: false,
@@ -760,7 +766,7 @@ async function main() {
 
   // 43: Surgissement toxique — téléport + AoE CROIX (dégâts AGI + empoisonnement)
   await prisma.sort.upsert({
-    where: { id: 43 }, update: { estTeleportation: true, porteeModifiable: false },
+    where: { id: 43 }, update: { estTeleportation: true, porteeModifiable: false, coefficient: 0.7 },
     create: {
       nom: 'Surgissement toxique', type: SortType.SORT, statUtilisee: StatType.AGILITE,
       coutPA: 4, porteeMin: 1, porteeMax: 4, ligneDeVue: false,
@@ -1175,43 +1181,43 @@ async function main() {
   });
 
   await prisma.equipement.upsert({
-    where: { id: 3 }, update: { bonusCritique: 3, bonusForceMax: 8, bonusVieMax: 12 },
+    where: { id: 3 }, update: { bonusCritique: 3, bonusForceMax: 8, bonusVieMax: 12, resistanceDexterite: 3 },
     create: {
       nom: 'Casque de fer', slot: SlotType.COIFFE,
       bonusVie: 8, bonusForce: 3, niveauMinimum: 1, bonusCritique: 3,
-      bonusForceMax: 8, bonusVieMax: 12,
+      bonusForceMax: 8, bonusVieMax: 12, resistanceDexterite: 3,
     },
   });
 
   await prisma.equipement.upsert({
-    where: { id: 4 }, update: {},
+    where: { id: 4 }, update: { resistanceIntelligence: 5 },
     create: {
       nom: 'Amulette de vie', slot: SlotType.AMULETTE,
-      bonusVie: 15, niveauMinimum: 5,
+      bonusVie: 15, niveauMinimum: 5, resistanceIntelligence: 5,
     },
   });
 
   await prisma.equipement.upsert({
-    where: { id: 5 }, update: { bonusVie: 5, bonusVieMax: 8 },
+    where: { id: 5 }, update: { bonusVie: 5, bonusVieMax: 8, resistanceForce: 8 },
     create: {
       nom: 'Bouclier en bois', slot: SlotType.BOUCLIER,
-      bonusVie: 5, bonusForce: 2, niveauMinimum: 1, bonusVieMax: 8,
+      bonusVie: 5, bonusForce: 2, niveauMinimum: 1, bonusVieMax: 8, resistanceForce: 8,
     },
   });
 
   await prisma.equipement.upsert({
-    where: { id: 6 }, update: { bonusVieMax: 15 },
+    where: { id: 6 }, update: { bonusVieMax: 15, resistanceForce: 5 },
     create: {
       nom: 'Plastron de cuir', slot: SlotType.HAUT,
-      bonusVie: 12, bonusAgilite: 3, niveauMinimum: 1, bonusVieMax: 15,
+      bonusVie: 12, bonusAgilite: 3, niveauMinimum: 1, bonusVieMax: 15, resistanceForce: 5,
     },
   });
 
   await prisma.equipement.upsert({
-    where: { id: 7 }, update: {},
+    where: { id: 7 }, update: { resistanceForce: 4 },
     create: {
       nom: 'Jambières renforcées', slot: SlotType.BAS,
-      bonusVie: 8, bonusPM: 1, niveauMinimum: 3,
+      bonusVie: 8, bonusPM: 1, niveauMinimum: 3, resistanceForce: 4,
     },
   });
 

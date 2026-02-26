@@ -165,6 +165,10 @@ export class CombatService {
           chance: totalStats.chance,
           poBonus: totalStats.po,
           bonusCritique: totalStats.bonusCritique,
+          resistanceForce: totalStats.resistanceForce,
+          resistanceIntelligence: totalStats.resistanceIntelligence,
+          resistanceDexterite: totalStats.resistanceDexterite,
+          resistanceAgilite: totalStats.resistanceAgilite,
           armeData: armeData ? JSON.parse(JSON.stringify(armeData)) : undefined,
         },
       });
@@ -174,6 +178,24 @@ export class CombatService {
     for (let i = 0; i < data.monstres.length; i++) {
       const monster = data.monstres[i];
       const spawn = enemySpawns[i];
+
+      // Calculate scaled resistances from template (if available)
+      let resistanceForce = 0;
+      let resistanceIntelligence = 0;
+      let resistanceDexterite = 0;
+      let resistanceAgilite = 0;
+
+      if (monster.monstreTemplateId) {
+        const template = await prisma.monstreTemplate.findUnique({ where: { id: monster.monstreTemplateId } });
+        if (template) {
+          const monsterLevel = monster.niveau ?? template.niveauBase;
+          const resistScale = 1 + (monsterLevel - template.niveauBase) * 0.05;
+          resistanceForce = Math.floor(template.resistanceForce * resistScale);
+          resistanceIntelligence = Math.floor(template.resistanceIntelligence * resistScale);
+          resistanceDexterite = Math.floor(template.resistanceDexterite * resistScale);
+          resistanceAgilite = Math.floor(template.resistanceAgilite * resistScale);
+        }
+      }
 
       await prisma.combatEntite.create({
         data: {
@@ -200,6 +222,10 @@ export class CombatService {
           monstreTemplateId: monster.monstreTemplateId ?? null,
           niveau: monster.niveau ?? null,
           iaType: (monster.iaType as any) ?? null,
+          resistanceForce,
+          resistanceIntelligence,
+          resistanceDexterite,
+          resistanceAgilite,
         },
       });
     }

@@ -60,6 +60,7 @@ enum EffetType {
   ATTIRANCE
   POISON
   BOUCLIER
+  RESISTANCE
 }
 
 enum CombatStatus {
@@ -169,6 +170,8 @@ model Sort {
   poseDuree            Int?             // durée en tours de la zone posée (null = permanent)
   // Téléportation : déplace instantanément le lanceur vers la case ciblée (sans PM, ignore les obstacles de chemin)
   estTeleportation     Boolean          @default(false)
+  // Coefficient multiplicateur appliqué aux dégâts/soins (utile pour réduire la puissance des sorts en zone)
+  coefficient          Float            @default(1.0)
   personnages         PersonnageSort[]
   cooldowns           SortCooldown[]
   monstres            MonstreSort[]
@@ -218,6 +221,16 @@ model Equipement {
   // Crit global pour armes multi-lignes
   bonusCrit         Int?
   bonusCritique     Int       @default(0)
+  // Résistances aux dégâts (valeurs de base)
+  resistanceForce          Int  @default(0)
+  resistanceIntelligence   Int  @default(0)
+  resistanceDexterite      Int  @default(0)
+  resistanceAgilite        Int  @default(0)
+  // Ranges max pour résistances aléatoires (null = résistance fixe)
+  resistanceForceMax       Int?
+  resistanceIntelligenceMax Int?
+  resistanceDexteriteMax   Int?
+  resistanceAgiliteMax     Int?
   // Panoplie
   panoplieId        Int?
   panoplie          Panoplie? @relation(fields: [panoplieId], references: [id])
@@ -348,6 +361,11 @@ model MonstreTemplate {
   iaType         IAType               @default(EQUILIBRE)
   pvScalingInvocation Float?
   orMin          Int                  @default(0)
+  // Résistances de base (scalées par niveau au combat)
+  resistanceForce          Int  @default(0)
+  resistanceIntelligence   Int  @default(0)
+  resistanceDexterite      Int  @default(0)
+  resistanceAgilite        Int  @default(0)
   orMax          Int                  @default(0)
   groupesMembres    GroupeEnnemiMembre[]
   donjonsBoss       Donjon[]
@@ -578,6 +596,11 @@ model CombatEntite {
   iaType              IAType?
   poBonus             Int              @default(0)
   bonusCritique       Int              @default(0)
+  // Résistances snapshot (calculées au début du combat)
+  resistanceForce          Int  @default(0)
+  resistanceIntelligence   Int  @default(0)
+  resistanceDexterite      Int  @default(0)
+  resistanceAgilite        Int  @default(0)
 }
 
 model EffetActif {
@@ -651,6 +674,11 @@ model InventaireItem {
   bonusPM         Int        @default(0)
   bonusPO         Int        @default(0)
   bonusCritique   Int        @default(0)
+  // Résistances rollées (valeurs fixées au drop/craft)
+  resistanceForce         Int  @default(0)
+  resistanceIntelligence  Int  @default(0)
+  resistanceDexterite     Int  @default(0)
+  resistanceAgilite       Int  @default(0)
   estEquipe       Boolean    @default(false)
   createdAt       DateTime   @default(now())
 

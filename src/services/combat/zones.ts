@@ -44,13 +44,14 @@ export async function createZone(
   casterStats: CasterStats,
   zoneTaille: number = 0,
   zoneType: string = 'CASE',
-  effetId?: number
+  effetId?: number,
+  coefficient: number = 1.0
 ): Promise<void> {
   const statValue = getStatValue(casterStats, statUtilisee);
   const multiplier = calculateStatMultiplier(statValue);
 
-  const degatsMinFinal = Math.floor(degatsMin * multiplier);
-  const degatsMaxFinal = Math.floor(degatsMax * multiplier);
+  const degatsMinFinal = Math.floor(degatsMin * multiplier * coefficient);
+  const degatsMaxFinal = Math.floor(degatsMax * multiplier * coefficient);
 
   // Si un glyphe existe déjà sur cette case, on le remplace
   await prisma.zonePoseeCombat.deleteMany({

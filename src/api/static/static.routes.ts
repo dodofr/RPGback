@@ -9,7 +9,7 @@ import { z } from 'zod';
 const StatTypeEnum = z.enum(['FORCE', 'INTELLIGENCE', 'DEXTERITE', 'AGILITE', 'VIE', 'CHANCE', 'PA', 'PM', 'PO']);
 const SortTypeEnum = z.enum(['ARME', 'SORT']);
 const SlotTypeEnum = z.enum(['ARME', 'COIFFE', 'AMULETTE', 'BOUCLIER', 'HAUT', 'BAS', 'ANNEAU1', 'ANNEAU2', 'FAMILIER']);
-const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF', 'DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON', 'BOUCLIER']);
+const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF', 'DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON', 'BOUCLIER', 'RESISTANCE']);
 const ZoneTypeEnum = z.enum(['CASE', 'CROIX', 'LIGNE', 'CONE', 'CERCLE', 'LIGNE_PERPENDICULAIRE', 'DIAGONALE', 'CARRE', 'ANNEAU', 'CONE_INVERSE']);
 
 // Race schemas
@@ -54,6 +54,7 @@ const createSortSchema = z.object({
   estPiege: z.boolean().default(false),
   poseDuree: z.number().int().min(1).nullable().optional(),
   estTeleportation: z.boolean().default(false),
+  coefficient: z.number().min(0).max(10).default(1.0),
 });
 
 const updateSortSchema = createSortSchema.partial();
@@ -83,6 +84,14 @@ const createEquipementSchema = z.object({
   bonusPMMax: z.number().int().nullable().optional(),
   bonusPOMax: z.number().int().nullable().optional(),
   bonusCritiqueMax: z.number().int().nullable().optional(),
+  resistanceForce: z.number().int().min(0).max(75).default(0),
+  resistanceIntelligence: z.number().int().min(0).max(75).default(0),
+  resistanceDexterite: z.number().int().min(0).max(75).default(0),
+  resistanceAgilite: z.number().int().min(0).max(75).default(0),
+  resistanceForceMax: z.number().int().min(0).max(75).nullable().optional(),
+  resistanceIntelligenceMax: z.number().int().min(0).max(75).nullable().optional(),
+  resistanceDexteriteMax: z.number().int().min(0).max(75).nullable().optional(),
+  resistanceAgiliteMax: z.number().int().min(0).max(75).nullable().optional(),
   degatsMin: z.number().int().nullable().optional(),
   degatsMax: z.number().int().nullable().optional(),
   chanceCritBase: z.number().nullable().optional(),

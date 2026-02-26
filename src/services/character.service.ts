@@ -156,6 +156,10 @@ export class CharacterService {
       pm: calculateBasePM(),
       po: calculateBasePO(),
       bonusCritique: 0,
+      resistanceForce: 0,
+      resistanceIntelligence: 0,
+      resistanceDexterite: 0,
+      resistanceAgilite: 0,
     };
 
     // Add equipment bonuses from inventory instances (rolled stats)
@@ -175,6 +179,10 @@ export class CharacterService {
         stats.pm += item.bonusPM;
         stats.po += item.bonusPO;
         stats.bonusCritique += item.bonusCritique;
+        stats.resistanceForce += item.resistanceForce;
+        stats.resistanceIntelligence += item.resistanceIntelligence;
+        stats.resistanceDexterite += item.resistanceDexterite;
+        stats.resistanceAgilite += item.resistanceAgilite;
       }
 
       // Add panoplie (set) bonuses
@@ -239,6 +247,10 @@ export class CharacterService {
 
   async allocateStatPoints(characterId: number, stats: StatAllocation) {
     return progressionService.allocateStats(characterId, stats);
+  }
+
+  async resetStatPoints(characterId: number) {
+    return progressionService.resetStats(characterId);
   }
 
   async getProgressionInfo(characterId: number) {
