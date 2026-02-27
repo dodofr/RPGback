@@ -127,6 +127,42 @@ export async function getEffectiveResistance(
 }
 
 /**
+ * Get effective bonus dommages for an attacker (base + active BUFF/DEBUFF on DOMMAGES).
+ */
+export async function getEffectiveBonusDommages(
+  combatId: number,
+  entiteId: number,
+  base: number
+): Promise<number> {
+  const activeEffects = await prisma.effetActif.findMany({
+    where: { combatId, entiteId },
+    include: { effet: true },
+  });
+  const modifier = activeEffects
+    .filter(e => (e.effet.type === 'BUFF' || e.effet.type === 'DEBUFF') && e.effet.statCiblee === 'DOMMAGES')
+    .reduce((sum, e) => sum + e.effet.valeur, 0);
+  return base + modifier;
+}
+
+/**
+ * Get effective bonus soins for a caster (base + active BUFF/DEBUFF on SOINS).
+ */
+export async function getEffectiveBonusSoins(
+  combatId: number,
+  entiteId: number,
+  base: number
+): Promise<number> {
+  const activeEffects = await prisma.effetActif.findMany({
+    where: { combatId, entiteId },
+    include: { effet: true },
+  });
+  const modifier = activeEffects
+    .filter(e => (e.effet.type === 'BUFF' || e.effet.type === 'DEBUFF') && e.effet.statCiblee === 'SOINS')
+    .reduce((sum, e) => sum + e.effet.valeur, 0);
+  return base + modifier;
+}
+
+/**
  * Apply an effect to an entity.
  * If the effect is cumulable, always creates a new EffetActif instance.
  * Otherwise, refreshes duration of the existing instance.
@@ -361,7 +397,8 @@ export async function applySpellEffects(
     gridHeight: number;
     entities: { id: number; positionX: number; positionY: number; pvActuels: number }[];
     blockedCases: CombatCaseState[];
-  }
+  },
+  bonusDmg?: number
 ): Promise<AppliedEffect[]> {
   // Get spell effects
   const sortEffets = await prisma.sortEffet.findMany({
@@ -466,10 +503,13 @@ export async function applySpellEffects(
       continue;
     }
 
+    // For POISON effects, bake in bonusDmg as valeurCourante (additive bonus per tick)
+    const poisonBonus = sortEffet.effet.type === 'POISON' && bonusDmg ? bonusDmg : undefined;
+
     if (sortEffet.surCible) {
       // Apply to all targets
       for (const targetId of targetIds) {
-        const result = await applyEffect(combatId, targetId, sortEffet.effetId, casterId);
+        const result = await applyEffect(combatId, targetId, sortEffet.effetId, casterId, poisonBonus);
         appliedEffects.push({
           entiteId: targetId,
           effetId: sortEffet.effetId,
@@ -482,7 +522,7 @@ export async function applySpellEffects(
       }
     } else {
       // Apply to caster
-      const result = await applyEffect(combatId, casterId, sortEffet.effetId, casterId);
+      const result = await applyEffect(combatId, casterId, sortEffet.effetId, casterId, poisonBonus);
       appliedEffects.push({
         entiteId: casterId,
         effetId: sortEffet.effetId,
@@ -608,8 +648,10 @@ export async function applyPoisonDamage(
 
   let totalDamage = 0;
   for (const poison of poisons) {
-    const min = poison.effet.valeurMin ?? poison.effet.valeur;
-    const max = poison.effet.valeur;
+    // valeurCourante stores the bonusDmg baked in at cast time (flat additive per tick)
+    const bonus = poison.valeurCourante ?? 0;
+    const min = (poison.effet.valeurMin ?? poison.effet.valeur) + bonus;
+    const max = poison.effet.valeur + bonus;
     let damage = randomInt(Math.min(min, max), Math.max(min, max));
     // Apply effective resistance (snapshot + RESISTANCE effects) based on the poison's attack stat
     const resistance = await getEffectiveResistance(combatId, entiteId, entity, poison.effet.statCiblee);

@@ -160,6 +160,8 @@ export class CharacterService {
       resistanceIntelligence: 0,
       resistanceDexterite: 0,
       resistanceAgilite: 0,
+      bonusDommages: 0,
+      bonusSoins: 0,
     };
 
     // Add equipment bonuses from inventory instances (rolled stats)
@@ -183,6 +185,8 @@ export class CharacterService {
         stats.resistanceIntelligence += item.resistanceIntelligence;
         stats.resistanceDexterite += item.resistanceDexterite;
         stats.resistanceAgilite += item.resistanceAgilite;
+        stats.bonusDommages += item.bonusDommages;
+        stats.bonusSoins += item.bonusSoins;
       }
 
       // Add panoplie (set) bonuses

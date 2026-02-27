@@ -20,6 +20,8 @@ enum StatType {
   PM
   PO
   CRITIQUE
+  DOMMAGES
+  SOINS
 }
 
 enum ZoneType {
@@ -231,6 +233,11 @@ model Equipement {
   resistanceIntelligenceMax Int?
   resistanceDexteriteMax   Int?
   resistanceAgiliteMax     Int?
+  // Bonus dommages et soins flat
+  bonusDommages            Int  @default(0)
+  bonusDommagesMax         Int?
+  bonusSoins               Int  @default(0)
+  bonusSoinsMax            Int?
   // Panoplie
   panoplieId        Int?
   panoplie          Panoplie? @relation(fields: [panoplieId], references: [id])
@@ -601,6 +608,9 @@ model CombatEntite {
   resistanceIntelligence   Int  @default(0)
   resistanceDexterite      Int  @default(0)
   resistanceAgilite        Int  @default(0)
+  // Bonus dommages/soins snapshot
+  bonusDommages            Int  @default(0)
+  bonusSoins               Int  @default(0)
 }
 
 model EffetActif {
@@ -679,6 +689,9 @@ model InventaireItem {
   resistanceIntelligence  Int  @default(0)
   resistanceDexterite     Int  @default(0)
   resistanceAgilite       Int  @default(0)
+  // Bonus dommages et soins rollés
+  bonusDommages           Int  @default(0)
+  bonusSoins              Int  @default(0)
   estEquipe       Boolean    @default(false)
   createdAt       DateTime   @default(now())
 

@@ -5,7 +5,15 @@ Faire tout les test front pour voir les comportement
 ameliorer les pages 
 passer au graphisme
 
+voir pour les dommages et soin mis en place
 
 Voir pour mettre des pnj
 
-o
+  Progression
+  - Sorts améliorables : paliers 1/2/3 par sort, chaque rang augmente les dégâts ou réduit le coût PA. Le PersonnageSort a déjà un rang     
+  potentiel.
+  - Compétences passives : bonus permanents débloqués à certains niveaux (ex: +5% crit, +1 PM de base).
+
+  Économie / Monde
+  - Marchand dans les maps VILLE : acheter/vendre des items. Juste un endpoint avec une liste d'Equipement à prix fixe.
+  - Quêtes simples : tuer N monstres d'un type, rapporter une ressource. Récompense XP/or/item.

@@ -6,7 +6,7 @@ import { z } from 'zod';
 // Zod Schemas
 // ============================================================
 
-const StatTypeEnum = z.enum(['FORCE', 'INTELLIGENCE', 'DEXTERITE', 'AGILITE', 'VIE', 'CHANCE', 'PA', 'PM', 'PO']);
+const StatTypeEnum = z.enum(['FORCE', 'INTELLIGENCE', 'DEXTERITE', 'AGILITE', 'VIE', 'CHANCE', 'PA', 'PM', 'PO', 'DOMMAGES', 'SOINS']);
 const SortTypeEnum = z.enum(['ARME', 'SORT']);
 const SlotTypeEnum = z.enum(['ARME', 'COIFFE', 'AMULETTE', 'BOUCLIER', 'HAUT', 'BAS', 'ANNEAU1', 'ANNEAU2', 'FAMILIER']);
 const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF', 'DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON', 'BOUCLIER', 'RESISTANCE']);
@@ -105,6 +105,10 @@ const createEquipementSchema = z.object({
   tauxEchec: z.number().nullable().optional(),
   estVolDeVie: z.boolean().default(false),
   bonusCrit: z.number().int().nullable().optional(),
+  bonusDommages: z.number().int().min(0).optional(),
+  bonusDommagesMax: z.number().int().min(0).nullable().optional(),
+  bonusSoins: z.number().int().min(0).optional(),
+  bonusSoinsMax: z.number().int().min(0).nullable().optional(),
   panoplieId: z.number().int().nullable().optional(),
 });
 

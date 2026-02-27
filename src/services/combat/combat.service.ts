@@ -169,6 +169,8 @@ export class CombatService {
           resistanceIntelligence: totalStats.resistanceIntelligence,
           resistanceDexterite: totalStats.resistanceDexterite,
           resistanceAgilite: totalStats.resistanceAgilite,
+          bonusDommages: totalStats.bonusDommages ?? 0,
+          bonusSoins: totalStats.bonusSoins ?? 0,
           armeData: armeData ? JSON.parse(JSON.stringify(armeData)) : undefined,
         },
       });

@@ -153,6 +153,8 @@ export class DropService {
                 resistanceIntelligence: item.resistanceIntelligence,
                 resistanceDexterite: item.resistanceDexterite,
                 resistanceAgilite: item.resistanceAgilite,
+                bonusDommages: item.bonusDommages,
+                bonusSoins: item.bonusSoins,
                 estEquipe: false,
                 panoplieId: item.equipement.panoplieId,
               };

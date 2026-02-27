@@ -45,6 +45,8 @@ export class InventoryService {
       resistanceIntelligence: item.resistanceIntelligence,
       resistanceDexterite: item.resistanceDexterite,
       resistanceAgilite: item.resistanceAgilite,
+      bonusDommages: item.bonusDommages,
+      bonusSoins: item.bonusSoins,
       estEquipe: item.estEquipe,
       panoplieId: item.equipement.panoplieId,
     }));
@@ -101,6 +103,10 @@ export class InventoryService {
     resistanceIntelligenceMax?: number | null;
     resistanceDexteriteMax?: number | null;
     resistanceAgiliteMax?: number | null;
+    bonusDommages?: number;
+    bonusDommagesMax?: number | null;
+    bonusSoins?: number;
+    bonusSoinsMax?: number | null;
   }) {
     return {
       bonusForce: equipement.bonusForceMax != null
@@ -145,6 +151,12 @@ export class InventoryService {
       resistanceAgilite: equipement.resistanceAgiliteMax != null
         ? randomInt(equipement.resistanceAgilite ?? 0, equipement.resistanceAgiliteMax)
         : (equipement.resistanceAgilite ?? 0),
+      bonusDommages: equipement.bonusDommagesMax != null
+        ? randomInt(equipement.bonusDommages ?? 0, equipement.bonusDommagesMax)
+        : (equipement.bonusDommages ?? 0),
+      bonusSoins: equipement.bonusSoinsMax != null
+        ? randomInt(equipement.bonusSoins ?? 0, equipement.bonusSoinsMax)
+        : (equipement.bonusSoins ?? 0),
     };
   }
 

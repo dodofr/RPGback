@@ -13,7 +13,7 @@ import { executeAITurn } from './ai';
 import { createInvocation, killInvocationsOf } from './invocation';
 import { donjonService } from '../donjon.service';
 import { dropService } from '../drop.service';
-import { getStatsWithEffects, applySpellEffects, applyShieldEffect, calculateShieldReduction, AppliedEffect, PushPullResult, getResourceModifiers, applyPoisonDamage, removeEffectsByCaster, getEffectiveResistance } from './effects';
+import { getStatsWithEffects, applySpellEffects, applyShieldEffect, calculateShieldReduction, AppliedEffect, PushPullResult, getResourceModifiers, applyPoisonDamage, removeEffectsByCaster, getEffectiveResistance, getEffectiveBonusDommages, getEffectiveBonusSoins } from './effects';
 import { createZone, triggerGlyphesForEntity, triggerPiegesForEntity, decrementZones, cleanupZones } from './zones';
 import { checkProbability, randomInt } from '../../utils/random';
 import { addLog } from './combatLog';
@@ -258,6 +258,20 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
         resistanceIntelligence: e.resistanceIntelligence,
         resistanceDexterite: e.resistanceDexterite,
         resistanceAgilite: e.resistanceAgilite,
+        bonusDommages: e.bonusDommages + combat.effetsActifs
+          .filter(ea =>
+            ea.entiteId === e.id &&
+            ['BUFF', 'DEBUFF'].includes(ea.effet.type) &&
+            ea.effet.statCiblee === 'DOMMAGES'
+          )
+          .reduce((sum, ea) => sum + ea.effet.valeur, 0),
+        bonusSoins: e.bonusSoins + combat.effetsActifs
+          .filter(ea =>
+            ea.entiteId === e.id &&
+            ['BUFF', 'DEBUFF'].includes(ea.effet.type) &&
+            ea.effet.statCiblee === 'SOINS'
+          )
+          .reduce((sum, ea) => sum + ea.effet.valeur, 0),
         sorts,
       };
     })
@@ -536,6 +550,10 @@ export async function executeAction(
     };
   }
 
+  // Compute effective bonus dommages/soins (snapshot + active BUFF/DEBUFF effects)
+  const bonusDmg = await getEffectiveBonusDommages(combatId, entiteId, attacker.bonusDommages);
+  const bonusSoin = await getEffectiveBonusSoins(combatId, entiteId, attacker.bonusSoins);
+
   // Convert cases to CombatCaseState format
   const blockedCases: CombatCaseState[] = combat.cases.map((c) => ({
     x: c.x,
@@ -624,7 +642,7 @@ export async function executeAction(
     await createZone(
       combatId, entiteId, attacker.equipe, targetX, targetY, false,
       spell.poseDuree ?? 3,
-      spell.degatsMin, spell.degatsMax, spell.statUtilisee as any,
+      spell.degatsMin + bonusDmg, spell.degatsMax + bonusDmg, spell.statUtilisee as any,
       attackerBaseStats,
       spell.zone?.taille ?? 0,
       spell.zone?.type ?? 'CASE',
@@ -658,7 +676,7 @@ export async function executeAction(
     await createZone(
       combatId, entiteId, attacker.equipe, targetX, targetY, true,
       spell.poseDuree ?? 5,
-      spell.degatsMin, spell.degatsMax, spell.statUtilisee as any,
+      spell.degatsMin + bonusDmg, spell.degatsMax + bonusDmg, spell.statUtilisee as any,
       attackerBaseStats,
       spell.zone?.taille ?? 0,
       spell.zone?.type ?? 'CASE',
@@ -811,7 +829,7 @@ export async function executeAction(
             pvActuels: e.pvActuels,
           })),
           blockedCases,
-        });
+        }, bonusDmg > 0 ? bonusDmg : undefined);
         await applyImmediateResourceEffects(combatId, appliedEffectsTeleport);
 
         if (hasDamageOrEffects) {
@@ -823,10 +841,10 @@ export async function executeAction(
           const attackerStatsWithCrit = { ...attackerModifiedStats, bonusCritique: attacker.bonusCritique + poMods.critiqueModifier };
 
           const spellData = {
-            degatsMin: spell.degatsMin,
-            degatsMax: spell.degatsMax,
-            degatsCritMin: spell.degatsCritMin,
-            degatsCritMax: spell.degatsCritMax,
+            degatsMin: spell.degatsMin + bonusDmg,
+            degatsMax: spell.degatsMax + bonusDmg,
+            degatsCritMin: spell.degatsCritMin + bonusDmg,
+            degatsCritMax: spell.degatsCritMax + bonusDmg,
             chanceCritBase: spell.chanceCritBase,
             statUtilisee: spell.statUtilisee as any,
             coefficient: spell.coefficient ?? 1.0,
@@ -968,7 +986,7 @@ export async function executeAction(
         pvActuels: e.pvActuels,
       })),
       blockedCases,
-    });
+    }, bonusDmg > 0 ? bonusDmg : undefined);
     await applyImmediateResourceEffects(combatId, appliedEffects);
   }
 
@@ -986,10 +1004,10 @@ export async function executeAction(
     const healStats = { ...attackerModifiedStats, bonusCritique: attacker.bonusCritique + poMods.critiqueModifier };
 
     const spellData = {
-      degatsMin: attackData.degatsMin,
-      degatsMax: attackData.degatsMax,
-      degatsCritMin: attackData.degatsCritMin!,
-      degatsCritMax: attackData.degatsCritMax!,
+      degatsMin: attackData.degatsMin + bonusSoin,
+      degatsMax: attackData.degatsMax + bonusSoin,
+      degatsCritMin: attackData.degatsCritMin! + bonusSoin,
+      degatsCritMax: attackData.degatsCritMax! + bonusSoin,
       chanceCritBase: attackData.chanceCritBase,
       statUtilisee: attackData.statUtilisee as any,
       coefficient: spell?.coefficient ?? 1.0,
@@ -1147,12 +1165,17 @@ export async function executeAction(
         const statValue = getStatValue(attackerModifiedStats, ligne.statUtilisee as any);
         const statMultiplier = calculateStatMultiplier(statValue);
 
+        // Apply flat bonus: bonusSoin for soin lines, bonusDmg for damage lines
+        const lineBonus = ligne.estSoin ? bonusSoin : bonusDmg;
+        const effectiveMin = ligne.degatsMin + lineBonus;
+        const effectiveMax = ligne.degatsMax + lineBonus;
+
         let baseDmg: number;
         if (globalWeaponCrit) {
-          baseDmg = randomInt(ligne.degatsMin + bonusCrit, ligne.degatsMax + bonusCrit);
+          baseDmg = randomInt(effectiveMin + bonusCrit, effectiveMax + bonusCrit);
           anyCrit = true;
         } else {
-          baseDmg = randomInt(ligne.degatsMin, ligne.degatsMax);
+          baseDmg = randomInt(effectiveMin, effectiveMax);
         }
         const preFinalDmg = Math.floor(Math.floor(baseDmg * statMultiplier) * aoeMultiplier);
         // Apply resistance based on this line's stat
@@ -1182,10 +1205,10 @@ export async function executeAction(
     } else {
       // ===== SPELL DAMAGE =====
       const spellData = {
-        degatsMin: attackData.degatsMin,
-        degatsMax: attackData.degatsMax,
-        degatsCritMin: attackData.degatsCritMin!,
-        degatsCritMax: attackData.degatsCritMax!,
+        degatsMin: attackData.degatsMin + bonusDmg,
+        degatsMax: attackData.degatsMax + bonusDmg,
+        degatsCritMin: attackData.degatsCritMin! + bonusDmg,
+        degatsCritMax: attackData.degatsCritMax! + bonusDmg,
         chanceCritBase: attackData.chanceCritBase,
         statUtilisee: attackData.statUtilisee as any,
         coefficient: spell?.coefficient ?? 1.0,

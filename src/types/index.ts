@@ -160,6 +160,8 @@ export interface CombatEntityState {
   resistanceIntelligence?: number;
   resistanceDexterite?: number;
   resistanceAgilite?: number;
+  bonusDommages?: number;
+  bonusSoins?: number;
   sorts?: CombatSpellState[];
 }
 
@@ -272,6 +274,8 @@ export interface InventoryItemInstance {
   resistanceIntelligence: number;
   resistanceDexterite: number;
   resistanceAgilite: number;
+  bonusDommages: number;
+  bonusSoins: number;
   estEquipe: boolean;
   panoplieId?: number | null;
 }
@@ -384,4 +388,6 @@ export interface TotalStats {
   resistanceIntelligence: number;
   resistanceDexterite: number;
   resistanceAgilite: number;
+  bonusDommages: number;
+  bonusSoins: number;
 }
