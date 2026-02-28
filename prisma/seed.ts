@@ -1412,6 +1412,22 @@ async function main() {
 
   console.log('Created 6 recipes');
 
+  // ==================== COMPÉTENCES PASSIVES (3) ====================
+  await prisma.competencePassive.upsert({
+    where: { id: 1 }, update: { nom: 'Perspicacité', description: 'Une maîtrise accrue de la portée des sorts.', niveauDeblocage: 25, bonusPo: 1 },
+    create: { id: 1, nom: 'Perspicacité', description: 'Une maîtrise accrue de la portée des sorts.', niveauDeblocage: 25, bonusPo: 1 },
+  });
+  await prisma.competencePassive.upsert({
+    where: { id: 2 }, update: { nom: 'Endurance', description: 'Le corps forgé par l\'expérience gagne en mobilité.', niveauDeblocage: 50, bonusPm: 1 },
+    create: { id: 2, nom: 'Endurance', description: 'Le corps forgé par l\'expérience gagne en mobilité.', niveauDeblocage: 50, bonusPm: 1 },
+  });
+  await prisma.competencePassive.upsert({
+    where: { id: 3 }, update: { nom: 'Maestria', description: 'Un vétéran chevronné agit avec plus d\'efficacité.', niveauDeblocage: 100, bonusPa: 1 },
+    create: { id: 3, nom: 'Maestria', description: 'Un vétéran chevronné agit avec plus d\'efficacité.', niveauDeblocage: 100, bonusPa: 1 },
+  });
+
+  console.log('Created 3 passive skills');
+
   console.log('Seeding completed!');
 }
 

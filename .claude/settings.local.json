@@ -59,7 +59,8 @@
       "Bash(cmd /c \"cd C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\frontend && npx tsc --noEmit 2>&1\")",
       "Bash(cmd /c \"cd /d C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\frontend && npx tsc --noEmit\")",
       "Bash(find:*)",
-      "Bash(start cmd:*)"
+      "Bash(start cmd:*)",
+      "Bash(do:*)"
     ]
   }
 }

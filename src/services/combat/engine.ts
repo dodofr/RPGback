@@ -933,6 +933,7 @@ export async function executeAction(
           const verb = ef.effetNom.toLowerCase().includes('attir') ? 'attiré' : 'repoussé';
           await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} est ${verb} de ${r.distanceReelle} case(s) (${r.from.x},${r.from.y}) → (${r.to.x},${r.to.y})`, 'ACTION');
           await triggerPiegesForEntity(combatId, ef.entiteId, r.to.x, r.to.y);
+          await checkCombatEnd(combatId);
         } else {
           await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} résiste au déplacement`, 'ACTION');
         }
@@ -1054,6 +1055,7 @@ export async function executeAction(
           const verb = ef.effetNom.toLowerCase().includes('attir') ? 'attiré' : 'repoussé';
           await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} est ${verb} de ${r.distanceReelle} case(s) (${r.from.x},${r.from.y}) → (${r.to.x},${r.to.y})`, 'ACTION');
           await triggerPiegesForEntity(combatId, ef.entiteId, r.to.x, r.to.y);
+          await checkCombatEnd(combatId);
         } else {
           await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} résiste au déplacement`, 'ACTION');
         }
@@ -1475,11 +1477,8 @@ export async function moveEntity(
   // Trigger traps on the new position (traps are one-shot, invisible to enemy)
   await triggerPiegesForEntity(combatId, entiteId, targetX, targetY);
 
-  // Check if entity died from trap
-  const entityAfterTrap = await prisma.combatEntite.findUnique({ where: { id: entiteId } });
-  if (entityAfterTrap && entityAfterTrap.pvActuels <= 0) {
-    await checkCombatEnd(combatId);
-  }
+  // Always check combat end: trap AoE can kill other entities even if the trigger entity survived
+  await checkCombatEnd(combatId);
 
   return {
     success: true,
@@ -1499,6 +1498,13 @@ export async function endTurn(combatId: number, entiteId: number): Promise<Actio
 
   if (!combat || combat.status !== CombatStatus.EN_COURS) {
     return { success: false, message: 'Combat not found or not in progress' };
+  }
+
+  // Safety check: catch any combat that should already be over (e.g. last enemy killed by trap AoE)
+  await checkCombatEnd(combatId);
+  const combatAfterCheck = await prisma.combat.findUnique({ where: { id: combatId }, select: { status: true } });
+  if (combatAfterCheck && combatAfterCheck.status !== CombatStatus.EN_COURS) {
+    return { success: true, message: 'Combat ended.' };
   }
 
   const entity = combat.entites.find((e) => e.id === entiteId);

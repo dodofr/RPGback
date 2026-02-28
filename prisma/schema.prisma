@@ -245,6 +245,7 @@ model Equipement {
   inventaireItems   InventaireItem[]
   recettes          Recette[]
   drops             MonstreDrop[]
+  marchandLignes    MarchandLigne[]
 }
 
 model Effet {
@@ -336,14 +337,15 @@ model Map {
   donjonSalles    DonjonSalle[]
   cases           MapCase[]
   spawns          MapSpawn[]
+  pnjs            PNJ[]
 }
 
 model MapConnection {
   id        Int     @id @default(autoincrement())
   fromMapId Int
   fromMap   Map     @relation("FromMap", fields: [fromMapId], references: [id])
-  toMapId   Int
-  toMap     Map     @relation("ToMap", fields: [toMapId], references: [id])
+  toMapId   Int?
+  toMap     Map?    @relation("ToMap", fields: [toMapId], references: [id])
   positionX Int
   positionY Int
   nom       String
@@ -705,9 +707,10 @@ model Ressource {
   description String?
   poids       Int                   @default(1)
   estPremium  Boolean               @default(false)
-  inventaires InventaireRessource[]
-  drops       MonstreDrop[]
-  ingredients RecetteIngredient[]
+  inventaires    InventaireRessource[]
+  drops          MonstreDrop[]
+  ingredients    RecetteIngredient[]
+  marchandLignes MarchandLigne[]
 }
 
 model InventaireRessource {
@@ -783,6 +786,53 @@ model PanoplieBonus {
   bonusCritique   Int      @default(0)
 
   @@unique([panoplieId, nombrePieces])
+}
+
+// ==================== PNJ MARCHANDS ====================
+
+model PNJ {
+  id          Int             @id @default(autoincrement())
+  nom         String
+  description String?
+  mapId       Int
+  map         Map             @relation(fields: [mapId], references: [id])
+  positionX   Int
+  positionY   Int
+  estMarchand Boolean         @default(true)
+  lignes      MarchandLigne[]
+}
+
+model MarchandLigne {
+  id           Int        @id @default(autoincrement())
+  pnjId        Int
+  pnj          PNJ        @relation(fields: [pnjId], references: [id], onDelete: Cascade)
+  equipementId Int?
+  equipement   Equipement? @relation(fields: [equipementId], references: [id])
+  ressourceId  Int?
+  ressource    Ressource?  @relation(fields: [ressourceId], references: [id])
+  prixMarchand Int?
+  prixRachat   Int?
+}
+
+// ==================== COMPÉTENCES PASSIVES ====================
+
+model CompetencePassive {
+  id                Int     @id @default(autoincrement())
+  nom               String
+  description       String?
+  niveauDeblocage   Int
+  bonusForce        Int     @default(0)
+  bonusIntelligence Int     @default(0)
+  bonusDexterite    Int     @default(0)
+  bonusAgilite      Int     @default(0)
+  bonusVie          Int     @default(0)
+  bonusChance       Int     @default(0)
+  bonusPa           Int     @default(0)
+  bonusPm           Int     @default(0)
+  bonusPo           Int     @default(0)
+  bonusCritique     Int     @default(0)
+  bonusDommages     Int     @default(0)
+  bonusSoins        Int     @default(0)
 }
 
 // ==================== DONJONS ====================

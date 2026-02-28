@@ -4,6 +4,7 @@ import prisma from '../../config/database';
 import { mapService } from '../../services/map.service';
 import { regionService } from '../../services/region.service';
 import { monstreService } from '../../services/monstre.service';
+import { pnjService } from '../../services/pnj.service';
 
 // Validation schemas
 const createMapSchema = z.object({
@@ -48,7 +49,7 @@ const createMonstreSchema = z.object({
 });
 
 const addConnectionSchema = z.object({
-  toMapId: z.number().int().positive(),
+  toMapId: z.number().int().positive().nullable().optional(),
   positionX: z.number().int().min(0),
   positionY: z.number().int().min(0),
   nom: z.string().min(2).max(100),
@@ -134,6 +135,26 @@ export class MapController {
     try {
       const maps = await mapService.findAll();
       res.json(maps);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getAllPortals(req: Request, res: Response, next: NextFunction) {
+    try {
+      const portals = await mapService.getAllPortals();
+      res.json(portals);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getMapPNJ(req: Request, res: Response, next: NextFunction) {
+    try {
+      const mapId = parseInt(req.params.id, 10);
+      if (isNaN(mapId)) { res.status(400).json({ error: 'Invalid map ID' }); return; }
+      const pnjs = await pnjService.getByMap(mapId);
+      res.json(pnjs);
     } catch (error) {
       next(error);
     }

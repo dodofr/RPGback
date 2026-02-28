@@ -340,7 +340,7 @@ export class GroupService {
   /**
    * Use a connection to travel to another map
    */
-  async useConnection(groupId: number, connectionId: number, difficulte?: number) {
+  async useConnection(groupId: number, connectionId: number, difficulte?: number, destinationConnectionId?: number) {
     const group = await prisma.groupe.findUnique({
       where: { id: groupId },
       include: { map: true },
@@ -379,8 +379,20 @@ export class GroupService {
       return donjonService.enterDungeon(connection.donjonId, groupId, difficulte);
     }
 
-    // Move to destination map
-    return this.enterMap(groupId, connection.toMapId);
+    // Network portal: destination chosen at runtime via destinationConnectionId
+    if (!destinationConnectionId) {
+      throw new Error('destinationConnectionId required for non-dungeon portals');
+    }
+
+    const dest = await prisma.mapConnection.findUnique({
+      where: { id: destinationConnectionId },
+    });
+
+    if (!dest) {
+      throw new Error('Destination portal not found');
+    }
+
+    return this.enterMap(groupId, dest.fromMapId, dest.positionX, dest.positionY);
   }
 
   /**

@@ -228,6 +228,25 @@ export class CharacterService {
       }
     }
 
+    // Passives débloquées par niveau
+    const passives = await prisma.competencePassive.findMany({
+      where: { niveauDeblocage: { lte: character.niveau } },
+    });
+    for (const p of passives) {
+      stats.force += p.bonusForce;
+      stats.intelligence += p.bonusIntelligence;
+      stats.dexterite += p.bonusDexterite;
+      stats.agilite += p.bonusAgilite;
+      stats.vie += p.bonusVie;
+      stats.chance += p.bonusChance;
+      stats.pa += p.bonusPa;
+      stats.pm += p.bonusPm;
+      stats.po += p.bonusPo;
+      stats.bonusCritique += p.bonusCritique;
+      stats.bonusDommages += p.bonusDommages;
+      stats.bonusSoins += p.bonusSoins;
+    }
+
     return {
       ...stats,
       pvMax: calculatePV(stats.vie),

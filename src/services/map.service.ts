@@ -105,7 +105,7 @@ export class MapService {
 
   async addConnection(data: {
     fromMapId: number;
-    toMapId: number;
+    toMapId?: number | null;
     positionX: number;
     positionY: number;
     nom: string;
@@ -113,11 +113,21 @@ export class MapService {
     return prisma.mapConnection.create({
       data: {
         fromMapId: data.fromMapId,
-        toMapId: data.toMapId,
+        toMapId: data.toMapId ?? null,
         positionX: data.positionX,
         positionY: data.positionY,
         nom: data.nom,
       },
+    });
+  }
+
+  async getAllPortals() {
+    return prisma.mapConnection.findMany({
+      where: { donjonId: null },
+      include: {
+        fromMap: { select: { id: true, nom: true, type: true } },
+      },
+      orderBy: [{ fromMap: { nom: 'asc' } }, { nom: 'asc' }],
     });
   }
 

@@ -6,6 +6,7 @@ import combatRoutes from './combat/combat.routes';
 import staticRoutes from './static/static.routes';
 import mapRoutes from './maps/map.routes';
 import donjonRoutes from './donjons/donjon.routes';
+import pnjRoutes from './pnj/pnj.routes';
 
 import inventoryRoutes from './inventory/inventory.routes';
 import craftRoutes from './craft/craft.routes';
@@ -39,5 +40,7 @@ router.use('/zones', staticRoutes.zones);
 router.use('/resources', staticRoutes.resources);
 router.use('/sets', staticRoutes.sets);
 router.use('/admin/recipes', staticRoutes.recipes);
+router.use('/passives', staticRoutes.passives);
+router.use('/pnj', pnjRoutes);
 
 export default router;

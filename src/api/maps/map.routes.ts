@@ -33,6 +33,9 @@ const mapsRouter = Router();
 // PUT /api/maps/world-positions - Batch update world positions + rebuild directional links
 mapsRouter.put('/world-positions', (req, res, next) => mapController.updateWorldPositions(req, res, next));
 
+// GET /api/maps/portals - List all non-dungeon portals (must be before /:id)
+mapsRouter.get('/portals', (req, res, next) => mapController.getAllPortals(req, res, next));
+
 // GET /api/maps - List all maps
 mapsRouter.get('/', (req, res, next) => mapController.getAllMaps(req, res, next));
 
@@ -53,6 +56,9 @@ mapsRouter.put('/:id/grid/cases', (req, res, next) => mapController.setMapCases(
 
 // PUT /api/maps/:id/grid/spawns - Replace map spawns
 mapsRouter.put('/:id/grid/spawns', (req, res, next) => mapController.setMapSpawns(req, res, next));
+
+// GET /api/maps/:id/pnj - Get all NPCs on a map
+mapsRouter.get('/:id/pnj', (req, res, next) => mapController.getMapPNJ(req, res, next));
 
 // POST /api/maps/:id/spawn-enemies - Spawn enemies on the map (MANUEL mode)
 mapsRouter.post('/:id/spawn-enemies', (req, res, next) => mapController.spawnEnemies(req, res, next));

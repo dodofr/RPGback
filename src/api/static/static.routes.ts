@@ -1240,6 +1240,85 @@ recipesRouter.delete('/:id/ingredients/:ingredientId', async (req: Request, res:
   } catch (error) { next(error); }
 });
 
+// ============================================================
+// Compétences Passives routes
+// ============================================================
+const passivesRouter = Router();
+
+const createPassiveSchema = z.object({
+  nom: z.string().min(1),
+  description: z.string().nullable().optional(),
+  niveauDeblocage: z.number().int().min(1),
+  bonusForce: z.number().int().default(0),
+  bonusIntelligence: z.number().int().default(0),
+  bonusDexterite: z.number().int().default(0),
+  bonusAgilite: z.number().int().default(0),
+  bonusVie: z.number().int().default(0),
+  bonusChance: z.number().int().default(0),
+  bonusPa: z.number().int().default(0),
+  bonusPm: z.number().int().default(0),
+  bonusPo: z.number().int().default(0),
+  bonusCritique: z.number().int().default(0),
+  bonusDommages: z.number().int().default(0),
+  bonusSoins: z.number().int().default(0),
+});
+
+const updatePassiveSchema = createPassiveSchema.partial();
+
+passivesRouter.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const passives = await prisma.competencePassive.findMany({ orderBy: { niveauDeblocage: 'asc' } });
+    res.json(passives);
+  } catch (error) { next(error); }
+});
+
+passivesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const passive = await prisma.competencePassive.findUnique({ where: { id } });
+    if (!passive) { res.status(404).json({ error: 'Passive skill not found' }); return; }
+    res.json(passive);
+  } catch (error) { next(error); }
+});
+
+passivesRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = createPassiveSchema.parse(req.body);
+    const passive = await prisma.competencePassive.create({ data });
+    res.status(201).json(passive);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+passivesRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const data = updatePassiveSchema.parse(req.body);
+    const existing = await prisma.competencePassive.findUnique({ where: { id } });
+    if (!existing) { res.status(404).json({ error: 'Passive skill not found' }); return; }
+    const passive = await prisma.competencePassive.update({ where: { id }, data });
+    res.json(passive);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+passivesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const existing = await prisma.competencePassive.findUnique({ where: { id } });
+    if (!existing) { res.status(404).json({ error: 'Passive skill not found' }); return; }
+    await prisma.competencePassive.delete({ where: { id } });
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
+
 export default {
   races: racesRouter,
   spells: spellsRouter,
@@ -1249,4 +1328,5 @@ export default {
   resources: resourcesRouter,
   sets: setsRouter,
   recipes: recipesRouter,
+  passives: passivesRouter,
 };

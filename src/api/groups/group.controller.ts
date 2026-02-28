@@ -25,6 +25,7 @@ const enterMapSchema = z.object({
 
 const useConnectionSchema = z.object({
   connectionId: z.number().int().positive(),
+  destinationConnectionId: z.number().int().positive().optional(),
   difficulte: z.number().int().refine(val => [4, 6, 8].includes(val), {
     message: 'Difficulty must be 4, 6, or 8',
   }).optional(),
@@ -205,7 +206,7 @@ export class GroupController {
       }
 
       const data = useConnectionSchema.parse(req.body);
-      const result = await groupService.useConnection(groupId, data.connectionId, data.difficulte);
+      const result = await groupService.useConnection(groupId, data.connectionId, data.difficulte, data.destinationConnectionId);
       res.json(result);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -214,7 +215,7 @@ export class GroupController {
       }
       if (error instanceof Error) {
         if (error.message === 'Group not found' || error.message === 'Connection not found' ||
-            error.message === 'Dungeon not found') {
+            error.message === 'Dungeon not found' || error.message === 'Destination portal not found') {
           res.status(404).json({ error: error.message });
           return;
         }
@@ -222,6 +223,7 @@ export class GroupController {
             error.message === 'Group is not at the connection position' ||
             error.message.includes('Difficulty required') ||
             error.message.includes('Difficulty must be') ||
+            error.message.includes('destinationConnectionId required') ||
             error.message.includes('Group already has an active dungeon run') ||
             error.message.includes('Group has no characters')) {
           res.status(400).json({ error: error.message });
