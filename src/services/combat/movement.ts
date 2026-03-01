@@ -93,6 +93,86 @@ function bfsPathCost(
 }
 
 /**
+ * BFS pathfinding returning the full path from 'from' to 'to'.
+ * Returns [step1, ..., to] (from excluded), or null if unreachable.
+ * Used to trigger traps on each traversed cell during player movement.
+ */
+export function bfsPathFull(
+  from: Position,
+  to: Position,
+  maxSteps: number,
+  grid: GridConfig,
+  occupiedPositions: EntityPosition[],
+  blockedCases: CombatCaseState[]
+): Position[] | null {
+  if (from.x === to.x && from.y === to.y) return [];
+
+  const occupiedSet = new Set<string>();
+  for (const e of occupiedPositions) {
+    if (e.pvActuels > 0) occupiedSet.add(`${e.positionX},${e.positionY}`);
+  }
+  const blockedSet = new Set<string>();
+  for (const c of blockedCases) {
+    if (c.bloqueDeplacement) blockedSet.add(`${c.x},${c.y}`);
+  }
+
+  const visited = new Set<string>();
+  visited.add(`${from.x},${from.y}`);
+
+  // parent map to reconstruct path
+  const parent = new Map<string, string>();
+
+  const queue: Array<{ x: number; y: number; cost: number }> = [
+    { x: from.x, y: from.y, cost: 0 },
+  ];
+
+  const directions = [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 },
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+
+    for (const dir of directions) {
+      const nx = current.x + dir.dx;
+      const ny = current.y + dir.dy;
+      const key = `${nx},${ny}`;
+      const nextCost = current.cost + 1;
+
+      if (nextCost > maxSteps) continue;
+      if (!isInBounds(nx, ny, grid.width, grid.height)) continue;
+      if (visited.has(key)) continue;
+      if (blockedSet.has(key)) continue;
+
+      visited.add(key);
+      parent.set(key, `${current.x},${current.y}`);
+
+      if (nx === to.x && ny === to.y) {
+        // Reconstruct path
+        const path: Position[] = [];
+        let cur = key;
+        while (cur !== `${from.x},${from.y}`) {
+          const [px, py] = cur.split(',').map(Number);
+          path.unshift({ x: px, y: py });
+          cur = parent.get(cur)!;
+        }
+        return path;
+      }
+
+      // Can't walk through living entities
+      if (occupiedSet.has(key)) continue;
+
+      queue.push({ x: nx, y: ny, cost: nextCost });
+    }
+  }
+
+  return null;
+}
+
+/**
  * Check if a move is valid
  */
 export function canMove(

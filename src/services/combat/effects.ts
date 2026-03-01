@@ -18,6 +18,7 @@ export interface PushPullResult {
   distanceReelle: number;
   from: { x: number; y: number };
   to: { x: number; y: number };
+  steps: { x: number; y: number }[];
 }
 
 export interface AppliedEffect {
@@ -299,7 +300,7 @@ export async function pushPullEntity(
   const target = entities.find(e => e.id === targetId);
 
   if (!caster || !target) {
-    return { moved: false, distanceReelle: 0, from: { x: 0, y: 0 }, to: { x: 0, y: 0 } };
+    return { moved: false, distanceReelle: 0, from: { x: 0, y: 0 }, to: { x: 0, y: 0 }, steps: [] };
   }
 
   const from = { x: target.positionX, y: target.positionY };
@@ -329,7 +330,7 @@ export async function pushPullEntity(
 
   // If caster and target are on the same cell (shouldn't happen), no movement
   if (dx === 0 && dy === 0) {
-    return { moved: false, distanceReelle: 0, from, to: from };
+    return { moved: false, distanceReelle: 0, from, to: from, steps: [] };
   }
 
   // Build sets for quick lookup
@@ -349,6 +350,7 @@ export async function pushPullEntity(
   let currentX = target.positionX;
   let currentY = target.positionY;
   let moved = 0;
+  const steps: { x: number; y: number }[] = [];
 
   for (let i = 0; i < distance; i++) {
     const nextX = currentX + dirX;
@@ -364,6 +366,7 @@ export async function pushPullEntity(
     currentX = nextX;
     currentY = nextY;
     moved++;
+    steps.push({ x: currentX, y: currentY });
   }
 
   const to = { x: currentX, y: currentY };
@@ -380,7 +383,7 @@ export async function pushPullEntity(
     target.positionY = currentY;
   }
 
-  return { moved: moved > 0, distanceReelle: moved, from, to };
+  return { moved: moved > 0, distanceReelle: moved, from, to, steps };
 }
 
 /**

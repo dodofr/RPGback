@@ -1,0 +1,449 @@
+====================================================================
+  DOCUMENTATION — Système d'import en masse (POST /api/import)
+====================================================================
+
+PRINCIPE
+--------
+Un seul appel POST /api/import accepte un objet JSON ("pack") et
+crée ou met à jour toutes les entités en une seule transaction Prisma
+atomique, sans jamais avoir à connaître les IDs en base.
+
+  • Atomique      : si une erreur survient, TOUT est annulé (rollback).
+  • Idempotent    : réimporter le même pack ne crée pas de doublons.
+  • Par nom       : toutes les références utilisent les noms, pas les IDs.
+
+
+ENDPOINT
+--------
+  POST /api/import
+  Content-Type: application/json
+  Body: <pack JSON>
+
+
+RÉPONSES
+--------
+Succès (200) :
+  {
+    "success": true,
+    "imported": {
+      "ressources": 1,   "effets": 1,     "zones": 0,
+      "races": 1,        "sorts": 2,      "sortEffets": 1,
+      "monstres": 2,     "monstreSorts": 2, "monstreDrops": 3,
+      "equipements": 1,  "lignesDegats": 1,
+      "recettes": 1,     "recetteIngredients": 1
+    }
+  }
+
+Erreur de validation Zod (400) :
+  { "error": "Validation error", "details": [...] }
+
+Référence introuvable (400) :
+  { "error": "Sort 'Nom' : effet 'Toto' introuvable en BDD ni dans le pack" }
+
+Erreur base de données (500, rollback) :
+  { "error": "Import failed — database rolled back", "details": "..." }
+
+
+STRUCTURE DU PACK JSON
+-----------------------
+Toutes les sections sont optionnelles.
+
+{
+  "ressources":  [ ... ],
+  "effets":      [ ... ],
+  "zones":       [ ... ],
+  "races":       [ ... ],
+  "sorts":       [ ... ],
+  "monstres":    [ ... ],
+  "equipements": [ ... ],
+  "recettes":    [ ... ]
+}
+
+
+====================================================================
+  DÉTAIL DE CHAQUE SECTION
+====================================================================
+
+── RESSOURCES ──────────────────────────────────────────────────────
+
+{
+  "nom":        "Écaille de reptile",  // REQUIS, unique en BDD
+  "poids":      1,                     // défaut: 1
+  "estPremium": false                  // défaut: false (drop global si true)
+}
+
+── EFFETS ──────────────────────────────────────────────────────────
+
+{
+  "nom":       "Empoisonnement lent",     // REQUIS
+  "type":      "POISON",                  // REQUIS — voir enums ci-dessous
+  "statCiblee":"FORCE",                   // défaut: FORCE (ignoré pour POISON/DISPEL)
+  "valeur":    0,                         // Pour BUFF/DEBUFF : valeur de la stat (ex: +20)
+  "valeurMin": 3,                         // Pour POISON : dégâts min par tick
+  "valeurMax": 6,                         // Pour POISON : dégâts max par tick → remplace valeur
+  "duree":     3,                         // REQUIS, en tours
+  "cumulable": true                       // défaut: false
+}
+
+Convention POISON : utiliser valeurMin + valeurMax (ignorent valeur).
+Convention BUFF/DEBUFF : utiliser valeur + statCiblee.
+
+Types EffetType : BUFF | DEBUFF | DISPEL | POUSSEE | ATTIRANCE | POISON | BOUCLIER | RESISTANCE
+
+── ZONES ───────────────────────────────────────────────────────────
+
+{
+  "type":   "CERCLE",  // REQUIS — voir enums ci-dessous
+  "taille": 2,         // REQUIS — rayon/taille de la zone
+  "nom":    "Cercle 2" // optionnel, généré automatiquement si absent
+}
+
+Les zones sont identifiées par la clé composite (type + taille).
+Si une zone avec ce type+taille existe déjà en BDD, elle est réutilisée
+sans recréation.
+
+Types ZoneType : CASE | CROIX | LIGNE | CONE | CERCLE | LIGNE_PERPENDICULAIRE
+                 DIAGONALE | CARRE | ANNEAU | CONE_INVERSE
+
+── RACES ───────────────────────────────────────────────────────────
+
+{
+  "nom":               "Reptilien",  // REQUIS, unique en BDD
+  "bonusForce":        5,            // défaut: 0
+  "bonusIntelligence": 0,
+  "bonusDexterite":    15,
+  "bonusAgilite":      10,
+  "bonusVie":          0,
+  "bonusChance":       0
+}
+
+── SORTS ───────────────────────────────────────────────────────────
+
+{
+  "nom":          "Morsure venimeuse",  // REQUIS
+  "race":         "Reptilien",         // nom de race → raceId (absent = sort neutre)
+  "type":         "SORT",              // SORT | ARME, défaut: SORT
+  "statUtilisee": "DEXTERITE",         // voir StatType, défaut: FORCE
+  "niveauRequis": 1,                   // niveau d'apprentissage, défaut: 1
+  "coutPA":       3,                   // REQUIS
+  "porteeMin":    1,                   // défaut: 0
+  "porteeMax":    1,                   // REQUIS
+  "ligneDeVue":   true,                // défaut: true
+  "degatsMin":    8,                   // défaut: 0
+  "degatsMax":    14,                  // défaut: 0
+  "degatsCritMin":18,                  // défaut: 0
+  "degatsCritMax":25,                  // défaut: 0
+  "chanceCritBase":0.1,                // défaut: 0.01
+  "cooldown":     0,                   // défaut: 0
+  "estSoin":      false,               // défaut: false
+  "tauxEchec":    0,                   // 0-1, défaut: 0
+  "zone": { "type": "CASE", "taille": 0 },  // zone inline (créée si absente)
+  "estInvocation":   false,
+  "invocationTemplate": "Lézard invoqué",   // nom monstre → invocationTemplateId
+  "estVolDeVie":     false,
+  "porteeModifiable":true,
+  "ligneDirecte":    false,
+  "estGlyphe":       false,
+  "estPiege":        false,
+  "poseDuree":       null,             // durée en tours (glyphe/piège)
+  "estTeleportation":false,
+  "coefficient":     1.0,              // multiplicateur dégâts, défaut: 1.0
+  "effets": [
+    {
+      "effet":              "Empoisonnement lent",  // nom effet REQUIS
+      "chanceDeclenchement":0.6,                   // défaut: 1.0
+      "surCible":           true                   // défaut: true
+    }
+  ]
+}
+
+Règle forward-ref : invocationTemplate doit référencer un monstre
+défini DANS LE MÊME PACK (section monstres) ou déjà présent en BDD.
+
+── MONSTRES ────────────────────────────────────────────────────────
+
+{
+  "nom":         "Lézard des marais",  // REQUIS
+  "force":       10,   // défaut: 10
+  "intelligence":5,    // défaut: 10
+  "dexterite":   18,   // défaut: 10
+  "agilite":     14,   // défaut: 10
+  "vie":         8,    // défaut: 10
+  "chance":      5,    // défaut: 10
+  "pvBase":      90,   // optionnel — calculé automatiquement : 50 + (vie × 5)
+  "paBase":      6,    // défaut: 6
+  "pmBase":      3,    // défaut: 3
+  "niveauBase":  4,    // défaut: 1
+  "xpRecompense":55,   // défaut: 10  (mettre 0 pour les invocations)
+  "orMin":       8,    // défaut: 0
+  "orMax":       20,   // défaut: 0
+  "iaType":      "AGGRESSIF",           // défaut: EQUILIBRE
+  "pvScalingInvocation": null,          // float ou null
+  "resistanceForce":       0,           // 0-75, défaut: 0
+  "resistanceIntelligence":0,
+  "resistanceDexterite":   0,
+  "resistanceAgilite":     0,
+
+  "sorts": [
+    { "sort": "Morsure venimeuse", "priorite": 1 }  // nom sort, défaut prio: 1
+  ],
+
+  "drops": [
+    // Cas 1 : drop ressource
+    {
+      "ressource":   "Écaille de reptile",
+      "tauxDrop":    0.7,   // 0-1
+      "quantiteMin": 1,
+      "quantiteMax": 3
+    },
+    // Cas 2 : drop équipement
+    {
+      "equipement":  "Crocs de reptile",
+      "tauxDrop":    0.05,
+      "quantiteMin": 1,
+      "quantiteMax": 1
+    }
+  ]
+}
+
+IMPORTANT — clé "drops" :
+  • Absente  : les drops existants du monstre sont PRÉSERVÉS.
+  • Présente : les drops existants sont REMPLACÉS par la liste fournie.
+  • []       : tous les drops existants sont SUPPRIMÉS.
+
+IAType : EQUILIBRE | AGGRESSIF | SOUTIEN | DISTANCE
+
+── EQUIPEMENTS ─────────────────────────────────────────────────────
+
+{
+  "nom":       "Crocs de reptile",  // REQUIS
+  "slot":      "ARME",              // REQUIS — voir SlotType
+  "niveauRequis":    4,             // défaut: 1
+  "poids":           2,             // défaut: 1
+
+  // Bonus stats fixes (base)
+  "bonusForce":        0,           // défaut: 0
+  "bonusIntelligence": 0,
+  "bonusDexterite":    10,
+  "bonusAgilite":      0,
+  "bonusVie":          0,
+  "bonusChance":       0,
+  "bonusPA":           0,
+  "bonusPM":           0,
+  "bonusPO":           0,
+
+  // Ranges pour stats rollées au drop/craft (optionnel)
+  "bonusDexteriteMax": 18,          // null = stat fixe (pas de roll)
+
+  // Résistances (0-75)
+  "resistanceForce":       0,
+  "resistanceIntelligence":0,
+  "resistanceDexterite":   0,
+  "resistanceAgilite":     0,
+
+  // Bonus dommages/soins flat
+  "bonusDommages": 0,
+  "bonusSoins":    0,
+
+  // Champs arme (tous optionnels, null si non-arme)
+  "coutPA":       3,
+  "porteeMin":    1,
+  "porteeMax":    1,
+  "ligneDeVue":   true,
+  "chanceCritBase":0.1,
+  "bonusCrit":    8,     // ajouté au min+max de chaque ligne en cas de critique
+  "estVolDeVie":  false,
+
+  // Lignes de dégâts (une arme DOIT avoir au moins 1 ligne pour pouvoir attaquer)
+  "lignes": [
+    {
+      "ordre":        1,            // REQUIS, entier ≥ 1
+      "degatsMin":    12,           // REQUIS
+      "degatsMax":    20,           // REQUIS
+      "statUtilisee": "DEXTERITE",  // REQUIS — voir StatType
+      "estVolDeVie":  false,        // défaut: false
+      "estSoin":      false         // défaut: false
+    }
+  ]
+}
+
+SlotType : ARME | COIFFE | AMULETTE | BOUCLIER | HAUT | BAS | ANNEAU1 | ANNEAU2 | FAMILIER
+
+── RECETTES ────────────────────────────────────────────────────────
+
+{
+  "nom":           "Crocs de reptile",  // REQUIS, unique en BDD
+  "equipement":    "Crocs de reptile",  // REQUIS — nom équipement résultat
+  "niveauMinimum": 4,                   // défaut: 1
+  "coutOr":        150,                 // défaut: 0
+  "ingredients": [
+    {
+      "ressource": "Écaille de reptile",  // REQUIS — nom ressource
+      "quantite":  8                      // REQUIS
+    }
+  ]
+}
+
+Les ingrédients existants d'une recette sont TOUJOURS remplacés
+par ceux définis dans le pack.
+
+
+====================================================================
+  ENUMS DISPONIBLES
+====================================================================
+
+StatType     : FORCE | INTELLIGENCE | DEXTERITE | AGILITE | VIE | CHANCE
+               PA | PM | PO | DOMMAGES | SOINS
+
+ZoneType     : CASE | CROIX | LIGNE | CONE | CERCLE | LIGNE_PERPENDICULAIRE
+               DIAGONALE | CARRE | ANNEAU | CONE_INVERSE
+
+SlotType     : ARME | COIFFE | AMULETTE | BOUCLIER | HAUT | BAS
+               ANNEAU1 | ANNEAU2 | FAMILIER
+
+EffetType    : BUFF | DEBUFF | DISPEL | POUSSEE | ATTIRANCE | POISON
+               BOUCLIER | RESISTANCE
+
+IAType       : EQUILIBRE | AGGRESSIF | SOUTIEN | DISTANCE
+
+
+====================================================================
+  ORDRE DE TRAITEMENT ET DÉPENDANCES
+====================================================================
+
+Les entités sont traitées dans cet ordre au sein de la transaction :
+
+  1.  ressources         → pré-requis pour drops et ingrédients recettes
+  2.  effets             → pré-requis pour SortEffets
+  3.  zones              → pré-requis pour sorts (créées à la volée aussi)
+  4.  races              → pré-requis pour sorts
+  5.  monstres (base)    → AVANT sorts (forward-ref invocationTemplate)
+  6.  sorts              → résout zone/race/invocationTemplate
+  7.  SortEffets         → liaison sort → effet
+  8.  MonstreSorts       → liaison monstre → sort
+  9.  equipements        → AVANT monstreDrops (équipements droppables)
+  10. LigneDegatsArme    → lignes de dégâts par équipement
+  11. monstreDrops       → remplace drops si clé présente
+  12. recettes           → résout équipement résultat
+  13. RecetteIngredients → remplace ingrédients
+
+Règles de résolution des références :
+  • Une référence est cherchée d'abord dans le cache du pack (entités
+    définies dans le pack courant), puis en pré-chargement BDD.
+  • Si introuvable dans les deux → erreur immédiate avec message clair.
+  • Les zones inline dans les sorts sont créées à la volée si absentes.
+
+
+====================================================================
+  EXEMPLE COMPLET — Pack "Reptiliens"
+====================================================================
+
+{
+  "ressources": [
+    { "nom": "Écaille de reptile", "poids": 1, "estPremium": false }
+  ],
+
+  "effets": [
+    {
+      "nom": "Empoisonnement lent",
+      "type": "POISON",
+      "valeurMin": 3, "valeurMax": 6,
+      "duree": 3, "cumulable": true
+    }
+  ],
+
+  "races": [
+    {
+      "nom": "Reptilien",
+      "bonusForce": 5, "bonusDexterite": 15, "bonusAgilite": 10
+    }
+  ],
+
+  "monstres": [
+    {
+      "nom": "Lézard invoqué",
+      "force": 12, "dexterite": 15, "agilite": 12, "vie": 6,
+      "niveauBase": 1, "xpRecompense": 0, "orMin": 0, "orMax": 0,
+      "iaType": "AGGRESSIF", "pvScalingInvocation": 0.4,
+      "sorts": [{ "sort": "Morsure venimeuse", "priorite": 1 }]
+    },
+    {
+      "nom": "Lézard des marais",
+      "force": 10, "dexterite": 18, "agilite": 14, "vie": 8,
+      "niveauBase": 4, "xpRecompense": 55, "orMin": 8, "orMax": 20,
+      "iaType": "AGGRESSIF",
+      "sorts": [{ "sort": "Morsure venimeuse", "priorite": 1 }],
+      "drops": [
+        { "ressource": "Écaille de reptile", "tauxDrop": 0.7, "quantiteMin": 1, "quantiteMax": 3 },
+        { "equipement": "Crocs de reptile",   "tauxDrop": 0.05, "quantiteMin": 1, "quantiteMax": 1 }
+      ]
+    }
+  ],
+
+  "sorts": [
+    {
+      "nom": "Morsure venimeuse",
+      "race": "Reptilien",
+      "niveauRequis": 1, "coutPA": 3,
+      "porteeMin": 1, "porteeMax": 1,
+      "degatsMin": 8, "degatsMax": 14,
+      "degatsCritMin": 18, "degatsCritMax": 25, "chanceCritBase": 0.1,
+      "zone": { "type": "CASE", "taille": 0 },
+      "effets": [
+        { "effet": "Empoisonnement lent", "chanceDeclenchement": 0.6, "surCible": true }
+      ]
+    },
+    {
+      "nom": "Convocation du lézard",
+      "race": "Reptilien", "niveauRequis": 5,
+      "coutPA": 5, "porteeMin": 1, "porteeMax": 3,
+      "estInvocation": true,
+      "invocationTemplate": "Lézard invoqué",
+      "porteeModifiable": false,
+      "zone": { "type": "CASE", "taille": 0 }
+    }
+  ],
+
+  "equipements": [
+    {
+      "nom": "Crocs de reptile", "slot": "ARME",
+      "niveauRequis": 4, "bonusDexterite": 10,
+      "coutPA": 3, "porteeMin": 1, "porteeMax": 1,
+      "chanceCritBase": 0.1, "bonusCrit": 8,
+      "lignes": [
+        { "ordre": 1, "degatsMin": 12, "degatsMax": 20, "statUtilisee": "DEXTERITE" }
+      ]
+    }
+  ],
+
+  "recettes": [
+    {
+      "nom": "Crocs de reptile",
+      "equipement": "Crocs de reptile",
+      "niveauMinimum": 4, "coutOr": 150,
+      "ingredients": [
+        { "ressource": "Écaille de reptile", "quantite": 8 }
+      ]
+    }
+  ]
+}
+
+
+====================================================================
+  CONSEILS ET LIMITES
+====================================================================
+
+• Couper les gros imports en packs thématiques de ~50-80 entités
+  (timeout transaction : 30 secondes).
+
+• Les noms dans une même section doivent être uniques — un doublon
+  dans le pack est détecté avant tout accès BDD (400 immédiat).
+
+• Les zones sont partagées par type+taille (pas par nom). Deux sorts
+  avec "zone": {"type":"CASE","taille":0} partageront la même Zone en BDD.
+
+• Un pack peut importer uniquement ce dont il a besoin.
+  Exemple : importer uniquement des ressources sans rien d'autre.
+
+• Pour tester sans risque : réimporter le même pack → résultat
+  identique, compteurs identiques, aucun doublon.

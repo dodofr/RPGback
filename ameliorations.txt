@@ -1,16 +1,10 @@
 Quete
-Penser a un sytheme de quete et creer des pnj
+Penser a un sytheme de quete
 
 Faire tout les test front pour voir les comportement
 ameliorer les pages 
 passer au graphisme
 
-voir pour les dommages et soin mis en place
 
-Voir pour mettre des pnj
 
-  Progression
-  - Sorts améliorables : paliers 1/2/3 par sort, chaque rang augmente les dégâts ou réduit le coût PA. Le PersonnageSort a déjà un rang     
  
-
- A verifier le comportement des invoques

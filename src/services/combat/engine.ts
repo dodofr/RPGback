@@ -3,7 +3,7 @@ import prisma from '../../config/database';
 import { CombatState, ActionResult, Position, CombatCaseState, ArmeData, LigneDegats, ActiveEffectStateWithDetails, CombatSpellState, ZonePoseeState } from '../../types';
 import { calculateAlternatingInitiativeOrder, getNextEntity } from './initiative';
 import { calculateDamage, applyDamage, isDead } from './damage';
-import { canMove, calculateMovementCost, hasLineOfSight } from './movement';
+import { canMove, calculateMovementCost, hasLineOfSight, bfsPathFull } from './movement';
 import { getAffectedCells, getEntitiesInArea } from './aoe';
 import { manhattanDistance, getStatValue, calculateStatMultiplier, calculateCritChance, calculateAoEReduction, applyResistance } from '../../utils/formulas';
 import { progressionService } from '../progression.service';
@@ -932,7 +932,11 @@ export async function executeAction(
         if (r.moved) {
           const verb = ef.effetNom.toLowerCase().includes('attir') ? 'attiré' : 'repoussé';
           await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} est ${verb} de ${r.distanceReelle} case(s) (${r.from.x},${r.from.y}) → (${r.to.x},${r.to.y})`, 'ACTION');
-          await triggerPiegesForEntity(combatId, ef.entiteId, r.to.x, r.to.y);
+          for (const step of r.steps) {
+            await triggerPiegesForEntity(combatId, ef.entiteId, step.x, step.y);
+            const check = await prisma.combatEntite.findUnique({ where: { id: ef.entiteId }, select: { pvActuels: true } });
+            if (!check || check.pvActuels <= 0) break;
+          }
           await checkCombatEnd(combatId);
         } else {
           await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} résiste au déplacement`, 'ACTION');
@@ -1054,7 +1058,11 @@ export async function executeAction(
         if (r.moved) {
           const verb = ef.effetNom.toLowerCase().includes('attir') ? 'attiré' : 'repoussé';
           await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} est ${verb} de ${r.distanceReelle} case(s) (${r.from.x},${r.from.y}) → (${r.to.x},${r.to.y})`, 'ACTION');
-          await triggerPiegesForEntity(combatId, ef.entiteId, r.to.x, r.to.y);
+          for (const step of r.steps) {
+            await triggerPiegesForEntity(combatId, ef.entiteId, step.x, step.y);
+            const check = await prisma.combatEntite.findUnique({ where: { id: ef.entiteId }, select: { pvActuels: true } });
+            if (!check || check.pvActuels <= 0) break;
+          }
           await checkCombatEnd(combatId);
         } else {
           await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} résiste au déplacement`, 'ACTION');
@@ -1378,7 +1386,11 @@ export async function executeAction(
       if (r.moved) {
         const verb = ef.effetNom.toLowerCase().includes('attir') ? 'attiré' : 'repoussé';
         await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} est ${verb} de ${r.distanceReelle} case(s) (${r.from.x},${r.from.y}) → (${r.to.x},${r.to.y})`, 'ACTION');
-        await triggerPiegesForEntity(combatId, ef.entiteId, r.to.x, r.to.y);
+        for (const step of r.steps) {
+          await triggerPiegesForEntity(combatId, ef.entiteId, step.x, step.y);
+          const check = await prisma.combatEntite.findUnique({ where: { id: ef.entiteId }, select: { pvActuels: true } });
+          if (!check || check.pvActuels <= 0) break;
+        }
       } else {
         await addLog(combatId, combat.tourActuel, `${target?.nom || '?'} résiste au déplacement`, 'ACTION');
       }
@@ -1474,8 +1486,26 @@ export async function moveEntity(
     },
   });
 
-  // Trigger traps on the new position (traps are one-shot, invisible to enemy)
-  await triggerPiegesForEntity(combatId, entiteId, targetX, targetY);
+  // Trigger traps on each cell of the path (not just destination)
+  const path = bfsPathFull(
+    { x: entity.positionX, y: entity.positionY },
+    { x: targetX, y: targetY },
+    entity.pmActuels,
+    { width: combat.grilleLargeur, height: combat.grilleHauteur },
+    combat.entites,
+    blockedCases
+  );
+
+  if (path) {
+    for (const cell of path) {
+      await triggerPiegesForEntity(combatId, entiteId, cell.x, cell.y);
+      const check = await prisma.combatEntite.findUnique({ where: { id: entiteId }, select: { pvActuels: true } });
+      if (!check || check.pvActuels <= 0) break;
+    }
+  } else {
+    // Fallback: trigger only at destination
+    await triggerPiegesForEntity(combatId, entiteId, targetX, targetY);
+  }
 
   // Always check combat end: trap AoE can kill other entities even if the trigger entity survived
   await checkCombatEnd(combatId);

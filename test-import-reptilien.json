@@ -1,0 +1,93 @@
+{
+  "ressources": [
+    { "nom": "Écaille de reptile", "poids": 1, "estPremium": false }
+  ],
+
+  "effets": [
+    {
+      "nom": "Empoisonnement lent",
+      "type": "POISON",
+      "valeurMin": 3, "valeurMax": 6,
+      "duree": 3, "cumulable": true
+    }
+  ],
+
+  "races": [
+    {
+      "nom": "Reptilien",
+      "bonusForce": 5,
+      "bonusDexterite": 15,
+      "bonusAgilite": 10
+    }
+  ],
+
+  "monstres": [
+    {
+      "nom": "Lézard invoqué",
+      "force": 12, "intelligence": 5, "dexterite": 15, "agilite": 12,
+      "vie": 6, "chance": 5,
+      "niveauBase": 1, "xpRecompense": 0, "orMin": 0, "orMax": 0,
+      "iaType": "AGGRESSIF", "pvScalingInvocation": 0.4,
+      "sorts": [{ "sort": "Morsure venimeuse", "priorite": 1 }]
+    },
+    {
+      "nom": "Lézard des marais",
+      "force": 10, "intelligence": 5, "dexterite": 18, "agilite": 14,
+      "vie": 8, "chance": 8,
+      "niveauBase": 4, "xpRecompense": 55, "orMin": 8, "orMax": 20,
+      "iaType": "AGGRESSIF",
+      "sorts": [{ "sort": "Morsure venimeuse", "priorite": 1 }],
+      "drops": [
+        { "ressource": "Écaille de reptile", "tauxDrop": 0.7, "quantiteMin": 1, "quantiteMax": 3 },
+        { "equipement": "Crocs de reptile",   "tauxDrop": 0.05, "quantiteMin": 1, "quantiteMax": 1 }
+      ]
+    }
+  ],
+
+  "sorts": [
+    {
+      "nom": "Morsure venimeuse",
+      "race": "Reptilien",
+      "niveauRequis": 1, "coutPA": 3,
+      "porteeMin": 1, "porteeMax": 1,
+      "degatsMin": 8, "degatsMax": 14,
+      "degatsCritMin": 18, "degatsCritMax": 25, "chanceCritBase": 0.1,
+      "zone": { "type": "CASE", "taille": 0 },
+      "effets": [
+        { "effet": "Empoisonnement lent", "chanceDeclenchement": 0.6, "surCible": true }
+      ]
+    },
+    {
+      "nom": "Convocation du lézard",
+      "race": "Reptilien", "niveauRequis": 5,
+      "coutPA": 5, "porteeMin": 1, "porteeMax": 3,
+      "estInvocation": true,
+      "invocationTemplate": "Lézard invoqué",
+      "porteeModifiable": false,
+      "zone": { "type": "CASE", "taille": 0 }
+    }
+  ],
+
+  "equipements": [
+    {
+      "nom": "Crocs de reptile", "slot": "ARME",
+      "niveauRequis": 4, "bonusDexterite": 10,
+      "coutPA": 3, "porteeMin": 1, "porteeMax": 1,
+      "chanceCritBase": 0.1, "bonusCrit": 8,
+      "lignes": [
+        { "ordre": 1, "degatsMin": 12, "degatsMax": 20, "statUtilisee": "DEXTERITE" }
+      ]
+    }
+  ],
+
+  "recettes": [
+    {
+      "nom": "Crocs de reptile",
+      "equipement": "Crocs de reptile",
+      "niveauMinimum": 4, "coutOr": 150,
+      "ingredients": [
+        { "ressource": "Écaille de reptile", "quantite": 8 }
+      ]
+    }
+  ]
+}
