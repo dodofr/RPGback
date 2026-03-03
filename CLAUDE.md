@@ -194,7 +194,7 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 
 ### Tables référentielles
 - `Race` - Bonus de stats
-- `Sort` - Sorts avec `degatsCritMin`/`degatsCritMax`, `estSoin`/`estInvocation`/`estVolDeVie`, `tauxEchec`, `invocationTemplateId`, `ligneDirecte` (Boolean, ciblage axe strict)
+- `Sort` - Sorts avec `degatsCritMin`/`degatsCritMax`, `estSoin`/`estInvocation`/`estVolDeVie`/`estSelfBuff`, `tauxEchec`, `invocationTemplateId`, `ligneDirecte` (Boolean, ciblage axe strict)
 - `SortEffet` - Liaison sort → effet (`chanceDeclenchement`, `surCible`/`surLanceur`)
 - `Zone` - Types de zones d'effet
 - `Equipement` - Items avec bonus stats. Armes : données d'attaque + `tauxEchec` + `estVolDeVie` + `bonusCrit` (crit global) + `LigneDegatsArme[]` (multi-lignes optionnel)
@@ -242,6 +242,7 @@ type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST'
 - **estInvocation** : invoque entité à position libre (0 dégâts)
 - **ligneDirecte** : si `true`, la cible doit être sur le même axe X ou Y que le lanceur (diagonales refusées). Vérifié dans `engine.ts` avant le check de portée. Sort id=6 "Vent tranchant" : `porteeMax: 4, ligneDirecte: true`
 - **estVolDeVie** : après dégâts, le lanceur récupère 50% des dégâts totaux en PV (plafonné pvMax). Sur Sort = flag global, sur arme = par ligne
+- **estSelfBuff** : `true` → l'IA caste ce sort sur elle-même (step 0B, avant heal/attaque, dans les 4 stratégies). Flag explicite en BDD (remplace l'heuristique fragile basée sur dégâts=0). Sorts : Cri de rage (id=20), Méditation (id=21), Pas lourd (id=22). Le log ne montre pas "0 dégâts" pour les self-buffs (filtre `d.damage > 0` dans engine.ts)
 
 ### Armes multi-lignes
 - Chaque arme peut avoir 0 ou N `LigneDegatsArme` (table BDD, snapshotée dans `armeData.lignes[]`)
@@ -392,7 +393,7 @@ WILDERNESS (MANUEL, ennemis visibles) | DONJON (AUTO, rencontres aléatoires) | 
 
 ### Groupes ennemis
 - MANUEL : 1-3 `GroupeEnnemi` par map, 1-8 `GroupeEnnemiMembre` mixtes, spawn auto via `RegionMonstre`
-- AUTO : rencontres aléatoires (`tauxRencontre`), monstres via `RegionMonstre` (pondéré)
+- AUTO : engagement automatique à proximité (4 cases Manhattan), monstres via `RegionMonstre` (pondéré)
 - Engagement : automatique (déplacement sur case) ou manuel (`POST /maps/:id/engage`)
 
 ## Conventions de code
@@ -439,6 +440,7 @@ Avant de supprimer une ressource, nettoyer les relations :
 - Dispel : via `SortEffet → EffetType.DISPEL` (plus de flag `estDispel` sur Sort)
 - Invocation : `estInvocation: true`, `invocationTemplateId: N`, degats à 0
 - Ligne droite : `ligneDirecte: true` (ciblage axe H/V uniquement)
+- Self-buff IA : `estSelfBuff: true` (IA l'utilise sur soi en priorité)
 - Risqué : `tauxEchec: 0.xx`
 
 ### Modifier l'IA

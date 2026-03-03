@@ -54,6 +54,7 @@ const createSortSchema = z.object({
   estPiege: z.boolean().default(false),
   poseDuree: z.number().int().min(1).nullable().optional(),
   estTeleportation: z.boolean().default(false),
+  estSelfBuff: z.boolean().default(false),
   coefficient: z.number().min(0).max(10).default(1.0),
 });
 

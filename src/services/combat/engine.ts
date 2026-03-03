@@ -1325,7 +1325,7 @@ export async function executeAction(
     ? `${attacker.nom} utilise ${(attacker.armeData as unknown as ArmeData).nom} (${attackData.coutPA} PA)`
     : `${attacker.nom} lance ${spell!.nom} (${attackData.coutPA} PA)`;
   const critPrefix = useArme && globalWeaponCrit ? 'CRITIQUE ! ' : '';
-  const dmgParts = damages.map(d => {
+  const dmgParts = damages.filter(d => d.damage > 0).map(d => {
     const target = combat.entites.find(e => e.id === d.entiteId);
     const critStr = !useArme && d.isCritical ? 'CRITIQUE ! ' : '';
 

@@ -10,6 +10,9 @@ const SlotTypeEnum = z.enum(['ARME', 'COIFFE', 'AMULETTE', 'BOUCLIER', 'HAUT', '
 const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF', 'DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON', 'BOUCLIER', 'RESISTANCE']);
 const ZoneTypeEnum = z.enum(['CASE', 'CROIX', 'LIGNE', 'CONE', 'CERCLE', 'LIGNE_PERPENDICULAIRE', 'DIAGONALE', 'CARRE', 'ANNEAU', 'CONE_INVERSE']);
 const IATypeEnum = z.enum(['EQUILIBRE', 'AGGRESSIF', 'SOUTIEN', 'DISTANCE']);
+const RegionTypeEnum = z.enum(['FORET', 'PLAINE', 'DESERT', 'MONTAGNE', 'MARAIS', 'CAVERNE', 'CITE']);
+const MapTypeEnum = z.enum(['WILDERNESS', 'VILLE', 'DONJON', 'BOSS', 'SAFE']);
+const CombatModeEnum = z.enum(['MANUEL', 'AUTO']);
 
 // ============================================================
 // Sub-schemas (inline references by name)
@@ -60,6 +63,21 @@ const ligneImportSchema = z.object({
 const recetteIngredientInlineSchema = z.object({
   ressource: z.string().min(1),
   quantite: z.number().int().min(1),
+});
+
+const mapCaseInlineSchema = z.object({
+  x: z.number().int().min(0),
+  y: z.number().int().min(0),
+  bloqueDeplacement: z.boolean().default(false),
+  bloqueLigneDeVue: z.boolean().default(false),
+  estExclue: z.boolean().default(false),
+});
+
+const mapSpawnInlineSchema = z.object({
+  x: z.number().int().min(0),
+  y: z.number().int().min(0),
+  equipe: z.number().int().min(0).max(1),
+  ordre: z.number().int().min(1).max(8),
 });
 
 // ============================================================
@@ -122,6 +140,7 @@ const sortImportSchema = z.object({
   estPiege: z.boolean().default(false),
   poseDuree: z.number().int().min(1).optional(),
   estTeleportation: z.boolean().default(false),
+  estSelfBuff: z.boolean().default(false),
   coefficient: z.number().min(0).max(10).default(1.0),
   effets: z.array(sortEffetInlineSchema).optional(),
 });
@@ -149,6 +168,10 @@ const monstreImportSchema = z.object({
   resistanceAgilite: z.number().int().default(0),
   sorts: z.array(monstreSortInlineSchema).optional(),
   drops: z.array(monstreDropInlineSchema).optional(), // absent = skip, [] = clear
+  regions: z.array(z.object({
+    region: z.string().min(1),
+    probabilite: z.number().min(0).default(1.0),
+  })).optional(), // absent = skip, [] = clear
 });
 
 const equipementImportSchema = z.object({
@@ -211,10 +234,35 @@ const recetteImportSchema = z.object({
   ingredients: z.array(recetteIngredientInlineSchema),
 });
 
+const regionImportSchema = z.object({
+  nom: z.string().min(1),
+  type: RegionTypeEnum,
+  niveauMin: z.number().int().min(1).default(1),
+  niveauMax: z.number().int().min(1).default(10),
+  description: z.string().optional(),
+});
+
+const mapImportSchema = z.object({
+  nom: z.string().min(1),
+  region: z.string().min(1),          // nom région → regionId
+  type: MapTypeEnum,
+  combatMode: CombatModeEnum,
+  largeur: z.number().int().min(1).default(16),
+  hauteur: z.number().int().min(1).default(18),
+  // Spawns : spawnsDefaut=true → layout standard (x=1 joueurs / x=largeur-2 ennemis, y pair 2-16)
+  // spawns=[...] → positions explicites. Absent → spawns existants préservés
+  spawnsDefaut: z.boolean().default(false),
+  spawns: z.array(mapSpawnInlineSchema).optional(),
+  // Cases : absent → cases existantes préservées. [] → suppression. [...] → remplacement
+  cases: z.array(mapCaseInlineSchema).optional(),
+});
+
 // ============================================================
 // Root pack schema — all sections optional
 // ============================================================
 const importPackSchema = z.object({
+  regions: z.array(regionImportSchema).optional(),
+  maps: z.array(mapImportSchema).optional(),
   ressources: z.array(ressourceImportSchema).optional(),
   effets: z.array(effetImportSchema).optional(),
   zones: z.array(zoneInlineSchema).optional(),
@@ -252,6 +300,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     // ── 2. Check for duplicate names within each named section ──
     const namedSections: [string, { nom: string }[] | undefined][] = [
+      ['regions', pack.regions],
       ['ressources', pack.ressources],
       ['effets', pack.effets],
       ['races', pack.races],
@@ -271,6 +320,19 @@ router.post('/', async (req: Request, res: Response) => {
         seen.add(item.nom);
       }
     }
+    // Map duplicates use composite key nom+region
+    if (pack.maps?.length) {
+      const seen = new Set<string>();
+      for (const m of pack.maps) {
+        const key = `${m.nom}_${m.region}`;
+        if (seen.has(key)) {
+          res.status(400).json({ error: `Doublon dans la section 'maps' : '${m.nom}' dans région '${m.region}' apparaît plusieurs fois` });
+          return;
+        }
+        seen.add(key);
+      }
+    }
+
     // Zone duplicates use composite key type+taille
     if (pack.zones?.length) {
       const seen = new Set<string>();
@@ -286,8 +348,9 @@ router.post('/', async (req: Request, res: Response) => {
 
     // ── 3. Transaction ──────────────────────────────────────
     const counters = {
+      regions: 0, maps: 0, mapCases: 0, mapSpawns: 0,
       ressources: 0, effets: 0, zones: 0, races: 0,
-      sorts: 0, sortEffets: 0, monstres: 0,
+      sorts: 0, sortEffets: 0, monstres: 0, regionMonstres: 0,
       monstreSorts: 0, monstreDrops: 0,
       equipements: 0, lignesDegats: 0,
       recettes: 0, recetteIngredients: 0,
@@ -296,9 +359,11 @@ router.post('/', async (req: Request, res: Response) => {
     await prisma.$transaction(async (tx) => {
       // Name → id caches
       const cache = {
+        regions: new Map<string, number>(),         // nom → id
+        maps: new Map<string, number>(),            // "nom_regionId" → id
         ressources: new Map<string, number>(),
         effets: new Map<string, number>(),
-        zones: new Map<string, number>(), // "TYPE_N" → id
+        zones: new Map<string, number>(),           // "TYPE_N" → id
         races: new Map<string, number>(),
         sorts: new Map<string, number>(),
         monstres: new Map<string, number>(),
@@ -306,6 +371,8 @@ router.post('/', async (req: Request, res: Response) => {
       };
 
       // ── PRE-LOAD: populate cache with existing DB entries ──
+      const dbRegions = await tx.region.findMany({ select: { id: true, nom: true } });
+      const dbMaps = await tx.map.findMany({ select: { id: true, nom: true, regionId: true } });
       const dbRessources = await tx.ressource.findMany({ select: { id: true, nom: true } });
       const dbEffets = await tx.effet.findMany({ select: { id: true, nom: true } });
       const dbZones = await tx.zone.findMany({ select: { id: true, type: true, taille: true } });
@@ -314,6 +381,8 @@ router.post('/', async (req: Request, res: Response) => {
       const dbMonstres = await tx.monstreTemplate.findMany({ select: { id: true, nom: true } });
       const dbEquipements = await tx.equipement.findMany({ select: { id: true, nom: true } });
 
+      for (const r of dbRegions) cache.regions.set(r.nom, r.id);
+      for (const m of dbMaps) cache.maps.set(`${m.nom}_${m.regionId}`, m.id);
       for (const r of dbRessources) cache.ressources.set(r.nom, r.id);
       for (const e of dbEffets) cache.effets.set(e.nom, e.id);
       for (const z of dbZones) cache.zones.set(`${z.type}_${z.taille}`, z.id);
@@ -321,6 +390,92 @@ router.post('/', async (req: Request, res: Response) => {
       for (const s of dbSorts) cache.sorts.set(s.nom, s.id);
       for (const m of dbMonstres) cache.monstres.set(m.nom, m.id);
       for (const e of dbEquipements) cache.equipements.set(e.nom, e.id);
+
+      // ── STEP 0: Régions ───────────────────────────────────
+      for (const r of pack.regions ?? []) {
+        const data = {
+          type: r.type as any,
+          niveauMin: r.niveauMin,
+          niveauMax: r.niveauMax,
+          description: r.description ?? null,
+        };
+        const upserted = await tx.region.upsert({
+          where: { nom: r.nom },
+          update: data,
+          create: { nom: r.nom, ...data },
+          select: { id: true },
+        });
+        cache.regions.set(r.nom, upserted.id);
+        counters.regions++;
+      }
+
+      // ── STEP 0.5: Maps ────────────────────────────────────
+      for (const m of pack.maps ?? []) {
+        // Résolution région
+        if (!cache.regions.has(m.region)) {
+          throw new ImportRefError(`Map '${m.nom}' : région '${m.region}' introuvable en BDD ni dans le pack`);
+        }
+        const regionId = cache.regions.get(m.region)!;
+
+        const data = {
+          type: m.type as any,
+          combatMode: m.combatMode as any,
+          largeur: m.largeur,
+          hauteur: m.hauteur,
+        };
+
+        const existing = await tx.map.findFirst({ where: { nom: m.nom, regionId }, select: { id: true } });
+        let mapId: number;
+        if (existing) {
+          await tx.map.update({ where: { id: existing.id }, data });
+          mapId = existing.id;
+        } else {
+          const created = await tx.map.create({ data: { nom: m.nom, regionId, ...data }, select: { id: true } });
+          mapId = created.id;
+        }
+        cache.maps.set(`${m.nom}_${regionId}`, mapId);
+        counters.maps++;
+
+        // Cases : absent → préservées. [] ou [...] → remplacement
+        if (m.cases !== undefined) {
+          await tx.mapCase.deleteMany({ where: { mapId } });
+          for (const c of m.cases) {
+            await tx.mapCase.create({
+              data: {
+                mapId,
+                x: c.x,
+                y: c.y,
+                bloqueDeplacement: c.bloqueDeplacement,
+                bloqueLigneDeVue: c.bloqueLigneDeVue,
+                estExclue: c.estExclue,
+              },
+            });
+            counters.mapCases++;
+          }
+        }
+
+        // Spawns : absent → préservés. spawnsDefaut → layout standard. spawns=[...] → explicite
+        const spawnsToCreate: Array<{ x: number; y: number; equipe: number; ordre: number }> = [];
+        if (m.spawnsDefaut) {
+          const ys = [2, 4, 6, 8, 10, 12, 14, 16];
+          for (let i = 0; i < 8; i++) {
+            spawnsToCreate.push({ x: 1, y: ys[i], equipe: 0, ordre: i + 1 });
+            spawnsToCreate.push({ x: m.largeur - 2, y: ys[i], equipe: 1, ordre: i + 1 });
+          }
+        } else if (m.spawns !== undefined) {
+          spawnsToCreate.push(...m.spawns);
+        }
+
+        if (spawnsToCreate.length > 0) {
+          await tx.mapSpawn.deleteMany({ where: { mapId } });
+          for (const s of spawnsToCreate) {
+            await tx.mapSpawn.create({
+              data: { mapId, x: s.x, y: s.y, equipe: s.equipe, ordre: s.ordre },
+            });
+            counters.mapSpawns++;
+          }
+        }
+      }
 
       // ── STEP 1: Ressources ────────────────────────────────
       for (const r of pack.ressources ?? []) {
@@ -429,6 +584,21 @@ router.post('/', async (req: Request, res: Response) => {
         }
         cache.monstres.set(m.nom, monstreId);
         counters.monstres++;
+
+        // RegionMonstre : absent → préservé. [] → suppression. [...] → remplacement
+        if (m.regions !== undefined) {
+          await tx.regionMonstre.deleteMany({ where: { monstreId } });
+          for (const rm of m.regions) {
+            if (!cache.regions.has(rm.region)) {
+              throw new ImportRefError(`Monstre '${m.nom}' : région '${rm.region}' introuvable en BDD ni dans le pack`);
+            }
+            const regionId = cache.regions.get(rm.region)!;
+            await tx.regionMonstre.create({
+              data: { regionId, monstreId, probabilite: rm.probabilite },
+            });
+            counters.regionMonstres++;
+          }
+        }
       }
 
       // ── STEP 6: Sorts ─────────────────────────────────────
@@ -491,6 +661,7 @@ router.post('/', async (req: Request, res: Response) => {
           estPiege: s.estPiege,
           poseDuree: s.poseDuree ?? null,
           estTeleportation: s.estTeleportation,
+          estSelfBuff: s.estSelfBuff,
           coefficient: s.coefficient,
           zoneId,
           raceId,

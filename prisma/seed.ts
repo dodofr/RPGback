@@ -297,37 +297,40 @@ async function main() {
   // --- BUFF (IDs 20-22) ---
   // 20: Cri de rage (Humain) — Rage sur lanceur
   await prisma.sort.upsert({
-    where: { id: 20 }, update: {},
+    where: { id: 20 }, update: { estSelfBuff: true },
     create: {
       nom: 'Cri de rage', type: SortType.SORT, statUtilisee: StatType.FORCE,
       coutPA: 2, porteeMin: 0, porteeMax: 0, ligneDeVue: false,
       degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
       chanceCritBase: 0, cooldown: 3,
       niveauApprentissage: 3, raceId: humain.id, zoneId: zoneCase.id,
+      estSelfBuff: true,
     },
   });
 
   // 21: Méditation (Elfe) — Concentration sur lanceur
   await prisma.sort.upsert({
-    where: { id: 21 }, update: {},
+    where: { id: 21 }, update: { estSelfBuff: true },
     create: {
       nom: 'Méditation', type: SortType.SORT, statUtilisee: StatType.INTELLIGENCE,
       coutPA: 2, porteeMin: 0, porteeMax: 0, ligneDeVue: false,
       degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
       chanceCritBase: 0, cooldown: 3,
       niveauApprentissage: 3, raceId: elfe.id, zoneId: zoneCase.id,
+      estSelfBuff: true,
     },
   });
 
   // 22: Pas lourd (Nain) — Agilité accrue sur lanceur
   await prisma.sort.upsert({
-    where: { id: 22 }, update: {},
+    where: { id: 22 }, update: { estSelfBuff: true },
     create: {
       nom: 'Pas lourd', type: SortType.SORT, statUtilisee: StatType.VIE,
       coutPA: 2, porteeMin: 0, porteeMax: 0, ligneDeVue: false,
       degatsMin: 0, degatsMax: 0, degatsCritMin: 0, degatsCritMax: 0,
       chanceCritBase: 0, cooldown: 3,
       niveauApprentissage: 3, raceId: nain.id, zoneId: zoneCase.id,
+      estSelfBuff: true,
     },
   });
 
@@ -816,7 +819,7 @@ async function main() {
     create: {
       nom: 'Orée de la forêt', regionId: foretVertbois.id,
       type: MapType.WILDERNESS, combatMode: CombatMode.MANUEL,
-      largeur: 16, hauteur: 18, tauxRencontre: 0.2, worldX: 2, worldY: 1,
+      largeur: 16, hauteur: 18, worldX: 2, worldY: 1,
     },
   });
 
@@ -825,7 +828,7 @@ async function main() {
     create: {
       nom: 'Sentier forestier', regionId: foretVertbois.id,
       type: MapType.WILDERNESS, combatMode: CombatMode.MANUEL,
-      largeur: 16, hauteur: 18, tauxRencontre: 0.25, worldX: 3, worldY: 1,
+      largeur: 16, hauteur: 18, worldX: 3, worldY: 1,
     },
   });
 
@@ -845,7 +848,7 @@ async function main() {
     create: {
       nom: 'Route commerciale', regionId: plainesDuSud.id,
       type: MapType.WILDERNESS, combatMode: CombatMode.MANUEL,
-      largeur: 16, hauteur: 18, tauxRencontre: 0.15, worldX: 1, worldY: 1,
+      largeur: 16, hauteur: 18, worldX: 1, worldY: 1,
     },
   });
 
@@ -855,7 +858,7 @@ async function main() {
     create: {
       nom: 'Village de Piedmont', regionId: plainesDuSud.id,
       type: MapType.VILLE, combatMode: CombatMode.MANUEL,
-      largeur: 20, hauteur: 20, tauxRencontre: 0, worldX: 0, worldY: 1,
+      largeur: 20, hauteur: 20, worldX: 0, worldY: 1,
     },
   });
 
@@ -865,7 +868,7 @@ async function main() {
     create: {
       nom: 'Grotte - Entrée', regionId: foretVertbois.id,
       type: MapType.DONJON, combatMode: CombatMode.AUTO,
-      largeur: 16, hauteur: 18, tauxRencontre: 1.0,
+      largeur: 16, hauteur: 18,
     },
   });
 
@@ -874,7 +877,7 @@ async function main() {
     create: {
       nom: 'Grotte - Passage étroit', regionId: foretVertbois.id,
       type: MapType.DONJON, combatMode: CombatMode.AUTO,
-      largeur: 16, hauteur: 18, tauxRencontre: 1.0,
+      largeur: 16, hauteur: 18,
     },
   });
 
@@ -883,7 +886,7 @@ async function main() {
     create: {
       nom: 'Grotte - Salle des créatures', regionId: foretVertbois.id,
       type: MapType.DONJON, combatMode: CombatMode.AUTO,
-      largeur: 16, hauteur: 18, tauxRencontre: 1.0,
+      largeur: 16, hauteur: 18,
     },
   });
 
@@ -892,7 +895,7 @@ async function main() {
     create: {
       nom: 'Grotte - Antre du Troll', regionId: foretVertbois.id,
       type: MapType.BOSS, combatMode: CombatMode.AUTO,
-      largeur: 16, hauteur: 18, tauxRencontre: 1.0,
+      largeur: 16, hauteur: 18,
     },
   });
 

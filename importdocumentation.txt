@@ -26,9 +26,10 @@ Succès (200) :
   {
     "success": true,
     "imported": {
-      "ressources": 1,   "effets": 1,     "zones": 0,
-      "races": 1,        "sorts": 2,      "sortEffets": 1,
-      "monstres": 2,     "monstreSorts": 2, "monstreDrops": 3,
+      "regions": 1,      "maps": 2,         "mapCases": 6,     "mapSpawns": 32,
+      "ressources": 1,   "effets": 1,        "zones": 0,
+      "races": 1,        "sorts": 2,         "sortEffets": 1,
+      "monstres": 2,     "monstreSorts": 2,  "monstreDrops": 3,
       "equipements": 1,  "lignesDegats": 1,
       "recettes": 1,     "recetteIngredients": 1
     }
@@ -49,6 +50,8 @@ STRUCTURE DU PACK JSON
 Toutes les sections sont optionnelles.
 
 {
+  "regions":     [ ... ],
+  "maps":        [ ... ],
   "ressources":  [ ... ],
   "effets":      [ ... ],
   "zones":       [ ... ],
@@ -63,6 +66,78 @@ Toutes les sections sont optionnelles.
 ====================================================================
   DÉTAIL DE CHAQUE SECTION
 ====================================================================
+
+── RÉGIONS ─────────────────────────────────────────────────────────
+
+{
+  "nom":        "Catacombes du Nord",  // REQUIS, unique en BDD
+  "type":       "CAVERNE",             // REQUIS — voir RegionType
+  "niveauMin":  10,                    // défaut: 1
+  "niveauMax":  20,                    // défaut: 10
+  "description":"Des catacombes..."    // optionnel
+}
+
+RegionType : FORET | PLAINE | DESERT | MONTAGNE | MARAIS | CAVERNE | CITE
+
+Idempotence : upsert sur nom (unique en BDD).
+Les monstres de la région et les portails se configurent via l'admin UI,
+pas via l'import.
+
+── MAPS ─────────────────────────────────────────────────────────────
+
+{
+  "nom":          "Entrée des catacombes",  // REQUIS
+  "region":       "Catacombes du Nord",     // REQUIS — nom région → regionId
+  "type":         "WILDERNESS",             // REQUIS — voir MapType
+  "combatMode":   "MANUEL",                 // REQUIS — MANUEL | AUTO
+  "largeur":      16,                       // défaut: 16
+  "hauteur":      18,                       // défaut: 18
+  // ── Spawns ──────────────────────────────────────────────────────
+  // Option A : layout standard automatique (recommandé pour maps 16×18)
+  "spawnsDefaut": true,
+  // → Joueurs  : x=1,           y ∈ {2,4,6,8,10,12,14,16}, ordre 1-8
+  // → Ennemis  : x=largeur-2,   y ∈ {2,4,6,8,10,12,14,16}, ordre 1-8
+
+  // Option B : positions explicites (maps non-standard)
+  "spawns": [
+    { "x": 1,  "y": 2,  "equipe": 0, "ordre": 1 },
+    { "x": 1,  "y": 4,  "equipe": 0, "ordre": 2 },
+    { "x": 14, "y": 2,  "equipe": 1, "ordre": 1 },
+    { "x": 14, "y": 4,  "equipe": 1, "ordre": 2 }
+  ],
+  // equipe : 0 = joueurs, 1 = ennemis. ordre : 1-8 par équipe.
+
+  // Option C : clé absente → spawns existants préservés (utile pour update)
+
+  // ── Cases (obstacles) ────────────────────────────────────────────
+  "cases": [
+    { "x": 7, "y": 7,  "bloqueDeplacement": true },
+    { "x": 5, "y": 9,  "bloqueLigneDeVue": true },
+    { "x": 3, "y": 5,  "estExclue": true },
+    { "x": 9, "y": 9,  "bloqueDeplacement": true, "bloqueLigneDeVue": true }
+  ]
+  // Clé absente → cases existantes préservées.
+  // [] → toutes les cases supprimées. [...] → remplacement complet.
+}
+
+MapType     : WILDERNESS | VILLE | DONJON | BOSS | SAFE
+CombatMode  : MANUEL | AUTO
+
+Idempotence : résolution par (nom + région). Même nom dans deux régions
+différentes → deux maps distinctes.
+
+COMPORTEMENT DES CASES :
+  bloqueDeplacement: true  → obstacle PM (rayures)  — bloque le passage
+  bloqueLigneDeVue:  true  → mur LDV (noir)         — bloque LDV + passage
+  estExclue:         true  → zone noire totale       — bloque tout, rendu noir
+
+Les trois champs sont cumulables. estExclue est le plus fort (implique les deux autres).
+
+IMPORTANT — portails et groupes ennemis :
+  • Les portails (MapConnection) se configurent via l'admin UI (page Grille).
+  • Les groupes ennemis (GroupeEnnemi) et les monstres de la région
+    (RegionMonstre) se configurent également via l'admin UI.
+  • Les maps de type DONJON se créent et se lient via l'admin UI.
 
 ── RESSOURCES ──────────────────────────────────────────────────────
 
@@ -147,6 +222,7 @@ Types ZoneType : CASE | CROIX | LIGNE | CONE | CERCLE | LIGNE_PERPENDICULAIRE
   "estPiege":        false,
   "poseDuree":       null,             // durée en tours (glyphe/piège)
   "estTeleportation":false,
+  "estSelfBuff":     false,            // IA l'utilise sur soi (step 0B, avant heal/attaque)
   "coefficient":     1.0,              // multiplicateur dégâts, défaut: 1.0
   "effets": [
     {
@@ -292,6 +368,12 @@ par ceux définis dans le pack.
   ENUMS DISPONIBLES
 ====================================================================
 
+RegionType   : FORET | PLAINE | DESERT | MONTAGNE | MARAIS | CAVERNE | CITE
+
+MapType      : WILDERNESS | VILLE | DONJON | BOSS | SAFE
+
+CombatMode   : MANUEL | AUTO
+
 StatType     : FORCE | INTELLIGENCE | DEXTERITE | AGILITE | VIE | CHANCE
                PA | PM | PO | DOMMAGES | SOINS
 
@@ -313,29 +395,88 @@ IAType       : EQUILIBRE | AGGRESSIF | SOUTIEN | DISTANCE
 
 Les entités sont traitées dans cet ordre au sein de la transaction :
 
-  1.  ressources         → pré-requis pour drops et ingrédients recettes
-  2.  effets             → pré-requis pour SortEffets
-  3.  zones              → pré-requis pour sorts (créées à la volée aussi)
-  4.  races              → pré-requis pour sorts
-  5.  monstres (base)    → AVANT sorts (forward-ref invocationTemplate)
-  6.  sorts              → résout zone/race/invocationTemplate
-  7.  SortEffets         → liaison sort → effet
-  8.  MonstreSorts       → liaison monstre → sort
-  9.  equipements        → AVANT monstreDrops (équipements droppables)
-  10. LigneDegatsArme    → lignes de dégâts par équipement
-  11. monstreDrops       → remplace drops si clé présente
-  12. recettes           → résout équipement résultat
-  13. RecetteIngredients → remplace ingrédients
+  0.   régions            → pré-requis pour maps
+  0.5  maps               → cases + spawns inclus (portails via admin UI)
+  1.   ressources         → pré-requis pour drops et ingrédients recettes
+  2.   effets             → pré-requis pour SortEffets
+  3.   zones              → pré-requis pour sorts (créées à la volée aussi)
+  4.   races              → pré-requis pour sorts
+  5.   monstres (base)    → AVANT sorts (forward-ref invocationTemplate)
+  6.   sorts              → résout zone/race/invocationTemplate
+  7.   SortEffets         → liaison sort → effet
+  8.   MonstreSorts       → liaison monstre → sort
+  9.   equipements        → AVANT monstreDrops (équipements droppables)
+  10.  LigneDegatsArme    → lignes de dégâts par équipement
+  11.  monstreDrops       → remplace drops si clé présente
+  12.  recettes           → résout équipement résultat
+  13.  RecetteIngredients → remplace ingrédients
 
 Règles de résolution des références :
   • Une référence est cherchée d'abord dans le cache du pack (entités
     définies dans le pack courant), puis en pré-chargement BDD.
   • Si introuvable dans les deux → erreur immédiate avec message clair.
   • Les zones inline dans les sorts sont créées à la volée si absentes.
+  • Maps : résolution par (nom + région). Régions et maps peuvent être
+    dans le même pack — les régions sont traitées avant les maps.
 
 
 ====================================================================
-  EXEMPLE COMPLET — Pack "Reptiliens"
+  EXEMPLE COMPLET — Pack "Catacombes du Nord"
+====================================================================
+
+{
+  "regions": [
+    {
+      "nom": "Catacombes du Nord",
+      "type": "CAVERNE",
+      "niveauMin": 10,
+      "niveauMax": 20,
+      "description": "Des catacombes oubliées sous les plaines du sud."
+    }
+  ],
+
+  "maps": [
+    {
+      "nom": "Entrée des catacombes",
+      "region": "Catacombes du Nord",
+      "type": "WILDERNESS",
+      "combatMode": "MANUEL",
+      "spawnsDefaut": true,
+      "cases": [
+        { "x": 7, "y": 7,  "bloqueDeplacement": true },
+        { "x": 7, "y": 11, "bloqueDeplacement": true },
+        { "x": 5, "y": 9,  "bloqueDeplacement": true, "bloqueLigneDeVue": true },
+        { "x": 9, "y": 9,  "bloqueDeplacement": true, "bloqueLigneDeVue": true },
+        { "x": 0, "y": 0,  "estExclue": true },
+        { "x": 0, "y": 17, "estExclue": true }
+      ]
+    },
+    {
+      "nom": "Couloir osseux",
+      "region": "Catacombes du Nord",
+      "type": "WILDERNESS",
+      "combatMode": "MANUEL",
+      "spawnsDefaut": true,
+      "cases": [
+        { "x": 3,  "y": 6,  "bloqueDeplacement": true },
+        { "x": 3,  "y": 12, "bloqueDeplacement": true },
+        { "x": 11, "y": 6,  "bloqueDeplacement": true },
+        { "x": 11, "y": 12, "bloqueDeplacement": true },
+        { "x": 7,  "y": 4,  "bloqueDeplacement": true, "bloqueLigneDeVue": true },
+        { "x": 7,  "y": 14, "bloqueDeplacement": true, "bloqueLigneDeVue": true }
+      ]
+    }
+  ],
+
+  "ressources": [
+    { "nom": "Os fissuré", "poids": 1 },
+    { "nom": "Noyau nécrotique", "poids": 1, "estPremium": true }
+  ]
+}
+
+
+====================================================================
+  EXEMPLE COMPLET — Pack "Reptiliens" (monstres/sorts/équipements)
 ====================================================================
 
 {
@@ -438,12 +579,20 @@ Règles de résolution des références :
 
 • Les noms dans une même section doivent être uniques — un doublon
   dans le pack est détecté avant tout accès BDD (400 immédiat).
+  Exception maps : doublon détecté sur (nom + région).
 
 • Les zones sont partagées par type+taille (pas par nom). Deux sorts
   avec "zone": {"type":"CASE","taille":0} partageront la même Zone en BDD.
 
 • Un pack peut importer uniquement ce dont il a besoin.
-  Exemple : importer uniquement des ressources sans rien d'autre.
+  Exemple : importer uniquement des régions et des maps sans monstres.
 
 • Pour tester sans risque : réimporter le même pack → résultat
   identique, compteurs identiques, aucun doublon.
+
+• Ce qui se configure via l'admin UI (pas via import) :
+    - Portails entre maps (MapConnection)
+    - Groupes ennemis sur les maps (GroupeEnnemi)
+    - Monstres dans les régions (RegionMonstre + probabilités)
+    - Maps de type DONJON et leurs salles
+    - Position des maps sur la carte du monde (worldX/worldY)

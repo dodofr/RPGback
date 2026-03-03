@@ -172,6 +172,8 @@ model Sort {
   poseDuree            Int?             // durée en tours de la zone posée (null = permanent)
   // Téléportation : déplace instantanément le lanceur vers la case ciblée (sans PM, ignore les obstacles de chemin)
   estTeleportation     Boolean          @default(false)
+  // Self-buff : sort destiné uniquement à se booster soi-même (IA l'utilise sur soi au début du tour)
+  estSelfBuff          Boolean          @default(false)
   // Coefficient multiplicateur appliqué aux dégâts/soins (utile pour réduire la puissance des sorts en zone)
   coefficient          Float            @default(1.0)
   personnages         PersonnageSort[]
@@ -313,7 +315,6 @@ model Map {
   combatMode      CombatMode
   largeur         Int             @default(16)
   hauteur         Int             @default(18)
-  tauxRencontre   Float           @default(0.2)
   worldX          Int?
   worldY          Int?
   // Directional neighbors (self-referential)

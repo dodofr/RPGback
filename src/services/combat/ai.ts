@@ -40,6 +40,7 @@ interface SpellInfo {
   estSoin: boolean;
   tauxEchec: number;
   hasDispelEffect?: boolean;
+  hasSelfBuffEffect?: boolean;
   zoneType?: ZoneType | null;
   zoneTaille?: number | null;
 }
@@ -51,6 +52,7 @@ interface AIContext {
   blockedCases: CombatCaseState[];
   healSpells: SpellInfo[];
   dispelSpells: SpellInfo[];
+  selfBuffSpells: SpellInfo[];
   damageSpells: SpellInfo[];
 }
 
@@ -105,6 +107,7 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
     monsterSpells = monstreSorts.map((ms) => ({
       ...ms.sort,
       hasDispelEffect: ms.sort.effets.some((se) => se.effet.type === 'DISPEL'),
+      hasSelfBuffEffect: ms.sort.estSelfBuff,
       zoneType: ms.sort.zone?.type ?? null,
       zoneTaille: ms.sort.zone?.taille ?? null,
       ligneDirecte: ms.sort.ligneDirecte,
@@ -118,6 +121,7 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
     monsterSpells = spells.map((s) => ({
       ...s,
       hasDispelEffect: s.effets.some((se) => se.effet.type === 'DISPEL'),
+      hasSelfBuffEffect: s.estSelfBuff,
       zoneType: s.zone?.type ?? null,
       zoneTaille: s.zone?.taille ?? null,
       ligneDirecte: s.ligneDirecte,
@@ -127,7 +131,8 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
   // Separate spells by category
   const healSpells = monsterSpells.filter((s) => s.estSoin);
   const dispelSpells = monsterSpells.filter((s) => s.hasDispelEffect);
-  const damageSpells = monsterSpells.filter((s) => !s.estSoin && !s.hasDispelEffect);
+  const selfBuffSpells = monsterSpells.filter((s) => s.hasSelfBuffEffect && !s.hasDispelEffect);
+  const damageSpells = monsterSpells.filter((s) => !s.estSoin && !s.hasDispelEffect && !s.hasSelfBuffEffect);
 
   const ctx: AIContext = {
     combatId,
@@ -136,6 +141,7 @@ export async function executeAITurn(combatId: number, entiteId: number): Promise
     blockedCases,
     healSpells,
     dispelSpells,
+    selfBuffSpells,
     damageSpells,
   };
 
@@ -209,6 +215,20 @@ async function executeEquilibreTurn(ctx: AIContext): Promise<void> {
       );
       if (optimalStep) {
         await moveEntity(ctx.combatId, ctx.entiteId, optimalStep.x, optimalStep.y);
+        continue;
+      }
+    }
+
+    // 0B. Use self-buff spells proactively (cast on self)
+    if (ctx.selfBuffSpells.length > 0) {
+      const selfBuff = await findUsableSpell(
+        ctx.combatId, ctx.entiteId, ctx.selfBuffSpells,
+        { x: currentX, y: currentY },
+        { x: currentX, y: currentY },
+        currentPA, currentCombat.entites, ctx.blockedCases
+      );
+      if (selfBuff) {
+        await executeAction(ctx.combatId, ctx.entiteId, selfBuff.id, currentX, currentY);
         continue;
       }
     }
@@ -338,6 +358,20 @@ async function executeAggressifTurn(ctx: AIContext): Promise<void> {
       }
     }
 
+    // 0B. Use self-buff spells proactively (cast on self)
+    if (ctx.selfBuffSpells.length > 0) {
+      const selfBuff = await findUsableSpell(
+        ctx.combatId, ctx.entiteId, ctx.selfBuffSpells,
+        { x: currentX, y: currentY },
+        { x: currentX, y: currentY },
+        currentPA, currentCombat.entites, ctx.blockedCases
+      );
+      if (selfBuff) {
+        await executeAction(ctx.combatId, ctx.entiteId, selfBuff.id, currentX, currentY);
+        continue;
+      }
+    }
+
     // 1. Try to attack any enemy (aggressif always targets closest, tries others if needed)
     if (currentPA > 0 && canAffordAnySpell(ctx.damageSpells, currentPA)) {
       // For aggressif: closest first, then others
@@ -397,6 +431,20 @@ async function executeSoutienTurn(ctx: AIContext): Promise<void> {
       );
       if (optimalStep) {
         await moveEntity(ctx.combatId, ctx.entiteId, optimalStep.x, optimalStep.y);
+        continue;
+      }
+    }
+
+    // 0B. Use self-buff spells proactively (cast on self)
+    if (ctx.selfBuffSpells.length > 0) {
+      const selfBuff = await findUsableSpell(
+        ctx.combatId, ctx.entiteId, ctx.selfBuffSpells,
+        { x: currentX, y: currentY },
+        { x: currentX, y: currentY },
+        currentPA, currentCombat.entites, ctx.blockedCases
+      );
+      if (selfBuff) {
+        await executeAction(ctx.combatId, ctx.entiteId, selfBuff.id, currentX, currentY);
         continue;
       }
     }
@@ -543,6 +591,20 @@ async function executeDistanceTurn(ctx: AIContext): Promise<void> {
         currentCombat.entites, ctx.blockedCases
       );
       if (retreated) continue;
+    }
+
+    // 0B. Use self-buff spells proactively (cast on self)
+    if (ctx.selfBuffSpells.length > 0) {
+      const selfBuff = await findUsableSpell(
+        ctx.combatId, ctx.entiteId, ctx.selfBuffSpells,
+        { x: currentX, y: currentY },
+        { x: currentX, y: currentY },
+        currentPA, currentCombat.entites, ctx.blockedCases
+      );
+      if (selfBuff) {
+        await executeAction(ctx.combatId, ctx.entiteId, selfBuff.id, currentX, currentY);
+        continue;
+      }
     }
 
     // 0. Move-first evaluation (8): only when not under immediate threat

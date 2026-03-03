@@ -49,7 +49,6 @@ export class MapService {
     combatMode: CombatMode;
     largeur: number;
     hauteur: number;
-    tauxRencontre?: number;
   }) {
     return prisma.map.create({
       data: {
@@ -59,7 +58,6 @@ export class MapService {
         combatMode: data.combatMode,
         largeur: data.largeur,
         hauteur: data.hauteur,
-        tauxRencontre: data.tauxRencontre ?? 0.2,
       },
       include: {
         region: true,
@@ -73,7 +71,6 @@ export class MapService {
     combatMode: CombatMode;
     largeur: number;
     hauteur: number;
-    tauxRencontre: number;
     nordMapId: number | null;
     sudMapId: number | null;
     estMapId: number | null;
@@ -441,100 +438,6 @@ export class MapService {
         data: { combatActuel: combat.id },
       });
     }
-
-    return combat;
-  }
-
-  /**
-   * Check for random encounter (AUTO mode)
-   * Returns combat state if encounter triggered, null otherwise
-   * Creates a group of 1-8 mixed monsters
-   */
-  async checkRandomEncounter(mapId: number, groupeId: number) {
-    const map = await prisma.map.findUnique({
-      where: { id: mapId },
-      include: {
-        region: {
-          include: {
-            monstres: {
-              include: { monstre: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!map) {
-      throw new Error('Map not found');
-    }
-
-    if (map.combatMode !== CombatMode.AUTO) {
-      return null;
-    }
-
-    if (map.type === MapType.SAFE || map.type === MapType.VILLE) {
-      return null;
-    }
-
-    if (!checkProbability(map.tauxRencontre)) {
-      return null;
-    }
-
-    const regionMonstres = map.region.monstres;
-    if (regionMonstres.length === 0) {
-      return null;
-    }
-
-    // Calculate total probability weight
-    const totalWeight = regionMonstres.reduce((sum, rm) => sum + rm.probabilite, 0);
-
-    // Determine total monsters for this encounter (1-8)
-    const totalMonstres = randomInt(1, 8);
-
-    // Select 1-4 monster types for the group
-    const numTypes = Math.min(randomInt(1, 4), regionMonstres.length);
-    const monstres: {
-      nom: string;
-      force: number;
-      intelligence: number;
-      dexterite: number;
-      agilite: number;
-      vie: number;
-      chance: number;
-      pvMax: number;
-      paMax: number;
-      pmMax: number;
-      monstreTemplateId?: number;
-      niveau?: number;
-    }[] = [];
-    let remaining = totalMonstres;
-
-    for (let i = 0; i < numTypes && remaining > 0; i++) {
-      let roll = Math.random() * totalWeight;
-      let selected = regionMonstres[0];
-
-      for (const rm of regionMonstres) {
-        roll -= rm.probabilite;
-        if (roll <= 0) {
-          selected = rm;
-          break;
-        }
-      }
-
-      const count = i === numTypes - 1 ? remaining : randomInt(1, remaining);
-      const niveau = randomInt(map.region.niveauMin, map.region.niveauMax);
-
-      const typeMonstres = this.createMonstersFromTemplate(selected.monstre, count, niveau);
-      monstres.push(...typeMonstres);
-
-      remaining -= count;
-    }
-
-    const combat = await combatService.create({
-      groupeId,
-      monstres,
-      mapId,
-    });
 
     return combat;
   }

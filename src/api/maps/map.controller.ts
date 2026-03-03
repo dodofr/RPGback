@@ -14,7 +14,6 @@ const createMapSchema = z.object({
   combatMode: z.enum(['MANUEL', 'AUTO']),
   largeur: z.number().int().min(5).max(100),
   hauteur: z.number().int().min(5).max(100),
-  tauxRencontre: z.number().min(0).max(1).optional(),
 });
 
 const createRegionSchema = z.object({
@@ -493,7 +492,6 @@ export class MapController {
         combatMode: z.enum(['MANUEL', 'AUTO']).optional(),
         largeur: z.number().int().min(5).max(100).optional(),
         hauteur: z.number().int().min(5).max(100).optional(),
-        tauxRencontre: z.number().min(0).max(1).optional(),
         nordMapId: z.number().int().positive().nullable().optional(),
         sudMapId: z.number().int().positive().nullable().optional(),
         estMapId: z.number().int().positive().nullable().optional(),
