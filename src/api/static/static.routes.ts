@@ -601,6 +601,8 @@ equipmentRouter.delete('/:id', async (req: Request, res: Response, next: NextFun
 
     // Clean up damage lines
     await prisma.ligneDegatsArme.deleteMany({ where: { equipementId: id } });
+    // Nullify quest step references
+    await prisma.queteEtape.updateMany({ where: { equipementId: id }, data: { equipementId: null } });
 
     await prisma.equipement.delete({ where: { id } });
 
@@ -985,6 +987,7 @@ resourcesRouter.delete('/:id', async (req: Request, res: Response, next: NextFun
     await prisma.inventaireRessource.deleteMany({ where: { ressourceId: id } });
     await prisma.recetteIngredient.deleteMany({ where: { ressourceId: id } });
     await prisma.monstreDrop.deleteMany({ where: { ressourceId: id } });
+    await prisma.queteEtape.updateMany({ where: { ressourceId: id }, data: { ressourceId: null } });
     await prisma.ressource.delete({ where: { id } });
     res.status(204).send();
   } catch (error) { next(error); }

@@ -13,6 +13,7 @@ import { executeAITurn } from './ai';
 import { createInvocation, killInvocationsOf } from './invocation';
 import { donjonService } from '../donjon.service';
 import { dropService } from '../drop.service';
+import { questService } from '../quest.service';
 import { getStatsWithEffects, applySpellEffects, applyShieldEffect, calculateShieldReduction, AppliedEffect, PushPullResult, getResourceModifiers, applyPoisonDamage, removeEffectsByCaster, getEffectiveResistance, getEffectiveBonusDommages, getEffectiveBonusSoins } from './effects';
 import { createZone, triggerGlyphesForEntity, triggerPiegesForEntity, decrementZones, cleanupZones } from './zones';
 import { checkProbability, randomInt } from '../../utils/random';
@@ -633,6 +634,9 @@ export async function executeAction(
       agilite: attacker.agilite, vie: attacker.vie, chance: attacker.chance,
     };
 
+    // Bonus flat FORCE : 100 FORCE = +1 dommage (snapshot, sans buffs actifs pour glyphes)
+    const flatForceBonusSnapshot = Math.floor(attacker.force / 100);
+
     // Look up secondary effect from SortEffet if any
     const sortEffet = await prisma.sortEffet.findFirst({
       where: { sortId: sortId!, surCible: true },
@@ -642,7 +646,7 @@ export async function executeAction(
     await createZone(
       combatId, entiteId, attacker.equipe, targetX, targetY, false,
       spell.poseDuree ?? 3,
-      spell.degatsMin + bonusDmg, spell.degatsMax + bonusDmg, spell.statUtilisee as any,
+      spell.degatsMin + bonusDmg + flatForceBonusSnapshot, spell.degatsMax + bonusDmg + flatForceBonusSnapshot, spell.statUtilisee as any,
       attackerBaseStats,
       spell.zone?.taille ?? 0,
       spell.zone?.type ?? 'CASE',
@@ -668,6 +672,9 @@ export async function executeAction(
       agilite: attacker.agilite, vie: attacker.vie, chance: attacker.chance,
     };
 
+    // Bonus flat FORCE : 100 FORCE = +1 dommage (snapshot, sans buffs actifs pour pièges)
+    const flatForceBonusSnapshot = Math.floor(attacker.force / 100);
+
     const sortEffet = await prisma.sortEffet.findFirst({
       where: { sortId: sortId!, surCible: true },
       include: { effet: true },
@@ -676,7 +683,7 @@ export async function executeAction(
     await createZone(
       combatId, entiteId, attacker.equipe, targetX, targetY, true,
       spell.poseDuree ?? 5,
-      spell.degatsMin + bonusDmg, spell.degatsMax + bonusDmg, spell.statUtilisee as any,
+      spell.degatsMin + bonusDmg + flatForceBonusSnapshot, spell.degatsMax + bonusDmg + flatForceBonusSnapshot, spell.statUtilisee as any,
       attackerBaseStats,
       spell.zone?.taille ?? 0,
       spell.zone?.type ?? 'CASE',
@@ -840,11 +847,14 @@ export async function executeAction(
           const attackerModifiedStats = await getStatsWithEffects(combatId, entiteId, attackerBaseStats);
           const attackerStatsWithCrit = { ...attackerModifiedStats, bonusCritique: attacker.bonusCritique + poMods.critiqueModifier };
 
+          // Bonus flat FORCE : 100 FORCE effective = +1 dommage
+          const flatForceBonus = Math.floor(attackerModifiedStats.force / 100);
+
           const spellData = {
-            degatsMin: spell.degatsMin + bonusDmg,
-            degatsMax: spell.degatsMax + bonusDmg,
-            degatsCritMin: spell.degatsCritMin + bonusDmg,
-            degatsCritMax: spell.degatsCritMax + bonusDmg,
+            degatsMin: spell.degatsMin + bonusDmg + flatForceBonus,
+            degatsMax: spell.degatsMax + bonusDmg + flatForceBonus,
+            degatsCritMin: spell.degatsCritMin + bonusDmg + flatForceBonus,
+            degatsCritMax: spell.degatsCritMax + bonusDmg + flatForceBonus,
             chanceCritBase: spell.chanceCritBase,
             statUtilisee: spell.statUtilisee as any,
             coefficient: spell.coefficient ?? 1.0,
@@ -1008,11 +1018,14 @@ export async function executeAction(
     const attackerModifiedStats = await getStatsWithEffects(combatId, entiteId, attackerBaseStats);
     const healStats = { ...attackerModifiedStats, bonusCritique: attacker.bonusCritique + poMods.critiqueModifier };
 
+    // Bonus flat DEXTERITE : 100 DEX effective = +1 soin
+    const flatDexBonus = Math.floor(attackerModifiedStats.dexterite / 100);
+
     const spellData = {
-      degatsMin: attackData.degatsMin + bonusSoin,
-      degatsMax: attackData.degatsMax + bonusSoin,
-      degatsCritMin: attackData.degatsCritMin! + bonusSoin,
-      degatsCritMax: attackData.degatsCritMax! + bonusSoin,
+      degatsMin: attackData.degatsMin + bonusSoin + flatDexBonus,
+      degatsMax: attackData.degatsMax + bonusSoin + flatDexBonus,
+      degatsCritMin: attackData.degatsCritMin! + bonusSoin + flatDexBonus,
+      degatsCritMax: attackData.degatsCritMax! + bonusSoin + flatDexBonus,
       chanceCritBase: attackData.chanceCritBase,
       statUtilisee: attackData.statUtilisee as any,
       coefficient: spell?.coefficient ?? 1.0,
@@ -1129,6 +1142,10 @@ export async function executeAction(
   const attackerModifiedStats = await getStatsWithEffects(combatId, entiteId, attackerBaseStats);
   const attackerStatsWithCrit = { ...attackerModifiedStats, bonusCritique: attacker.bonusCritique + poMods.critiqueModifier };
 
+  // Bonus flat FORCE/DEX : 100 FORCE effective = +1 dommage, 100 DEX effective = +1 soin
+  const flatForceBonus = Math.floor(attackerModifiedStats.force / 100);
+  const flatDexBonus   = Math.floor(attackerModifiedStats.dexterite / 100);
+
   // Calculate and apply damage to each target
   const damages: ActionResult['damages'] = [];
   const heals: ActionResult['heals'] = [];
@@ -1175,8 +1192,8 @@ export async function executeAction(
         const statValue = getStatValue(attackerModifiedStats, ligne.statUtilisee as any);
         const statMultiplier = calculateStatMultiplier(statValue);
 
-        // Apply flat bonus: bonusSoin for soin lines, bonusDmg for damage lines
-        const lineBonus = ligne.estSoin ? bonusSoin : bonusDmg;
+        // Apply flat bonus: bonusSoin+flatDexBonus for soin lines, bonusDmg+flatForceBonus for damage lines
+        const lineBonus = ligne.estSoin ? (bonusSoin + flatDexBonus) : (bonusDmg + flatForceBonus);
         const effectiveMin = ligne.degatsMin + lineBonus;
         const effectiveMax = ligne.degatsMax + lineBonus;
 
@@ -1215,10 +1232,10 @@ export async function executeAction(
     } else {
       // ===== SPELL DAMAGE =====
       const spellData = {
-        degatsMin: attackData.degatsMin + bonusDmg,
-        degatsMax: attackData.degatsMax + bonusDmg,
-        degatsCritMin: attackData.degatsCritMin! + bonusDmg,
-        degatsCritMax: attackData.degatsCritMax! + bonusDmg,
+        degatsMin: attackData.degatsMin + bonusDmg + flatForceBonus,
+        degatsMax: attackData.degatsMax + bonusDmg + flatForceBonus,
+        degatsCritMin: attackData.degatsCritMin! + bonusDmg + flatForceBonus,
+        degatsCritMax: attackData.degatsCritMax! + bonusDmg + flatForceBonus,
         chanceCritBase: attackData.chanceCritBase,
         statUtilisee: attackData.statUtilisee as any,
         coefficient: spell?.coefficient ?? 1.0,
@@ -1427,6 +1444,43 @@ export async function executeAction(
 }
 
 /**
+ * Returns true if the entity is completely blocked by melee engagement.
+ * Rule: blocked if any adjacent enemy has AGI >= 2× entity's INT (≥100% excess).
+ * Teleportation bypasses this check entirely (handled separately).
+ */
+function isMeleeEngagementBlocked(
+  entity: {
+    equipe: number;
+    positionX: number;
+    positionY: number;
+    intelligence: number;
+  },
+  allEntities: Array<{
+    equipe: number;
+    positionX: number;
+    positionY: number;
+    pvActuels: number;
+    agilite: number;
+  }>
+): boolean {
+  const adjacentEnemies = allEntities.filter(
+    (e) =>
+      e.pvActuels > 0 &&
+      e.equipe !== entity.equipe &&
+      manhattanDistance(e.positionX, e.positionY, entity.positionX, entity.positionY) === 1
+  );
+
+  if (adjacentEnemies.length === 0) return false;
+
+  const mostAgile = adjacentEnemies.reduce((best, e) => (e.agilite > best.agilite ? e : best));
+  const moverInt = entity.intelligence;
+  const enemyAgi = mostAgile.agilite;
+
+  // Blocked if enemy AGI >= 2× mover INT (excess >= 100%)
+  return enemyAgi >= 2 * Math.max(1, moverInt);
+}
+
+/**
  * Move an entity
  */
 export async function moveEntity(
@@ -1473,6 +1527,28 @@ export async function moveEntity(
 
   if (!moveResult.valid) {
     return { success: false, message: moveResult.reason || 'Cannot move' };
+  }
+
+  // === ENGAGEMENT DE MÊLÉE ===
+  if (isMeleeEngagementBlocked(entity, combat.entites)) {
+    const blocker = combat.entites
+      .filter(
+        (e) =>
+          e.pvActuels > 0 &&
+          e.equipe !== entity.equipe &&
+          manhattanDistance(e.positionX, e.positionY, entity.positionX, entity.positionY) === 1
+      )
+      .reduce((best, e) => (e.agilite > best.agilite ? e : best));
+    await addLog(
+      combatId,
+      combat.tourActuel,
+      `${entity.nom} est taclé par ${blocker.nom} et ne peut pas se déplacer !`,
+      'DEPLACEMENT'
+    );
+    return {
+      success: false,
+      message: "Bloqué en mêlée ! L'ennemi adjacent est trop agile pour vous laisser fuir.",
+    };
   }
 
   // Update entity position and PM
@@ -1755,6 +1831,13 @@ async function checkCombatEnd(combatId: number): Promise<void> {
         }
       } catch (error) {
         console.error('Error distributing drops:', error);
+      }
+
+      // Process quest progress (monster kills)
+      try {
+        await questService.onCombatEnd(combatId);
+      } catch (error) {
+        console.error('Error processing quest progress:', error);
       }
 
       // If in dungeon, advance to next room

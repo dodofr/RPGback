@@ -26,12 +26,14 @@ Succès (200) :
   {
     "success": true,
     "imported": {
-      "regions": 1,      "maps": 2,         "mapCases": 6,     "mapSpawns": 32,
-      "ressources": 1,   "effets": 1,        "zones": 0,
-      "races": 1,        "sorts": 2,         "sortEffets": 1,
-      "monstres": 2,     "monstreSorts": 2,  "monstreDrops": 3,
+      "regions": 1,      "maps": 2,              "mapCases": 6,          "mapSpawns": 32,
+      "ressources": 1,   "effets": 1,            "zones": 0,
+      "races": 1,        "sorts": 2,             "sortEffets": 1,
+      "monstres": 2,     "monstreSorts": 2,      "monstreDrops": 3,
       "equipements": 1,  "lignesDegats": 1,
-      "recettes": 1,     "recetteIngredients": 1
+      "recettes": 1,     "recetteIngredients": 1,
+      "pnj": 1,          "marchandLignes": 2,
+      "quetes": 1,       "queteEtapes": 3,       "queteRecompenses": 1,  "quetePrerequisites": 1
     }
   }
 
@@ -59,7 +61,9 @@ Toutes les sections sont optionnelles.
   "sorts":       [ ... ],
   "monstres":    [ ... ],
   "equipements": [ ... ],
-  "recettes":    [ ... ]
+  "recettes":    [ ... ],
+  "pnj":         [ ... ],
+  "quetes":      [ ... ]
 }
 
 
@@ -363,6 +367,106 @@ SlotType : ARME | COIFFE | AMULETTE | BOUCLIER | HAUT | BAS | ANNEAU1 | ANNEAU2 
 Les ingrédients existants d'une recette sont TOUJOURS remplacés
 par ceux définis dans le pack.
 
+── PNJ ────────────────────────────────────────────────────────────
+
+{
+  "nom":         "Forgeron",               // REQUIS
+  "map":         "Village de Piedmont",    // REQUIS — nom map → mapId
+  "positionX":   10,                       // REQUIS
+  "positionY":   5,                        // REQUIS
+  "description": "Le forgeron du village.",// optionnel
+  "estMarchand": true,                     // défaut: true
+
+  // Catalogue marchand optionnel :
+  // Absent → catalogue existant préservé
+  // [] → catalogue vidé
+  // [...] → remplacement complet
+  "marchandLignes": [
+    {
+      "equipement":  "Épée en bois",  // nom équipement (ou ressource, pas les deux)
+      "prixMarchand": 120,            // prix d'achat joueur
+      "prixRachat":    40             // prix de vente joueur → marchand
+    },
+    {
+      "ressource":   "Cuir",
+      "prixMarchand": 15,
+      "prixRachat":    5
+    }
+  ]
+}
+
+Idempotence : résolution par nom (findFirst). Si un PNJ avec ce nom
+existe déjà, il est mis à jour (position, map, catalogue).
+Note : un PNJ peut être marchand ET donneur de quête simultanément.
+
+── QUÊTES ─────────────────────────────────────────────────────────
+
+{
+  "nom":          "La chasse aux bandits",     // REQUIS
+  "description":  "Des bandits rôdent...",     // optionnel
+  "niveauRequis": 3,                           // défaut: 1
+  "pnjDepart":    "Chef du village",           // nom PNJ → pnjDepartId (optionnel)
+
+  // Étapes — absent → étapes existantes préservées. [...] → remplacement complet
+  "etapes": [
+    {
+      "ordre":       1,                        // REQUIS, entier ≥ 1
+      "description": "Parle au garde.",        // REQUIS
+      "type":        "PARLER_PNJ",             // REQUIS — voir QueteEtapeType
+      "pnj":         "Garde du village"        // nom PNJ (pour PARLER_PNJ / APPORTER_*)
+    },
+    {
+      "ordre":       2,
+      "description": "Élimine 3 bandits.",
+      "type":        "TUER_MONSTRE",
+      "monstre":     "Bandit",                 // nom MonstreTemplate
+      "quantite":    3                         // REQUIS pour TUER_MONSTRE
+    },
+    {
+      "ordre":       3,
+      "description": "Rapporte 2 cuirs.",
+      "type":        "APPORTER_RESSOURCE",
+      "pnj":         "Chef du village",
+      "ressource":   "Cuir",                   // nom Ressource
+      "quantite":    2
+    },
+    {
+      "ordre":       4,
+      "description": "Rapporte un bouclier.",
+      "type":        "APPORTER_EQUIPEMENT",
+      "pnj":         "Chef du village",
+      "equipement":  "Bouclier en bois",       // nom Equipement
+      "quantite":    1
+    }
+  ],
+
+  // Récompenses — absent → récompenses existantes préservées. [...] → remplacement complet
+  "recompenses": [
+    {
+      "xp": 300, "or": 80,                     // défaut: 0
+      "ressource": "Cuir", "quantiteRessource": 3,  // optionnel
+      "equipement": "Épée en bois"             // optionnel
+    }
+  ],
+
+  // Prérequis — noms de quêtes devant être TERMINÉES avant d'accepter celle-ci
+  // Absent → prérequis existants préservés. [] → tous les prérequis supprimés
+  "prerequis": ["La menace des loups"]
+}
+
+QueteEtapeType : PARLER_PNJ | TUER_MONSTRE | APPORTER_RESSOURCE | APPORTER_EQUIPEMENT
+
+COMPORTEMENT DES RÉFÉRENCES :
+  • pnjDepart / pnj : PNJ en BDD ou créé dans la section "pnj" du même pack
+  • monstre : MonstreTemplate en BDD ou section "monstres" du même pack
+  • ressource / equipement : doivent exister en BDD ou dans le pack courant
+
+IMPORTANT — ordre de résolution dans la transaction :
+  • Les PNJ sont traités APRÈS les équipements (marchandLignes résolvables)
+  • Les quêtes sont traitées APRÈS les PNJ (pnjDepart/pnj résolvables)
+  • Les prérequis sont traités en 2e passe (toutes les quêtes du pack disponibles)
+  • Erreur si une quête tente d'être son propre prérequis
+
 
 ====================================================================
   ENUMS DISPONIBLES
@@ -388,6 +492,8 @@ EffetType    : BUFF | DEBUFF | DISPEL | POUSSEE | ATTIRANCE | POISON
 
 IAType       : EQUILIBRE | AGGRESSIF | SOUTIEN | DISTANCE
 
+QueteEtapeType : PARLER_PNJ | TUER_MONSTRE | APPORTER_RESSOURCE | APPORTER_EQUIPEMENT
+
 
 ====================================================================
   ORDRE DE TRAITEMENT ET DÉPENDANCES
@@ -410,6 +516,9 @@ Les entités sont traitées dans cet ordre au sein de la transaction :
   11.  monstreDrops       → remplace drops si clé présente
   12.  recettes           → résout équipement résultat
   13.  RecetteIngredients → remplace ingrédients
+  14.  PNJ                → résout map + équipements/ressources (marchandLignes)
+  15a. Quêtes             → résout PNJ, monstres, ressources, équipements (étapes + récompenses)
+  15b. Prérequis quêtes   → 2e passe, toutes les quêtes du pack disponibles
 
 Règles de résolution des références :
   • Une référence est cherchée d'abord dans le cache du pack (entités
@@ -571,6 +680,43 @@ Règles de résolution des références :
 
 
 ====================================================================
+  EXEMPLE COMPLET — Pack "PNJ & Quêtes"
+====================================================================
+
+{
+  "pnj": [
+    {
+      "nom": "Forgeron",
+      "map": "Village de Piedmont",
+      "positionX": 10, "positionY": 5,
+      "description": "Le forgeron du village.",
+      "estMarchand": true,
+      "marchandLignes": [
+        { "equipement": "Épée en bois", "prixMarchand": 120, "prixRachat": 40 },
+        { "ressource": "Cuir", "prixMarchand": 15, "prixRachat": 5 }
+      ]
+    }
+  ],
+
+  "quetes": [
+    {
+      "nom": "La chasse aux bandits",
+      "description": "Des bandits rôdent aux abords du village.",
+      "niveauRequis": 3,
+      "pnjDepart": "Chef du village",
+      "etapes": [
+        { "ordre": 1, "description": "Parle au garde.", "type": "PARLER_PNJ", "pnj": "Garde du village" },
+        { "ordre": 2, "description": "Élimine 3 bandits.", "type": "TUER_MONSTRE", "monstre": "Bandit", "quantite": 3 },
+        { "ordre": 3, "description": "Retourne voir le chef.", "type": "PARLER_PNJ", "pnj": "Chef du village" }
+      ],
+      "recompenses": [{ "xp": 300, "or": 80 }],
+      "prerequis": ["La menace des loups"]
+    }
+  ]
+}
+
+
+====================================================================
   CONSEILS ET LIMITES
 ====================================================================
 
@@ -596,3 +742,14 @@ Règles de résolution des références :
     - Monstres dans les régions (RegionMonstre + probabilités)
     - Maps de type DONJON et leurs salles
     - Position des maps sur la carte du monde (worldX/worldY)
+
+• PNJ : la résolution est par nom (findFirst, pas d'unique constraint en BDD).
+  Si deux PNJ ont le même nom en BDD, le premier trouvé sera mis à jour.
+
+• Quêtes non-rejouables : la contrainte unique [queteId, personnageId] garantit
+  qu'un personnage ne peut accepter la même quête deux fois. L'import ne touche
+  jamais QuetePersonnage (progression joueurs préservée).
+
+• Prérequis : lors d'un ré-import, les anciens prérequis d'une quête présente
+  dans le pack sont REMPLACÉS par la liste fournie. Quêtes absentes du pack →
+  leurs prérequis sont préservés.

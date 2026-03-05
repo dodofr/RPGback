@@ -60,7 +60,13 @@
       "Bash(cmd /c \"cd /d C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\frontend && npx tsc --noEmit\")",
       "Bash(find:*)",
       "Bash(start cmd:*)",
-      "Bash(do:*)"
+      "Bash(do:*)",
+      "Bash(PGPASSWORD=rpg_password \"/c/Program Files/PostgreSQL/18/bin/psql.exe\":*)",
+      "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql.exe\":*)",
+      "Bash(ls:*)",
+      "Bash(cmd:*)",
+      "Bash(node_modules/.bin/tsc:*)",
+      "Bash(powershell:*)"
     ]
   }
 }

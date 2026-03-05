@@ -28,7 +28,11 @@ export class PNJService {
   async getById(id: number) {
     return prisma.pNJ.findUnique({
       where: { id },
-      include: { ...PNJ_INCLUDE, map: { select: { id: true, nom: true, type: true } } },
+      include: {
+        ...PNJ_INCLUDE,
+        map: { select: { id: true, nom: true, type: true } },
+        quetesDepart: { select: { id: true, nom: true, niveauRequis: true } },
+      },
     });
   }
 

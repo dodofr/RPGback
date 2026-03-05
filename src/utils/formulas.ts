@@ -74,12 +74,14 @@ export function calculateStatMultiplier(statValue: number): number {
 
 /**
  * Calculate critical chance
- * Formula: chanceCritBase + (chance / 5000) + (bonusCritique / 100)
- * - chance / 5000 : marginal contribution (100 chance = +2%)
+ * Formula: chanceCritBase + chanceBonus + (bonusCritique / 100)
+ * - Math.floor(chance/100) * 0.01 : 0 sous 100 CHANCE, +1% par tranche de 100
  * - bonusCritique / 100 : equipment + effects (integer, 10 = +10%)
  */
 export function calculateCritChance(chanceCritBase: number, chance: number, bonusCritique: number = 0): number {
-  const raw = chanceCritBase + (chance / 5000) + (bonusCritique / 100);
+  // Nouveau palier : 0 crit sous 100 CHANCE, puis +1% par tranche de 100
+  const chanceBonus = Math.floor(chance / 100) * 0.01;
+  const raw = chanceCritBase + chanceBonus + (bonusCritique / 100);
   return Math.min(0.50, raw);
 }
 

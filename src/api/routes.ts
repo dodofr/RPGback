@@ -8,6 +8,8 @@ import mapRoutes from './maps/map.routes';
 import donjonRoutes from './donjons/donjon.routes';
 import pnjRoutes from './pnj/pnj.routes';
 import importRoutes from './import/import.routes';
+import exportRoutes from './export/export.routes';
+import queteRoutes from './quetes/quetes.routes';
 
 import inventoryRoutes from './inventory/inventory.routes';
 import craftRoutes from './craft/craft.routes';
@@ -44,5 +46,7 @@ router.use('/admin/recipes', staticRoutes.recipes);
 router.use('/passives', staticRoutes.passives);
 router.use('/pnj', pnjRoutes);
 router.use('/import', importRoutes);
+router.use('/export', exportRoutes);
+router.use('/quetes', queteRoutes);
 
 export default router;

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { characterController } from './character.controller';
 import { craftController } from '../craft/craft.controller';
+import { questService } from '../../services/quest.service';
 
 const router = Router();
 
@@ -33,6 +34,16 @@ router.get('/:id/progression', (req, res, next) => characterController.getProgre
 
 // POST /api/characters/:id/craft/:recetteId - Craft an item
 router.post('/:id/craft/:recetteId', (req, res, next) => craftController.craft(req, res, next));
+
+// GET /api/characters/:id/quetes - Get active quests
+router.get('/:id/quetes', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const quetes = await questService.getActiveQuests(id);
+    res.json(quetes);
+  } catch (error) { next(error); }
+});
 
 // DELETE /api/characters/:id - Delete a character
 router.delete('/:id', (req, res, next) => characterController.delete(req, res, next));

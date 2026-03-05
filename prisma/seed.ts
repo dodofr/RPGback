@@ -1431,6 +1431,59 @@ async function main() {
 
   console.log('Created 3 passive skills');
 
+  // ==================== PNJ (2) ====================
+  const chefVillage = await prisma.pNJ.upsert({
+    where: { id: 1 }, update: { nom: 'Chef du village', mapId: villageDepart.id, positionX: 7, positionY: 9, estMarchand: true },
+    create: { nom: 'Chef du village', description: 'Le chef du Village de Piedmont.', mapId: villageDepart.id, positionX: 7, positionY: 9, estMarchand: true },
+  });
+  const gardeVillage = await prisma.pNJ.upsert({
+    where: { id: 2 }, update: { nom: 'Garde du village', mapId: villageDepart.id, positionX: 3, positionY: 9, estMarchand: false },
+    create: { nom: 'Garde du village', description: 'Un garde qui surveille les environs.', mapId: villageDepart.id, positionX: 3, positionY: 9, estMarchand: false },
+  });
+
+  console.log('Created 2 PNJs');
+
+  // ==================== QUÊTES ====================
+
+  // Quête 1 : La menace des loups (PARLER_PNJ + TUER_MONSTRE)
+  // Loup template id=2
+  const queteMenaceLoup = await prisma.quete.upsert({
+    where: { id: 1 }, update: {},
+    create: { nom: 'La menace des loups', description: 'Des loups menacent les voyageurs aux abords du village.', niveauRequis: 1, pnjDepartId: chefVillage.id },
+  });
+  await prisma.queteEtape.upsert({ where: { queteId_ordre: { queteId: queteMenaceLoup.id, ordre: 1 } }, update: {}, create: { queteId: queteMenaceLoup.id, ordre: 1, description: 'Va voir le garde du village pour prendre les détails.', type: 'PARLER_PNJ', pnjId: gardeVillage.id } });
+  await prisma.queteEtape.upsert({ where: { queteId_ordre: { queteId: queteMenaceLoup.id, ordre: 2 } }, update: {}, create: { queteId: queteMenaceLoup.id, ordre: 2, description: 'Élimine 4 loups dans la région.', type: 'TUER_MONSTRE', monstreTemplateId: 2, quantite: 4 } });
+  await prisma.queteEtape.upsert({ where: { queteId_ordre: { queteId: queteMenaceLoup.id, ordre: 3 } }, update: {}, create: { queteId: queteMenaceLoup.id, ordre: 3, description: 'Rapporte ta victoire au garde.', type: 'PARLER_PNJ', pnjId: gardeVillage.id } });
+  await prisma.queteEtape.upsert({ where: { queteId_ordre: { queteId: queteMenaceLoup.id, ordre: 4 } }, update: {}, create: { queteId: queteMenaceLoup.id, ordre: 4, description: 'Retourne voir le chef du village pour recevoir ta récompense.', type: 'PARLER_PNJ', pnjId: chefVillage.id } });
+  await prisma.queteRecompense.upsert({ where: { id: 1 }, update: {}, create: { queteId: queteMenaceLoup.id, xp: 200, or: 50 } });
+
+  console.log('Created quest "La menace des loups"');
+
+  // Quête 3 : Ravitaillement du village (démo APPORTER_RESSOURCE + APPORTER_EQUIPEMENT)
+  // id=3 pour laisser id=2 libre (quête créée manuellement via l'admin)
+  // Ressource : cuir (variable cuir), Equipement : Bouclier en bois (id=5)
+  const queteRavitaillement = await prisma.quete.upsert({
+    where: { id: 3 }, update: {},
+    create: { nom: 'Ravitaillement du village', description: 'Le garde a besoin de fournitures pour équiper les nouvelles recrues.', niveauRequis: 1, pnjDepartId: gardeVillage.id },
+  });
+  await prisma.queteEtape.upsert({ where: { queteId_ordre: { queteId: queteRavitaillement.id, ordre: 1 } }, update: {}, create: { queteId: queteRavitaillement.id, ordre: 1, description: 'Parle au garde du village pour prendre sa liste de fournitures.', type: 'PARLER_PNJ', pnjId: gardeVillage.id } });
+  await prisma.queteEtape.upsert({ where: { queteId_ordre: { queteId: queteRavitaillement.id, ordre: 2 } }, update: {}, create: { queteId: queteRavitaillement.id, ordre: 2, description: "Apporte 3 cuirs au garde pour les réparations d'armure.", type: 'APPORTER_RESSOURCE', pnjId: gardeVillage.id, ressourceId: cuir.id, quantite: 3 } });
+  await prisma.queteEtape.upsert({ where: { queteId_ordre: { queteId: queteRavitaillement.id, ordre: 3 } }, update: {}, create: { queteId: queteRavitaillement.id, ordre: 3, description: 'Apporte un bouclier en bois au chef du village pour la milice.', type: 'APPORTER_EQUIPEMENT', pnjId: chefVillage.id, equipementId: 5, quantite: 1 } });
+  await prisma.queteEtape.upsert({ where: { queteId_ordre: { queteId: queteRavitaillement.id, ordre: 4 } }, update: {}, create: { queteId: queteRavitaillement.id, ordre: 4, description: 'Retourne voir le chef pour recevoir ta récompense.', type: 'PARLER_PNJ', pnjId: chefVillage.id } });
+  await prisma.queteRecompense.upsert({ where: { id: 2 }, update: {}, create: { queteId: queteRavitaillement.id, xp: 100, or: 30 } });
+
+  console.log('Created quest "Ravitaillement du village"');
+
+  // ==================== PRÉREQUIS DE QUÊTES ====================
+  // "Ravitaillement du village" requiert "La menace des loups" (progression logique)
+  await prisma.queteRequis.upsert({
+    where: { queteId_prerequisId: { queteId: queteRavitaillement.id, prerequisId: queteMenaceLoup.id } },
+    update: {},
+    create: { queteId: queteRavitaillement.id, prerequisId: queteMenaceLoup.id },
+  });
+
+  console.log('Created quest prerequisites');
+
   console.log('Seeding completed!');
 }
 

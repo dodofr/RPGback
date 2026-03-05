@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { pnjService } from '../../services/pnj.service';
+import { questService } from '../../services/quest.service';
 
 const router = Router();
 
@@ -134,6 +135,73 @@ router.delete('/:id/lignes/:ligneId', async (req: Request, res: Response, next: 
     await pnjService.deleteLigne(ligneId);
     res.status(204).send();
   } catch (error) { next(error); }
+});
+
+// ============================================================
+// Gameplay: quêtes
+// ============================================================
+
+// POST /api/pnj/:id/interact
+router.post('/:id/interact', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pnjId = parseInt(req.params.id, 10);
+    if (isNaN(pnjId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({ personnageId: z.number().int().positive() });
+    const { personnageId } = schema.parse(req.body);
+    const result = await questService.interactWithPnj(personnageId, pnjId);
+    res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    if (error instanceof Error) {
+      if (error.message === 'PNJ not found' || error.message === 'Character not found') { res.status(404).json({ error: error.message }); return; }
+      res.status(400).json({ error: error.message }); return;
+    }
+    next(error);
+  }
+});
+
+// POST /api/pnj/:id/accept-quest
+router.post('/:id/accept-quest', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pnjId = parseInt(req.params.id, 10);
+    if (isNaN(pnjId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      personnageId: z.number().int().positive(),
+      queteId: z.number().int().positive(),
+    });
+    const { personnageId, queteId } = schema.parse(req.body);
+    const qp = await questService.acceptQuest(personnageId, queteId);
+    res.status(201).json({ quetePersonnage: qp });
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    if (error instanceof Error) {
+      if (error.message === 'Character not found' || error.message === 'Quest not found') { res.status(404).json({ error: error.message }); return; }
+      res.status(400).json({ error: error.message }); return;
+    }
+    next(error);
+  }
+});
+
+// POST /api/pnj/:id/advance-quest
+router.post('/:id/advance-quest', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pnjId = parseInt(req.params.id, 10);
+    if (isNaN(pnjId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      personnageId: z.number().int().positive(),
+      quetePersonnageId: z.number().int().positive(),
+    });
+    const { personnageId, quetePersonnageId } = schema.parse(req.body);
+    const result = await questService.advancePnjStep(personnageId, quetePersonnageId);
+    res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    if (error instanceof Error) {
+      if (error.message === 'Quest progress not found') { res.status(404).json({ error: error.message }); return; }
+      res.status(400).json({ error: error.message }); return;
+    }
+    next(error);
+  }
 });
 
 // ============================================================

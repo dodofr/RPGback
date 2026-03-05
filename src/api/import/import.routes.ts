@@ -13,6 +13,7 @@ const IATypeEnum = z.enum(['EQUILIBRE', 'AGGRESSIF', 'SOUTIEN', 'DISTANCE']);
 const RegionTypeEnum = z.enum(['FORET', 'PLAINE', 'DESERT', 'MONTAGNE', 'MARAIS', 'CAVERNE', 'CITE']);
 const MapTypeEnum = z.enum(['WILDERNESS', 'VILLE', 'DONJON', 'BOSS', 'SAFE']);
 const CombatModeEnum = z.enum(['MANUEL', 'AUTO']);
+const QueteEtapeTypeEnum = z.enum(['PARLER_PNJ', 'TUER_MONSTRE', 'APPORTER_RESSOURCE', 'APPORTER_EQUIPEMENT']);
 
 // ============================================================
 // Sub-schemas (inline references by name)
@@ -226,6 +227,52 @@ const equipementImportSchema = z.object({
   lignes: z.array(ligneImportSchema).optional(),
 });
 
+const marchandLigneInlineSchema = z.object({
+  equipement:   z.string().min(1).optional(),
+  ressource:    z.string().min(1).optional(),
+  prixMarchand: z.number().int().min(0).optional(),
+  prixRachat:   z.number().int().min(0).optional(),
+});
+
+const pnjImportSchema = z.object({
+  nom:         z.string().min(1),
+  map:         z.string().min(1),
+  positionX:   z.number().int().min(0),
+  positionY:   z.number().int().min(0),
+  description: z.string().optional(),
+  estMarchand: z.boolean().default(true),
+  marchandLignes: z.array(marchandLigneInlineSchema).optional(),
+});
+
+const queteEtapeInlineSchema = z.object({
+  ordre:       z.number().int().min(1),
+  description: z.string().min(1),
+  type:        QueteEtapeTypeEnum,
+  pnj:         z.string().min(1).optional(),
+  monstre:     z.string().min(1).optional(),
+  quantite:    z.number().int().min(1).optional(),
+  ressource:   z.string().min(1).optional(),
+  equipement:  z.string().min(1).optional(),
+});
+
+const queteRecompenseInlineSchema = z.object({
+  xp:                z.number().int().min(0).default(0),
+  or:                z.number().int().min(0).default(0),
+  ressource:         z.string().min(1).optional(),
+  quantiteRessource: z.number().int().min(1).optional(),
+  equipement:        z.string().min(1).optional(),
+});
+
+const queteImportSchema = z.object({
+  nom:          z.string().min(1),
+  description:  z.string().optional(),
+  niveauRequis: z.number().int().min(1).default(1),
+  pnjDepart:    z.string().min(1).optional(),
+  etapes:       z.array(queteEtapeInlineSchema).optional(),
+  recompenses:  z.array(queteRecompenseInlineSchema).optional(),
+  prerequis:    z.array(z.string().min(1)).optional(),
+});
+
 const recetteImportSchema = z.object({
   nom: z.string().min(1),
   equipement: z.string().min(1), // nom équipement → equipementId
@@ -271,6 +318,8 @@ const importPackSchema = z.object({
   monstres: z.array(monstreImportSchema).optional(),
   equipements: z.array(equipementImportSchema).optional(),
   recettes: z.array(recetteImportSchema).optional(),
+  pnj:    z.array(pnjImportSchema).optional(),
+  quetes: z.array(queteImportSchema).optional(),
 });
 
 // ============================================================
@@ -308,6 +357,8 @@ router.post('/', async (req: Request, res: Response) => {
       ['monstres', pack.monstres],
       ['equipements', pack.equipements],
       ['recettes', pack.recettes],
+      ['pnj',    pack.pnj],
+      ['quetes', pack.quetes],
     ];
     for (const [sectionName, items] of namedSections) {
       if (!items?.length) continue;
@@ -354,6 +405,8 @@ router.post('/', async (req: Request, res: Response) => {
       monstreSorts: 0, monstreDrops: 0,
       equipements: 0, lignesDegats: 0,
       recettes: 0, recetteIngredients: 0,
+      pnj: 0, marchandLignes: 0,
+      quetes: 0, queteEtapes: 0, queteRecompenses: 0, quetePrerequisites: 0,
     };
 
     await prisma.$transaction(async (tx) => {
@@ -368,6 +421,9 @@ router.post('/', async (req: Request, res: Response) => {
         sorts: new Map<string, number>(),
         monstres: new Map<string, number>(),
         equipements: new Map<string, number>(),
+        pnj:       new Map<string, number>(),
+        quetes:    new Map<string, number>(),
+        mapsByNom: new Map<string, number>(),
       };
 
       // ── PRE-LOAD: populate cache with existing DB entries ──
@@ -390,6 +446,12 @@ router.post('/', async (req: Request, res: Response) => {
       for (const s of dbSorts) cache.sorts.set(s.nom, s.id);
       for (const m of dbMonstres) cache.monstres.set(m.nom, m.id);
       for (const e of dbEquipements) cache.equipements.set(e.nom, e.id);
+
+      const dbPnj    = await tx.pNJ.findMany({ select: { id: true, nom: true } });
+      const dbQuetes = await tx.quete.findMany({ select: { id: true, nom: true } });
+      for (const p of dbPnj)    cache.pnj.set(p.nom, p.id);
+      for (const q of dbQuetes) cache.quetes.set(q.nom, q.id);
+      for (const m of dbMaps)   cache.mapsByNom.set(m.nom, m.id);
 
       // ── STEP 0: Régions ───────────────────────────────────
       for (const r of pack.regions ?? []) {
@@ -434,6 +496,7 @@ router.post('/', async (req: Request, res: Response) => {
           mapId = created.id;
         }
         cache.maps.set(`${m.nom}_${regionId}`, mapId);
+        cache.mapsByNom.set(m.nom, mapId);
         counters.maps++;
 
         // Cases : absent → préservées. [] ou [...] → remplacement
@@ -874,6 +937,97 @@ router.post('/', async (req: Request, res: Response) => {
             },
           });
           counters.recetteIngredients++;
+        }
+      }
+      // ── STEP 14: PNJ ─────────────────────────────────────
+      for (const p of pack.pnj ?? []) {
+        if (!cache.mapsByNom.has(p.map)) {
+          throw new ImportRefError(`PNJ '${p.nom}' : map '${p.map}' introuvable en BDD ni dans le pack`);
+        }
+        const mapId = cache.mapsByNom.get(p.map)!;
+
+        const existing = await tx.pNJ.findFirst({ where: { nom: p.nom }, select: { id: true } });
+        let pnjId: number;
+        if (existing) {
+          await tx.pNJ.update({ where: { id: existing.id }, data: { mapId, positionX: p.positionX, positionY: p.positionY, description: p.description ?? null, estMarchand: p.estMarchand } });
+          pnjId = existing.id;
+        } else {
+          const created = await tx.pNJ.create({ data: { nom: p.nom, mapId, positionX: p.positionX, positionY: p.positionY, description: p.description ?? null, estMarchand: p.estMarchand }, select: { id: true } });
+          pnjId = created.id;
+        }
+        cache.pnj.set(p.nom, pnjId);
+        counters.pnj++;
+
+        if (p.marchandLignes !== undefined) {
+          await tx.marchandLigne.deleteMany({ where: { pnjId } });
+          for (const l of p.marchandLignes) {
+            if (!l.equipement && !l.ressource) continue;
+            const equipementId = l.equipement
+              ? (cache.equipements.has(l.equipement) ? cache.equipements.get(l.equipement)! : (() => { throw new ImportRefError(`PNJ '${p.nom}' ligne : équipement '${l.equipement}' introuvable`); })())
+              : null;
+            const ressourceId = l.ressource
+              ? (cache.ressources.has(l.ressource) ? cache.ressources.get(l.ressource)! : (() => { throw new ImportRefError(`PNJ '${p.nom}' ligne : ressource '${l.ressource}' introuvable`); })())
+              : null;
+            await tx.marchandLigne.create({ data: { pnjId, equipementId, ressourceId, prixMarchand: l.prixMarchand ?? null, prixRachat: l.prixRachat ?? null } });
+            counters.marchandLignes++;
+          }
+        }
+      }
+
+      // ── STEP 15a: Quêtes (base + étapes + récompenses) ───
+      for (const q of pack.quetes ?? []) {
+        const pnjDepartId = q.pnjDepart
+          ? (cache.pnj.has(q.pnjDepart) ? cache.pnj.get(q.pnjDepart)! : (() => { throw new ImportRefError(`Quête '${q.nom}' : PNJ de départ '${q.pnjDepart}' introuvable`); })())
+          : null;
+
+        const existing = await tx.quete.findFirst({ where: { nom: q.nom }, select: { id: true } });
+        let queteId: number;
+        if (existing) {
+          await tx.quete.update({ where: { id: existing.id }, data: { description: q.description ?? null, niveauRequis: q.niveauRequis, pnjDepartId } });
+          queteId = existing.id;
+        } else {
+          const created = await tx.quete.create({ data: { nom: q.nom, description: q.description ?? null, niveauRequis: q.niveauRequis, pnjDepartId }, select: { id: true } });
+          queteId = created.id;
+        }
+        cache.quetes.set(q.nom, queteId);
+        counters.quetes++;
+
+        if (q.etapes !== undefined) {
+          await tx.queteEtape.deleteMany({ where: { queteId } });
+          for (const e of q.etapes) {
+            const pnjId       = e.pnj        ? (cache.pnj.has(e.pnj)               ? cache.pnj.get(e.pnj)!                    : (() => { throw new ImportRefError(`Quête '${q.nom}' étape ${e.ordre} : PNJ '${e.pnj}' introuvable`); })())        : null;
+            const monstreId   = e.monstre    ? (cache.monstres.has(e.monstre)       ? cache.monstres.get(e.monstre)!            : (() => { throw new ImportRefError(`Quête '${q.nom}' étape ${e.ordre} : monstre '${e.monstre}' introuvable`); })())  : null;
+            const ressourceId = e.ressource  ? (cache.ressources.has(e.ressource)   ? cache.ressources.get(e.ressource)!        : (() => { throw new ImportRefError(`Quête '${q.nom}' étape ${e.ordre} : ressource '${e.ressource}' introuvable`); })()) : null;
+            const equipId     = e.equipement ? (cache.equipements.has(e.equipement) ? cache.equipements.get(e.equipement)!      : (() => { throw new ImportRefError(`Quête '${q.nom}' étape ${e.ordre} : équipement '${e.equipement}' introuvable`); })()) : null;
+            await tx.queteEtape.create({ data: { queteId, ordre: e.ordre, description: e.description, type: e.type as any, pnjId, monstreTemplateId: monstreId, quantite: e.quantite ?? null, ressourceId, equipementId: equipId } });
+            counters.queteEtapes++;
+          }
+        }
+
+        if (q.recompenses !== undefined) {
+          await tx.queteRecompense.deleteMany({ where: { queteId } });
+          for (const r of q.recompenses) {
+            const ressourceId = r.ressource  ? (cache.ressources.has(r.ressource)   ? cache.ressources.get(r.ressource)!   : (() => { throw new ImportRefError(`Quête '${q.nom}' récompense : ressource '${r.ressource}' introuvable`); })())  : null;
+            const equipId     = r.equipement ? (cache.equipements.has(r.equipement) ? cache.equipements.get(r.equipement)! : (() => { throw new ImportRefError(`Quête '${q.nom}' récompense : équipement '${r.equipement}' introuvable`); })()) : null;
+            await tx.queteRecompense.create({ data: { queteId, xp: r.xp, or: r.or, ressourceId, quantiteRessource: r.quantiteRessource ?? null, equipementId: equipId } });
+            counters.queteRecompenses++;
+          }
+        }
+      }
+
+      // ── STEP 15b: Prérequis quêtes (2ème pass) ───────────
+      for (const q of pack.quetes ?? []) {
+        if (!q.prerequis?.length) continue;
+        const queteId = cache.quetes.get(q.nom)!;
+        await tx.queteRequis.deleteMany({ where: { queteId } });
+        for (const preNom of q.prerequis) {
+          if (!cache.quetes.has(preNom)) {
+            throw new ImportRefError(`Quête '${q.nom}' : quête prérequis '${preNom}' introuvable en BDD ni dans le pack`);
+          }
+          const prerequisId = cache.quetes.get(preNom)!;
+          if (prerequisId === queteId) throw new ImportRefError(`Quête '${q.nom}' : une quête ne peut pas être son propre prérequis`);
+          await tx.queteRequis.create({ data: { queteId, prerequisId } });
+          counters.quetePrerequisites++;
         }
       }
     }, { timeout: 30000 });

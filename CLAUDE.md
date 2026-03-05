@@ -2,7 +2,7 @@
 
 ## Vue d'ensemble
 
-Backend Node.js/TypeScript pour un jeu RPG tactique au tour par tour. API REST avec système de combat sur grille, exploration de monde, progression (XP/niveaux), équipement et IA des monstres.
+Backend Node.js/TypeScript pour un jeu RPG tactique au tour par tour. API REST avec système de combat sur grille, exploration de monde, progression (XP/niveaux), équipement, IA des monstres, et système de quêtes multi-étapes.
 
 ## Stack technique
 
@@ -40,12 +40,12 @@ backend/
 │   ├── api/
 │   │   ├── routes.ts            # Agrégation routes
 │   │   ├── players/             # CRUD joueurs (controller/service/routes)
-│   │   ├── characters/          # CRUD personnages + équipement + progression
+│   │   ├── characters/          # CRUD personnages + équipement + progression + quêtes actives
 │   │   ├── groups/              # Gestion groupes + navigation
 │   │   ├── combat/              # Endpoints combat
 │   │   ├── maps/                # Régions, maps, monstres, spawns + relations
-│   │   ├── grilles/             # CRUD grilles de combat prédéfinies
 │   │   ├── donjons/             # Système de donjons linéaires
+│   │   ├── quetes/              # CRUD quêtes admin (quetes.routes.ts)
 │   │   ├── inventory/           # Inventaire (controller/routes) — equip, envoi, destruction
 │   │   ├── craft/               # Craft (controller/routes) — recettes
 │   │   └── static/              # CRUD données référentielles (races, sorts, équipements, effets, zones, ressources, panoplies, recettes admin)
@@ -58,8 +58,8 @@ backend/
 │   │   ├── monstre.service.ts   # + update, delete, findById incl. drops
 │   │   ├── progression.service.ts  # XP, level-up, allocation stats
 │   │   ├── spell.service.ts     # Apprentissage sorts, cooldowns
-│   │   ├── grille.service.ts    # CRUD grilles + getRandomGridForMap()
 │   │   ├── donjon.service.ts    # + create, update, delete
+│   │   ├── quest.service.ts     # Système de quêtes (interact, accept, advance, rewards)
 │   │   ├── inventory.service.ts # Inventaire, equip, rollStats, envoi entre personnages
 │   │   ├── craft.service.ts     # Système de craft (recettes, vérif, consommation)
 │   │   ├── drop.service.ts      # Distribution de butin post-combat
@@ -82,9 +82,6 @@ backend/
 ├── prisma/
 │   ├── schema.prisma              # Schéma BDD complet
 │   └── seed.ts                    # Données initiales
-└── docs/
-    ├── API_DOCUMENTATION.md       # Doc API complète + exemples réponses
-    └── QUICK_REFERENCE.md         # Référence rapide + curl exemples
 ```
 
 ## Architecture
@@ -94,7 +91,7 @@ backend/
 Request → Routes → Controller (Zod) → Service (Prisma) → PostgreSQL
 ```
 
-Exception : `static.routes.ts` utilise des handlers inline (pas de controller/service séparés) avec Prisma + Zod directement dans les routes.
+Exception : `static.routes.ts` et `quetes.routes.ts` utilisent des handlers inline (pas de controller/service séparés) avec Prisma + Zod directement dans les routes.
 
 ## API Endpoints
 
@@ -102,7 +99,7 @@ Exception : `static.routes.ts` utilise des handlers inline (pas de controller/se
 POST `/` | GET `/` | GET `/:id` | GET `/:id/characters` | GET `/:id/groups` | PATCH `/:id` | DELETE `/:id`
 
 ### Characters (`/api/characters`)
-POST `/` | GET `/` | GET `/:id` (avec stats totales) | PATCH `/:id` | PUT `/:id/equipment` | GET `/:id/spells` | POST `/:id/allocate-stats` | GET `/:id/progression` | POST `/:id/craft/:recetteId` | DELETE `/:id`
+POST `/` | GET `/` | GET `/:id` (avec stats totales) | PATCH `/:id` | PUT `/:id/equipment` | GET `/:id/spells` | POST `/:id/sync-spells` | POST `/:id/allocate-stats` | POST `/:id/reset-stats` | GET `/:id/progression` | POST `/:id/craft/:recetteId` | GET `/:id/quetes` | DELETE `/:id`
 
 ### Inventory (`/api/characters/:id/inventory`)
 GET `/` | DELETE `/items/:itemId` | DELETE `/resources/:ressourceId` | POST `/equip/:itemId` | POST `/unequip` | POST `/send`
@@ -117,10 +114,7 @@ POST `/` | GET `/` | GET `/:id` | POST `/:id/characters` (max 6) | DELETE `/:id/
 POST `/` | GET `/` | GET `/:id` | POST `/:id/action` (sort ou arme) | POST `/:id/move` | POST `/:id/end-turn` | POST `/:id/flee` | DELETE `/:id`
 
 ### Maps (`/api/maps`)
-PUT `/world-positions` | GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/connections` | DELETE `/:id/connections/:connId` | POST `/:id/spawn-enemies` | POST `/:id/engage` | POST `/:id/respawn`
-
-### Grilles (`/api/grilles`)
-POST `/` | GET `/` | GET `/:id` | PUT `/:id` | DELETE `/:id` | PUT `/:id/cases` | PUT `/:id/spawns`
+PUT `/world-positions` | GET `/portals` | GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/connections` | DELETE `/:id/connections/:connId` | POST `/:id/spawn-enemies` | POST `/:id/engage` | POST `/:id/respawn` | GET `/:id/grid` | PUT `/:id/grid/cases` | PUT `/:id/grid/spawns` | GET `/:id/pnj`
 
 ### Regions (`/api/regions`)
 GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/monstres` | DELETE `/:id/monstres/:monstreId`
@@ -130,6 +124,18 @@ GET `/` | GET `/:id` (incl. drops) | POST `/` | PATCH `/:id` | DELETE `/:id` | P
 
 ### Donjons (`/api/donjons`)
 GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/enter` | GET `/run/:groupeId` | POST `/run/:groupeId/abandon`
+
+### PNJ (`/api/pnj`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+POST `/:id/lignes` | PATCH `/:id/lignes/:ligneId` | DELETE `/:id/lignes/:ligneId`
+POST `/:id/buy` | POST `/:id/sell`
+POST `/:id/interact` | POST `/:id/accept-quest` | POST `/:id/advance-quest`
+
+### Quêtes admin (`/api/quetes`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+POST `/:id/etapes` | PATCH `/:id/etapes/:etapeId` | DELETE `/:id/etapes/:etapeId`
+POST `/:id/recompenses` | DELETE `/:id/recompenses/:recompenseId`
+POST `/:id/prerequis` | DELETE `/:id/prerequis/:prerequisId`
 
 ### Static Data — Races (`/api/races`)
 GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
@@ -154,6 +160,12 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 
 ### Admin — Recettes (`/api/admin/recipes`)
 GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+
+### Passives (`/api/passives`)
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
+
+### Import (`/api/import`)
+POST `/maps` | POST `/monstres`
 
 ## Base de données
 
@@ -182,31 +194,44 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 - `Region` - Zones du monde (Forêt, Plaine, Montagne...)
 - `Map` - Cartes avec voisins directionnels (`nordMapId`, `sudMapId`, `estMapId`, `ouestMapId`) + position monde optionnelle (`worldX`, `worldY`)
 - `MapConnection` - Portails nommés avec position (x, y)
+- `MapCase` - Obstacles de la grille de combat liés à la map (Cascade via Map)
+- `MapSpawn` - Points de spawn joueurs/ennemis par map (Cascade via Map)
 - `MonstreTemplate` - Définitions monstres (+ `iaType`, `pvScalingInvocation`, `orMin`/`orMax`)
 - `RegionMonstre` - Many-to-many monstres ↔ régions avec probabilité
 - `MonstreSort` - Sorts par monstre avec priorité (1 = plus haute)
 - `GroupeEnnemi` / `GroupeEnnemiMembre` - Groupes ennemis sur map (1-3 groupes, 1-8 monstres, composition mixte)
 
-### Tables grilles de combat
-- `GrilleCombat` - Templates (nom, mapId, dimensions)
-- `GrilleCase` - Obstacles prédéfinis (Cascade)
-- `GrilleSpawn` - 8 joueurs + 8 ennemis par grille (Cascade)
+### Tables PNJ & Quêtes
+- `PNJ` - Personnages non-joueurs sur map (`mapId`, `positionX/Y`, `estMarchand`)
+- `MarchandLigne` - Catalogue marchand (equipementId ou ressourceId, prixMarchand, prixRachat)
+- `Quete` - Définition d'une quête (nom, niveauRequis, pnjDepartId)
+- `QueteEtape` - Étapes ordonnées d'une quête (type PARLER_PNJ ou TUER_MONSTRE, pnjId, monstreTemplateId, quantite) — Cascade via Quete
+- `QueteRecompense` - Récompenses d'une quête (xp, or, ressourceId+quantite, equipementId) — Cascade via Quete
+- `QuetePersonnage` - Progression d'un personnage sur une quête (etapeActuelle, compteurEtape, statut EN_COURS/TERMINEE) — unique [queteId, personnageId]
+- `QueteRequis` - Prérequis entre quêtes (queteId, prerequisId) — `@@id([queteId, prerequisId])`. Cascade si quête principale supprimée ; nettoyage manuel si prérequis supprimé (`deleteQuest()`)
 
 ### Tables référentielles
 - `Race` - Bonus de stats
 - `Sort` - Sorts avec `degatsCritMin`/`degatsCritMax`, `estSoin`/`estInvocation`/`estVolDeVie`/`estSelfBuff`, `tauxEchec`, `invocationTemplateId`, `ligneDirecte` (Boolean, ciblage axe strict)
-- `SortEffet` - Liaison sort → effet (`chanceDeclenchement`, `surCible`/`surLanceur`)
+- `SortEffet` - Liaison sort → effet (`chanceDeclenchement`, `surCible`)
 - `Zone` - Types de zones d'effet
 - `Equipement` - Items avec bonus stats. Armes : données d'attaque + `tauxEchec` + `estVolDeVie` + `bonusCrit` (crit global) + `LigneDegatsArme[]` (multi-lignes optionnel)
 - `LigneDegatsArme` - Ligne de dégâts arme : `ordre`, `degatsMin/Max`, `statUtilisee`, `estVolDeVie`, `estSoin`
 - `Effet` - Buffs/debuffs/poisons. Champs : `valeurMin` (plage min pour POISON), `type` incl. POISON
+- `CompetencePassive` - Bonus permanents débloqués par niveau (bonusForce, bonusPa, etc.)
+
+### Tables donjons
+- `Donjon` - Définition d'un donjon (regionId, bossId, niveauMin/Max)
+- `DonjonSalle` - Salles d'un donjon (ordre, mapId) — Cascade via Donjon
+- `DonjonSalleComposition` - Monstres par salle selon difficulté — Cascade via DonjonSalle
+- `DonjonRun` - Run actif d'un groupe dans un donjon (salleActuelle, difficulte, victoire)
 
 ### Enums
 ```prisma
-enum StatType { FORCE, INTELLIGENCE, DEXTERITE, AGILITE, VIE, CHANCE, PA, PM, PO }
+enum StatType { FORCE, INTELLIGENCE, DEXTERITE, AGILITE, VIE, CHANCE, PA, PM, PO, CRITIQUE, DOMMAGES, SOINS }
 enum SortType { ARME, SORT }
 enum SlotType { ARME, COIFFE, AMULETTE, BOUCLIER, HAUT, BAS, ANNEAU1, ANNEAU2, FAMILIER }
-enum EffetType { BUFF, DEBUFF, DISPEL, POUSSEE, ATTIRANCE, POISON }
+enum EffetType { BUFF, DEBUFF, DISPEL, POUSSEE, ATTIRANCE, POISON, BOUCLIER, RESISTANCE }
 enum ZoneType { CASE, CROIX, LIGNE, CONE, CERCLE, LIGNE_PERPENDICULAIRE, DIAGONALE, CARRE, ANNEAU, CONE_INVERSE }
 enum CombatStatus { EN_COURS, TERMINE, ABANDONNE }
 enum CombatLogType { ACTION, DEPLACEMENT, TOUR, MORT, EFFET, EFFET_EXPIRE, FIN }
@@ -214,6 +239,8 @@ enum RegionType { FORET, PLAINE, DESERT, MONTAGNE, MARAIS, CAVERNE, CITE }
 enum MapType { WILDERNESS, VILLE, DONJON, BOSS, SAFE }
 enum CombatMode { MANUEL, AUTO }
 enum IAType { EQUILIBRE, AGGRESSIF, SOUTIEN, DISTANCE }
+enum QueteEtapeType { PARLER_PNJ, TUER_MONSTRE, APPORTER_RESSOURCE, APPORTER_EQUIPEMENT }
+enum QueteStatut { EN_COURS, TERMINEE }
 ```
 
 ### Types TypeScript
@@ -231,7 +258,7 @@ type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST'
 5. Vérification de sort : `PersonnageSort` (joueurs) / `MonstreSort` (monstres)
 6. IA auto-play : monstres (equipe=1) ET invocations joueur (`invocateurId !== null`)
 7. Début de tour : décrémentation effets + cooldowns per-entity
-8. Fin combat : nettoyage effets/cooldowns + suppression invocations survivantes + XP si victoire (tous les joueurs, vivants ET morts, invocations exclues)
+8. Fin combat : nettoyage effets/cooldowns + suppression invocations survivantes + XP si victoire (tous les joueurs, vivants ET morts, invocations exclues) + drops + progression quêtes TUER_MONSTRE
 
 ### Actions
 - **Sort** : `{ entiteId, sortId, targetX, targetY }` — sort appris (mono-ligne toujours)
@@ -240,9 +267,9 @@ type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST'
 - **tauxEchec** : vérifié après PA déduits. Sort raté = PA perdus. Arme ratée = tour perdu (endTurn)
 - **estSoin** : heal (même formule que dégâts, +PV plafonné à pvMax)
 - **estInvocation** : invoque entité à position libre (0 dégâts)
-- **ligneDirecte** : si `true`, la cible doit être sur le même axe X ou Y que le lanceur (diagonales refusées). Vérifié dans `engine.ts` avant le check de portée. Sort id=6 "Vent tranchant" : `porteeMax: 4, ligneDirecte: true`
+- **ligneDirecte** : si `true`, la cible doit être sur le même axe X ou Y que le lanceur (diagonales refusées). Vérifié dans `engine.ts` avant le check de portée.
 - **estVolDeVie** : après dégâts, le lanceur récupère 50% des dégâts totaux en PV (plafonné pvMax). Sur Sort = flag global, sur arme = par ligne
-- **estSelfBuff** : `true` → l'IA caste ce sort sur elle-même (step 0B, avant heal/attaque, dans les 4 stratégies). Flag explicite en BDD (remplace l'heuristique fragile basée sur dégâts=0). Sorts : Cri de rage (id=20), Méditation (id=21), Pas lourd (id=22). Le log ne montre pas "0 dégâts" pour les self-buffs (filtre `d.damage > 0` dans engine.ts)
+- **estSelfBuff** : `true` → l'IA caste ce sort sur elle-même (step 0B, avant heal/attaque, dans les 4 stratégies). Flag explicite en BDD.
 
 ### Armes multi-lignes
 - Chaque arme peut avoir 0 ou N `LigneDegatsArme` (table BDD, snapshotée dans `armeData.lignes[]`)
@@ -259,9 +286,13 @@ type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST'
 pvMax = 50 + (vie × 5)
 paBase = 6, pmBase = 3
 multiplicateur = (stat / 100) + 1
-chanceCrit = chanceCritBase + (chance / 100)
-dégâts = floor(random(degatsMin, degatsMax) × multiplicateur)
-critiques = floor(random(degatsCritMin, degatsCritMax) × multiplicateur)
+chanceCrit = chanceCritBase + floor(chance/100)×0.01 + (bonusCritique/100)
+  // Palier CHANCE : 0 crit sous 100 CHANCE, +1% par tranche de 100 (ex: 300 → +3%)
+flatForceBonus = floor(force / 100)    // +1 dommage flat par tranche de 100 FORCE
+flatDexBonus   = floor(dexterite / 100) // +1 soin flat par tranche de 100 DEX
+dégâts = floor(random(degatsMin + flatForceBonus, degatsMax + flatForceBonus) × multiplicateur)
+critiques = floor(random(degatsCritMin + flatForceBonus, degatsCritMax + flatForceBonus) × multiplicateur)
+soins   = floor(random(degatsMin + flatDexBonus, degatsMax + flatDexBonus) × multiplicateur)
 distance = |x2 - x1| + |y2 - y1|  // Manhattan
 scaleFactor = 1 + (niveau - niveauBase) × 0.1  // Monstres +10%/niveau
 xpRequis = niveau² × 50
@@ -278,6 +309,11 @@ CASE (unique) | CROIX (N/S/E/O selon taille) | CERCLE (rayon Manhattan) | LIGNE 
 - `canMove()` utilise le BFS (pas la distance Manhattan directe)
 - Le frontend utilise aussi un BFS flood fill pour le preview des cases accessibles
 
+### Engagement de mêlée
+- **Règle** : si un ennemi adjacent a `AGI >= 2 × INT` du déplaceur → **blocage total** (impossible de se déplacer)
+- Check dans `moveEntity()` via helper `isMeleeEngagementBlocked()` après `canMove()`, avant le update Prisma
+- **Contournements** : téléportation (passe par update direct, pas `moveEntity()`), poussée/attirance (effects.ts, pas `moveEntity()`)
+
 ### Ligne de vue (LOS)
 - Bresenham supercover, LDV stricte sur diagonales
 - Bloquée par obstacles (`bloqueLigneDeVue`) et entités vivantes
@@ -291,8 +327,6 @@ CASE (unique) | CROIX (N/S/E/O selon taille) | CERCLE (rayon Manhattan) | LIGNE 
 - **Types** : ACTION (sort/arme/échec/soin/invocation/dispel), DEPLACEMENT, TOUR, MORT, EFFET, EFFET_EXPIRE, FIN
 - **Consolidation IA** : mouvements IA groupés en un seul log par tour (PM total), pas 1 log par pas
 - **Joueur** : mouvement logué dans `combat.service.ts move()` (pas dans `moveEntity()`)
-- Format : `{nom} lance {sort} ({PA} PA) → {cible} subit {dmg} dégâts ({pv}/{pvMax} PV)`
-- Multi-cibles AoE : un seul message avec toutes les cibles concaténées
 
 ## IA des monstres
 
@@ -328,7 +362,7 @@ Sorts via `MonstreSort` triés par `priorite`. Auto-play pour monstres ET invoca
 
 ## Système de buffs/debuffs
 
-- `SortEffet` lie Sort → Effet avec `chanceDeclenchement` et `surCible`/`surLanceur`
+- `SortEffet` lie Sort → Effet avec `chanceDeclenchement` et `surCible` (`true` = zone, `false` = lanceur uniquement)
 - Application automatique après sort. Stats modifiées : `statBase + somme(effets.valeur)`
 - Durée décrémentée per-entity au début du tour, supprimé à `toursRestants <= 0`
 - Nettoyage : mort entité → ses effets supprimés (+invocations). Fin combat → tous effets/cooldowns supprimés
@@ -337,7 +371,7 @@ Sorts via `MonstreSort` triés par `priorite`. Auto-play pour monstres ET invoca
 ## Système d'inventaire
 
 - Poids : `poidsActuel` = somme(items.poids) + somme(ressources.poids × quantité). Or sans poids
-- `poidsMaxInventaire` sur Personnage (défaut 100)
+- `poidsMaxInventaire` sur Personnage (défaut 2000)
 - `rollStats()` : ranges sur Equipement (`bonusXxxMax`), roll aléatoire à la création de l'instance
 - Items instanciés (`InventaireItem`) avec stats fixées au drop/craft, liés à un `Equipement` template
 - Equip/unequip : met à jour `estEquipe` + sync legacy JSON `personnage.equipements`
@@ -348,7 +382,7 @@ Sorts via `MonstreSort` triés par `priorite`. Auto-play pour monstres ET invoca
 - Distribution **individuelle** (per player per monster) : or (`orMin`/`orMax`), ressources normales
 - Distribution **globale** (1 roll, 1 joueur aléatoire) : équipements, ressources premium (`estPremium: true`)
 - `MonstreDrop` : `tauxDrop` (0-1), `quantiteMin`/`quantiteMax`, `ressourceId` ou `equipementId`
-- Appelé dans `combat.service.ts` à la fin du combat (victoire joueurs)
+- Appelé dans `engine.ts checkCombatEnd()` à la fin du combat (victoire joueurs)
 - Equipment droppé → `rollStats()` + `addItem()`, inventaire plein → item perdu silencieusement
 
 ## Système de craft
@@ -371,6 +405,52 @@ Sorts via `MonstreSort` triés par `priorite`. Auto-play pour monstres ET invoca
 - Validation : possession, items non équipés, poids destinataire, transaction atomique Prisma
 - Or sans poids, refus complet si destinataire n'a pas la place
 
+## Système de quêtes
+
+### Architecture
+- **Service** : `src/services/quest.service.ts` — logique centrale
+- **Types d'étapes** :
+  - `PARLER_PNJ` — déclenché manuellement via PNJ (dialogue)
+  - `TUER_MONSTRE` — déclenché automatiquement post-combat (`onCombatEnd`)
+  - `APPORTER_RESSOURCE` — déclenché manuellement via PNJ ; vérifie + consomme `quantite` unités de `ressourceId` dans l'inventaire
+  - `APPORTER_EQUIPEMENT` — déclenché manuellement via PNJ ; vérifie + supprime `quantite` instances non-équipées de `equipementId`
+- **Progression** : `QuetePersonnage.etapeActuelle` + `compteurEtape` (kills accumulés pour TUER_MONSTRE)
+- **Prérequis** : `QueteRequis` — une quête peut exiger que d'autres soient `TERMINEE`. Filtre côté serveur dans `interactWithPnj()` (quête verrouillée = invisible pour le joueur). Admin via section "Prérequis" dans `QueteDetailPage`.
+- **Avancement auto** `TUER_MONSTRE` : hook dans `engine.ts checkCombatEnd()` → `questService.onCombatEnd(combatId)`
+  - Tous les personnages joueurs du combat bénéficient des kills (kills partagés)
+  - Si étape complète et dernière → `statut = TERMINEE` + récompenses distribuées automatiquement
+- **Quête non-rejouable** : contrainte unique `[queteId, personnageId]`
+
+### Flow interact PNJ
+```
+POST /pnj/:id/interact { personnageId }
+  → quetesDisponibles (niveau ok, pas déjà acceptée)
+  → etapesEnAttente (QuetePersonnage EN_COURS dont étape actuelle = PARLER_PNJ | APPORTER_RESSOURCE | APPORTER_EQUIPEMENT avec ce PNJ)
+  → estMarchand (boolean)
+
+POST /pnj/:id/accept-quest { personnageId, queteId }
+  → Crée QuetePersonnage { etapeActuelle: 1, compteurEtape: 0 }
+
+POST /pnj/:id/advance-quest { personnageId, quetePersonnageId }
+  → Switch sur type d'étape :
+     PARLER_PNJ → avance directement
+     APPORTER_RESSOURCE → vérifie stock, consomme quantite unités (delete ou decrement)
+     APPORTER_EQUIPEMENT → vérifie N items non-équipés du template, les supprime
+  → etapeActuelle++, ou statut = TERMINEE si dernière étape
+  → Si terminée : distributeQuestRewards() → XP + or + ressources + équipement (rollStats)
+```
+
+### Récompenses
+- `xp` → `Personnage.experience` + `checkAndApplyLevelUp()`
+- `or` → `Personnage.or`
+- `ressource` → upsert `InventaireRessource`
+- `equipement` → `rollStats()` + `addItem()` (silent fail si inventaire plein)
+
+### Seed
+- PNJ id=1 : Chef du village (map id=5, pos 7/9, estMarchand=**true** — marchand ET donneur de quête)
+- PNJ id=2 : Garde du village (map id=5, pos 3/9, estMarchand=false)
+- Quête id=1 : "La menace des loups" — 4 étapes (Parler garde → Tuer 4 loups → Parler garde → Parler chef), récompense 200 XP + 50 or
+
 ## Système de monde & maps
 
 ### Types de maps
@@ -382,19 +462,35 @@ WILDERNESS (MANUEL, ennemis visibles) | DONJON (AUTO, rencontres aléatoires) | 
 - **Déplacement** : `PATCH /groups/:id/move { x, y }` → engagement auto si groupe ennemi
 - **Entrée map** : `POST /groups/:id/enter-map { mapId }` → spawn auto groupes ennemis (MANUEL)
 
+### Grille de combat (par map)
+- `MapCase` : obstacles (`bloqueDeplacement`, `bloqueLigneDeVue`, `estExclue`) — Cascade via Map
+- `MapSpawn` : points de spawn (equipe 0=joueurs, 1=ennemis, ordre 1-8) — Cascade via Map
+- Spawns standard : joueurs x=1, ennemis x=14, y=2,4,6,8,10,12,14,16
+- Endpoints : `GET /maps/:id/grid`, `PUT /maps/:id/grid/cases`, `PUT /maps/:id/grid/spawns`
+
 ### Carte du monde (positions)
 - `Map.worldX` / `Map.worldY` : position optionnelle sur la grille monde (Int?)
 - `PUT /api/maps/world-positions` : batch update positions + recalcul automatique des liens directionnels
-  - Body : `{ positions: [{ mapId, worldX, worldY }] }`
   - Transaction : update positions → clear tous liens → rebuild par adjacence (NORD=y-1, SUD=y+1, EST=x+1, OUEST=x-1)
   - Maps absentes de la liste : worldX/worldY remis à null
-- `map.service.ts updateWorldPositions()` : logique dans une transaction Prisma
 - Les liens directionnels sont bidirectionnels et calculés automatiquement
+
+### Portails réseau
+- `MapConnection.toMapId` nullable → portail sans destination = portail donjon
+- `GET /api/maps/portals` DOIT être déclaré avant `GET /api/maps/:id` dans map.routes.ts
 
 ### Groupes ennemis
 - MANUEL : 1-3 `GroupeEnnemi` par map, 1-8 `GroupeEnnemiMembre` mixtes, spawn auto via `RegionMonstre`
 - AUTO : engagement automatique à proximité (4 cases Manhattan), monstres via `RegionMonstre` (pondéré)
 - Engagement : automatique (déplacement sur case) ou manuel (`POST /maps/:id/engage`)
+
+## PNJ marchands
+
+- `PNJ` : positionX/Y sur map, `estMarchand` (checkbox indépendante — un PNJ peut être marchand ET donneur de quête simultanément)
+- `MarchandLigne` : catalogue avec `prixMarchand` (achat) et `prixRachat` (vente)
+- Tous les PNJ sont interactables (bouton "Parler à" dans MapPage) → dialogue modal avec sélecteur de personnage + quêtes + bouton boutique si `estMarchand`
+- Admin : `PNJPage` (liste) → `/admin/pnj/:id` → `PNJDetailPage` (détail avec inventaire marchand + quêtes données)
+- `POST /pnj/:id/buy` / `POST /pnj/:id/sell` : transactions marchandes
 
 ## Conventions de code
 
@@ -404,9 +500,9 @@ WILDERNESS (MANUEL, ennemis visibles) | DONJON (AUTO, rencontres aléatoires) | 
 - Endpoints en anglais (`/api/players`) | Modèles BDD en français (`Joueur`)
 
 ### Patterns
-- **Controller/Service/Route** : players, characters, groups, combat, maps, donjons, grilles
-- **Inline handlers** : `static.routes.ts` (races, sorts, equipment, effects, zones) — Prisma + Zod directement dans les routes, pas de controller/service séparés
-- **Relations** : endpoints imbriqués (`/spells/:id/effects`, `/regions/:id/monstres`, `/monstres/:id/sorts`)
+- **Controller/Service/Route** : players, characters, groups, combat, maps, donjons
+- **Inline handlers** : `static.routes.ts`, `quetes.routes.ts`, `pnj.routes.ts` — Prisma + Zod directement dans les routes, pas de controller/service séparés
+- **Relations** : endpoints imbriqués (`/spells/:id/effects`, `/regions/:id/monstres`, `/quetes/:id/etapes`)
 
 ### Erreurs
 ```typescript
@@ -421,8 +517,10 @@ Avant de supprimer une ressource, nettoyer les relations :
 - **Effet** : supprimer SortEffet, EffetActif
 - **Zone** : nullifier zoneId sur Sort et Equipement
 - **Region** : supprimer RegionMonstre
-- **Map** : supprimer MapConnection, GroupeEnnemi, GrilleCombat, nullifier directional refs
-- **Monstre** : supprimer RegionMonstre, MonstreSort
+- **Map** : supprimer MapConnection, GroupeEnnemi, MapCase, MapSpawn, nullifier directional refs
+- **Monstre** : supprimer RegionMonstre, MonstreSort, QueteEtape (mettre monstreTemplateId à null)
+- **PNJ** : supprimer MarchandLigne, nullifier QueteEtape.pnjId, nullifier Quete.pnjDepartId
+- **Quête** : supprimer QuetePersonnage + QueteRequis (où prerequisId = id), puis delete quête (cascade → QueteEtape, QueteRecompense, QueteRequis où queteId = id)
 - **Donjon** : supprimer DonjonRun (DonjonSalle cascade)
 - **Combat** : nullifier invocateurId, supprimer CombatEntite (EffetActif/SortCooldown/CombatCase/CombatLog cascade)
 
@@ -443,6 +541,14 @@ Avant de supprimer une ressource, nettoyer les relations :
 - Self-buff IA : `estSelfBuff: true` (IA l'utilise sur soi en priorité)
 - Risqué : `tauxEchec: 0.xx`
 
+### Ajouter un type d'étape de quête
+1. Ajouter valeur dans enum `QueteEtapeType` (schema.prisma) + `npx prisma db push`
+2. Ajouter la logique dans `quest.service.ts` :
+   - Si déclenchement via PNJ : ajouter le type dans le filtre `etapesEnAttente` de `interactWithPnj()`, et un `case` dans le switch de `advancePnjStep()`
+   - Si déclenchement automatique : nouveau hook (ex: `onCombatEnd` pour TUER_MONSTRE)
+3. Mettre à jour la validation Zod dans `quetes.routes.ts`
+4. Mettre à jour `TYPE_LABELS` dans `QueteDetailPage.tsx` et `QuetesPage.tsx` (frontend)
+
 ### Modifier l'IA
 - `src/services/combat/ai.ts` : `executeAITurn()` → dispatch par iaType
 - Nouveau type : enum `IAType` + `executeXxxTurn()` + switch dans `executeAITurn()`
@@ -452,20 +558,25 @@ Avant de supprimer une ressource, nettoyer les relations :
 
 ## Données de seed (résumé)
 
-- **5 races** : Nain, Orc, Halfelin, Humain, Elfe — chacune 4 sorts (niv 1/4/7/10) + buff/dispel + invocation (niv 5)
-- **55 sorts** : 20 race + 5 buff/debuff + 5 dispel + 3 soins + 5 invocations + 10 monstres + 7 invocations
-- **14 équipements** : tous slots, 4 armes (dont 2 multi-lignes), certains avec stat ranges
+- **3 races** : Humain, Elfe, Nain — sorts, buffs, dispels, invocations
+- **Sorts** : sorts race + sorts monstres + buffs/debuffs + invocations
+- **10 équipements** : tous slots, armes avec lignes de dégâts
 - **5 effets** : 3 buffs (Rage, Concentration, Agilité) + 2 debuffs (Affaiblissement, Ralentissement)
-- **12 ressources** : 2 premium (Pierre précieuse, Cuir de troll)
+- **11 ressources** : 2 premium (Pierre précieuse, Cuir de troll)
 - **2 panoplies** : avec bonus par palier
 - **6 recettes** de craft
-- **3 régions** : Forêt (niv 1-5), Plaines (niv 1-3), Montagne (niv 5-10)
-- **6 maps** : 3 WILDERNESS + 1 DONJON + 1 SAFE + 1 VILLE (avec positions monde worldX/worldY)
-- **11 monstres** : 6 normaux (Gobelin, Loup, Bandit, Araignée, Squelette, Troll) + 5 invocations
-- **6 groupes ennemis** : 2 par map WILDERNESS, composition mixte
-- **8 grilles** : 15×10, 16 spawns, 4-6 obstacles centraux
+- **3 régions** : Forêt Vertbois (niv 1-5), Plaines du Sud (niv 1-3)
+- **6 maps** : id=1 Orée forêt, id=2 Sentier forestier, id=4 Route commerciale, id=5 Village de Piedmont, id=6-9 salles donjon Grotte (⚠️ map id=3 supprimée — les IDs ne se décalent pas)
+- **11 monstres** : 6 normaux (Gobelin id=1, Loup id=2, Bandit, ...) + 5 invocations
+- **6 groupes ennemis** : 2 par map WILDERNESS
+- **1 donjon** : Grotte aux Gobelins (4 salles)
+- **2 PNJ** : id=1 Chef du village (map 5, pos 7/9, estMarchand=true), id=2 Garde du village (map 5, pos 3/9, estMarchand=false)
+- **2 quêtes** :
+  - id=1 "La menace des loups" (4 étapes : PARLER_PNJ→TUER_MONSTRE→PARLER_PNJ→PARLER_PNJ, 200 XP + 50 or)
+  - id=3 "Ravitaillement du village" (4 étapes : PARLER_PNJ→APPORTER_RESSOURCE(3×Cuir, Garde)→APPORTER_EQUIPEMENT(1×Bouclier en bois, Chef)→PARLER_PNJ, 100 XP + 30 or) — **prérequis : quête id=1 TERMINEE** — **⚠️ id=2 laissé libre (quête créée manuellement)**
+- **3 compétences passives** : Perspicacité (PO+1, niv 25), Endurance (PM+1, niv 50), Maestria (PA+1, niv 100)
 
-Détails complets : voir `prisma/seed.ts` et `docs/API_DOCUMENTATION.md`
+Détails complets : voir `prisma/seed.ts`
 
 ## Variables d'environnement
 
@@ -480,6 +591,9 @@ PORT=3000
 - `prisma db push` au lieu de `migrate dev` en CLI non-interactif
 - Polling frontend recommandé : 500ms-1000ms (pas de WebSocket, MVP REST)
 - Pas d'authentification (MVP)
-- Upsert pattern dans seed.ts pour idempotence
+- Upsert pattern dans seed.ts pour idempotence — inclure les champs à normaliser dans `update` (pas seulement `create`)
 - CORS activé (`cors()` middleware dans app.ts)
 - Frontend sur port 5173 (Vite), backend sur port 3000
+- `GET /api/maps/portals` DOIT être avant `GET /api/maps/:id` dans map.routes.ts
+- Frontend TypeScript : compiler avec `node_modules/.bin/tsc --noEmit --project tsconfig.app.json` (depuis le backend, avec le chemin absolu vers le frontend)
+- `ConfirmDialog` frontend requiert la prop `open: boolean` (pas de rendu conditionnel externe)

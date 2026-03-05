@@ -248,6 +248,8 @@ model Equipement {
   recettes          Recette[]
   drops             MonstreDrop[]
   marchandLignes    MarchandLigne[]
+  queteRecompenses  QueteRecompense[]
+  queteEtapes       QueteEtape[]          @relation("QueteEtapeEquipement")
 }
 
 model Effet {
@@ -385,6 +387,7 @@ model MonstreTemplate {
   invocationSorts   Sort[]                   @relation("InvocationSort")
   drops             MonstreDrop[]
   salleCompositions DonjonSalleComposition[]
+  queteEtapes       QueteEtape[]
 }
 
 model RegionMonstre {
@@ -470,6 +473,7 @@ model Personnage {
   sortsAppris            PersonnageSort[]
   inventaireItems        InventaireItem[]
   inventaireRessources   InventaireRessource[]
+  quetes                 QuetePersonnage[]
 }
 
 model PersonnageSort {
@@ -708,10 +712,12 @@ model Ressource {
   description String?
   poids       Int                   @default(1)
   estPremium  Boolean               @default(false)
-  inventaires    InventaireRessource[]
-  drops          MonstreDrop[]
-  ingredients    RecetteIngredient[]
-  marchandLignes MarchandLigne[]
+  inventaires      InventaireRessource[]
+  drops            MonstreDrop[]
+  ingredients      RecetteIngredient[]
+  marchandLignes   MarchandLigne[]
+  queteRecompenses QueteRecompense[]
+  queteEtapes      QueteEtape[]          @relation("QueteEtapeRessource")
 }
 
 model InventaireRessource {
@@ -801,6 +807,8 @@ model PNJ {
   positionY   Int
   estMarchand Boolean         @default(true)
   lignes      MarchandLigne[]
+  quetesDepart Quete[]         @relation("QuetePnjDepart")
+  quetesEtapes QueteEtape[]   @relation("QueteEtapePnj")
 }
 
 model MarchandLigne {
@@ -813,6 +821,89 @@ model MarchandLigne {
   ressource    Ressource?  @relation(fields: [ressourceId], references: [id])
   prixMarchand Int?
   prixRachat   Int?
+}
+
+// ==================== QUÊTES ====================
+
+enum QueteEtapeType {
+  PARLER_PNJ
+  TUER_MONSTRE
+  APPORTER_RESSOURCE
+  APPORTER_EQUIPEMENT
+}
+
+enum QueteStatut {
+  EN_COURS
+  TERMINEE
+}
+
+model Quete {
+  id           Int               @id @default(autoincrement())
+  nom          String
+  description  String?
+  niveauRequis Int               @default(1)
+  pnjDepartId  Int?
+  pnjDepart    PNJ?              @relation("QuetePnjDepart", fields: [pnjDepartId], references: [id])
+  etapes       QueteEtape[]
+  recompenses  QueteRecompense[]
+  personnages  QuetePersonnage[]
+  prerequis    QueteRequis[]     @relation("QuetePrincipale")
+  estPrerequis QueteRequis[]     @relation("QuetePrerequisite")
+}
+
+model QueteRequis {
+  queteId     Int
+  quete       Quete @relation("QuetePrincipale",   fields: [queteId],     references: [id], onDelete: Cascade)
+  prerequisId Int
+  prerequis   Quete @relation("QuetePrerequisite", fields: [prerequisId], references: [id])
+
+  @@id([queteId, prerequisId])
+}
+
+model QueteEtape {
+  id                Int              @id @default(autoincrement())
+  queteId           Int
+  quete             Quete            @relation(fields: [queteId], references: [id], onDelete: Cascade)
+  ordre             Int
+  description       String
+  type              QueteEtapeType
+  pnjId             Int?
+  pnj               PNJ?            @relation("QueteEtapePnj", fields: [pnjId], references: [id])
+  monstreTemplateId Int?
+  monstreTemplate   MonstreTemplate? @relation(fields: [monstreTemplateId], references: [id])
+  quantite          Int?
+  ressourceId       Int?
+  ressource         Ressource?       @relation("QueteEtapeRessource", fields: [ressourceId], references: [id])
+  equipementId      Int?
+  equipement        Equipement?      @relation("QueteEtapeEquipement", fields: [equipementId], references: [id])
+
+  @@unique([queteId, ordre])
+}
+
+model QueteRecompense {
+  id                Int         @id @default(autoincrement())
+  queteId           Int
+  quete             Quete       @relation(fields: [queteId], references: [id], onDelete: Cascade)
+  xp                Int         @default(0)
+  or                Int         @default(0)
+  ressourceId       Int?
+  ressource         Ressource?  @relation(fields: [ressourceId], references: [id])
+  quantiteRessource Int?
+  equipementId      Int?
+  equipement        Equipement? @relation(fields: [equipementId], references: [id])
+}
+
+model QuetePersonnage {
+  id            Int         @id @default(autoincrement())
+  queteId       Int
+  quete         Quete       @relation(fields: [queteId], references: [id])
+  personnageId  Int
+  personnage    Personnage  @relation(fields: [personnageId], references: [id])
+  statut        QueteStatut @default(EN_COURS)
+  etapeActuelle Int         @default(1)
+  compteurEtape Int         @default(0)
+
+  @@unique([queteId, personnageId])
 }
 
 // ==================== COMPÉTENCES PASSIVES ====================
