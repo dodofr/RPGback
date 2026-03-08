@@ -5,6 +5,19 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding database...');
 
+  // ==================== RESET GROUPES JOUEURS & POSITIONS PERSONNAGES ====================
+  // Depuis la migration "Position par Personnage" :
+  //   - Groupe n'a plus positionX/Y/mapId — il a leaderId
+  //   - Chaque Personnage a sa propre position (mapId, positionX, positionY)
+  // On remet tout à zéro pour garder un état propre entre seeds.
+  await prisma.donjonRun.deleteMany({});           // références FK vers Groupe (RESTRICT)
+  await prisma.groupePersonnage.deleteMany({});    // membres des groupes
+  await prisma.groupe.deleteMany({});              // groupes joueurs
+  await prisma.personnage.updateMany({            // reset positions
+    data: { mapId: null, positionX: 0, positionY: 0 },
+  });
+  console.log('Reset player groups and character positions');
+
   // ==================== RACES (3) ====================
   const humain = await prisma.race.upsert({
     where: { nom: 'Humain' },
@@ -815,20 +828,20 @@ async function main() {
   // (Map 3 supprimée, Clairière supprimée, doublons >= 10 nettoyés)
 
   const oreeForet = await prisma.map.upsert({
-    where: { id: 1 }, update: { worldX: 2, worldY: 1, largeur: 16, hauteur: 18 },
+    where: { id: 1 }, update: { worldX: 2, worldY: 1, largeur: 20, hauteur: 14 },
     create: {
       nom: 'Orée de la forêt', regionId: foretVertbois.id,
       type: MapType.WILDERNESS, combatMode: CombatMode.MANUEL,
-      largeur: 16, hauteur: 18, worldX: 2, worldY: 1,
+      largeur: 20, hauteur: 14, worldX: 2, worldY: 1,
     },
   });
 
   const sentierForestier = await prisma.map.upsert({
-    where: { id: 2 }, update: { worldX: 3, worldY: 1, largeur: 16, hauteur: 18 },
+    where: { id: 2 }, update: { worldX: 3, worldY: 1, largeur: 20, hauteur: 14 },
     create: {
       nom: 'Sentier forestier', regionId: foretVertbois.id,
       type: MapType.WILDERNESS, combatMode: CombatMode.MANUEL,
-      largeur: 16, hauteur: 18, worldX: 3, worldY: 1,
+      largeur: 20, hauteur: 14, worldX: 3, worldY: 1,
     },
   });
 
@@ -844,58 +857,58 @@ async function main() {
 
   // id=4 : Route commerciale (worldX=1, worldY=1)
   const routeCommerciale = await prisma.map.upsert({
-    where: { id: 4 }, update: { worldX: 1, worldY: 1, largeur: 16, hauteur: 18 },
+    where: { id: 4 }, update: { worldX: 1, worldY: 1, largeur: 20, hauteur: 14 },
     create: {
       nom: 'Route commerciale', regionId: plainesDuSud.id,
       type: MapType.WILDERNESS, combatMode: CombatMode.MANUEL,
-      largeur: 16, hauteur: 18, worldX: 1, worldY: 1,
+      largeur: 20, hauteur: 14, worldX: 1, worldY: 1,
     },
   });
 
   // id=5 : Village de Piedmont (worldX=0, worldY=1)
   const villageDepart = await prisma.map.upsert({
-    where: { id: 5 }, update: { worldX: 0, worldY: 1 },
+    where: { id: 5 }, update: { worldX: 0, worldY: 1, largeur: 20, hauteur: 14 },
     create: {
       nom: 'Village de Piedmont', regionId: plainesDuSud.id,
       type: MapType.VILLE, combatMode: CombatMode.MANUEL,
-      largeur: 20, hauteur: 20, worldX: 0, worldY: 1,
+      largeur: 20, hauteur: 14, worldX: 0, worldY: 1,
     },
   });
 
   // Salles de donjon (ids 6-9) — pas de worldX/Y, pas de liens directionnels
   const donjonSalle1 = await prisma.map.upsert({
-    where: { id: 6 }, update: { largeur: 16, hauteur: 18, worldX: null, worldY: null },
+    where: { id: 6 }, update: { largeur: 20, hauteur: 14, worldX: null, worldY: null },
     create: {
       nom: 'Grotte - Entrée', regionId: foretVertbois.id,
       type: MapType.DONJON, combatMode: CombatMode.AUTO,
-      largeur: 16, hauteur: 18,
+      largeur: 20, hauteur: 14,
     },
   });
 
   const donjonSalle2 = await prisma.map.upsert({
-    where: { id: 7 }, update: { largeur: 16, hauteur: 18 },
+    where: { id: 7 }, update: { largeur: 20, hauteur: 14 },
     create: {
       nom: 'Grotte - Passage étroit', regionId: foretVertbois.id,
       type: MapType.DONJON, combatMode: CombatMode.AUTO,
-      largeur: 16, hauteur: 18,
+      largeur: 20, hauteur: 14,
     },
   });
 
   const donjonSalle3 = await prisma.map.upsert({
-    where: { id: 8 }, update: { largeur: 16, hauteur: 18 },
+    where: { id: 8 }, update: { largeur: 20, hauteur: 14 },
     create: {
       nom: 'Grotte - Salle des créatures', regionId: foretVertbois.id,
       type: MapType.DONJON, combatMode: CombatMode.AUTO,
-      largeur: 16, hauteur: 18,
+      largeur: 20, hauteur: 14,
     },
   });
 
   const donjonSalle4 = await prisma.map.upsert({
-    where: { id: 9 }, update: { largeur: 16, hauteur: 18 },
+    where: { id: 9 }, update: { largeur: 20, hauteur: 14 },
     create: {
       nom: 'Grotte - Antre du Troll', regionId: foretVertbois.id,
       type: MapType.BOSS, combatMode: CombatMode.AUTO,
-      largeur: 16, hauteur: 18,
+      largeur: 20, hauteur: 14,
     },
   });
 
@@ -906,11 +919,11 @@ async function main() {
   await prisma.mapConnection.deleteMany({ where: { id: { in: [10, 11] } } });
 
   // Portails portés explicites (complètent les liens directionnels)
-  await prisma.mapConnection.upsert({ where: { id: 1 }, update: { positionX: 14 }, create: { fromMapId: oreeForet.id, toMapId: sentierForestier.id, positionX: 14, positionY: 7, nom: 'Vers le sentier forestier' } });
+  await prisma.mapConnection.upsert({ where: { id: 1 }, update: { positionX: 18 }, create: { fromMapId: oreeForet.id, toMapId: sentierForestier.id, positionX: 18, positionY: 7, nom: 'Vers le sentier forestier' } });
   await prisma.mapConnection.upsert({ where: { id: 2 }, update: {}, create: { fromMapId: sentierForestier.id, toMapId: oreeForet.id, positionX: 0, positionY: 6, nom: "Retour à l'orée" } });
-  await prisma.mapConnection.upsert({ where: { id: 5 }, update: { positionX: 14 }, create: { fromMapId: villageDepart.id, toMapId: routeCommerciale.id, positionX: 14, positionY: 10, nom: 'Sortie du village (Est)' } });
+  await prisma.mapConnection.upsert({ where: { id: 5 }, update: { positionX: 18 }, create: { fromMapId: villageDepart.id, toMapId: routeCommerciale.id, positionX: 18, positionY: 7, nom: 'Sortie du village (Est)' } });
   await prisma.mapConnection.upsert({ where: { id: 6 }, update: {}, create: { fromMapId: routeCommerciale.id, toMapId: villageDepart.id, positionX: 0, positionY: 5, nom: 'Vers le village' } });
-  await prisma.mapConnection.upsert({ where: { id: 7 }, update: { positionX: 14 }, create: { fromMapId: routeCommerciale.id, toMapId: oreeForet.id, positionX: 14, positionY: 5, nom: 'Vers la Forêt de Vertbois' } });
+  await prisma.mapConnection.upsert({ where: { id: 7 }, update: { positionX: 18 }, create: { fromMapId: routeCommerciale.id, toMapId: oreeForet.id, positionX: 18, positionY: 5, nom: 'Vers la Forêt de Vertbois' } });
   await prisma.mapConnection.upsert({ where: { id: 8 }, update: {}, create: { fromMapId: oreeForet.id, toMapId: routeCommerciale.id, positionX: 0, positionY: 7, nom: 'Vers les Plaines du Sud' } });
 
   console.log('Upserted 6 map connections');
@@ -1063,13 +1076,13 @@ async function main() {
   console.log('Created 24 dungeon salle compositions');
 
   // ==================== MAP SPAWNS & CASES (grilles de combat intégrées aux maps) ====================
-  // Toutes les maps de combat font 16×18 (défaut)
-  // Spawns standard : joueurs côté gauche (x=1), ennemis côté droit (x=12)
+  // Toutes les maps de combat font 20×14 (largeur×hauteur)
+  // Spawns standard : joueurs côté gauche (x=1), ennemis côté droit (x=18)
   function standardMapSpawns() {
     const spawns: { x: number; y: number; equipe: number; ordre: number }[] = [];
-    const ys = [2, 4, 6, 8, 10, 12, 14, 16];
+    const ys = [1, 3, 5, 7, 9, 11, 13]; // 7 positions, max y=13 (hauteur=14)
     ys.forEach((y, i) => spawns.push({ x: 1, y, equipe: 0, ordre: i + 1 }));
-    ys.forEach((y, i) => spawns.push({ x: 14, y, equipe: 1, ordre: i + 1 }));
+    ys.forEach((y, i) => spawns.push({ x: 18, y, equipe: 1, ordre: i + 1 }));
     return spawns;
   }
 
@@ -1094,7 +1107,7 @@ async function main() {
     { mapId: sentierForestier.id, x: 9, y: 6, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false },
     { mapId: sentierForestier.id, x: 9, y: 12, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false },
     { mapId: sentierForestier.id, x: 7, y: 3, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
-    { mapId: sentierForestier.id, x: 7, y: 15, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
+    { mapId: sentierForestier.id, x: 7, y: 13, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
   ]});
 
   // Route commerciale — obstacles légers
@@ -1127,7 +1140,7 @@ async function main() {
     { mapId: donjonSalle2.id, x: 3, y: 6, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false },
     { mapId: donjonSalle2.id, x: 3, y: 12, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false },
     { mapId: donjonSalle2.id, x: 7, y: 4, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
-    { mapId: donjonSalle2.id, x: 7, y: 14, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
+    { mapId: donjonSalle2.id, x: 7, y: 12, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
     { mapId: donjonSalle2.id, x: 11, y: 6, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false },
     { mapId: donjonSalle2.id, x: 11, y: 12, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false },
   ]});
@@ -1138,11 +1151,11 @@ async function main() {
   await prisma.mapCase.deleteMany({ where: { mapId: donjonSalle3.id } });
   await prisma.mapCase.createMany({ data: [
     { mapId: donjonSalle3.id, x: 5, y: 4, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
-    { mapId: donjonSalle3.id, x: 5, y: 14, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
+    { mapId: donjonSalle3.id, x: 5, y: 13, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
     { mapId: donjonSalle3.id, x: 7, y: 8, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false },
     { mapId: donjonSalle3.id, x: 7, y: 10, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false },
     { mapId: donjonSalle3.id, x: 9, y: 4, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
-    { mapId: donjonSalle3.id, x: 9, y: 14, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
+    { mapId: donjonSalle3.id, x: 9, y: 13, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
   ]});
 
   // Donjon salle 4 — antre du Troll (boss)
@@ -1151,9 +1164,9 @@ async function main() {
   await prisma.mapCase.deleteMany({ where: { mapId: donjonSalle4.id } });
   await prisma.mapCase.createMany({ data: [
     { mapId: donjonSalle4.id, x: 4, y: 3, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
-    { mapId: donjonSalle4.id, x: 4, y: 15, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
+    { mapId: donjonSalle4.id, x: 4, y: 13, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
     { mapId: donjonSalle4.id, x: 10, y: 3, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
-    { mapId: donjonSalle4.id, x: 10, y: 15, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
+    { mapId: donjonSalle4.id, x: 10, y: 13, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false },
     { mapId: donjonSalle4.id, x: 7, y: 7, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false },
     { mapId: donjonSalle4.id, x: 7, y: 11, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false },
   ]});
@@ -1443,6 +1456,13 @@ async function main() {
 
   console.log('Created 2 PNJs');
 
+  // ==================== DIALOGUES PNJ (génériques) ====================
+  await prisma.pNJDialogue.upsert({ where: { id: 1 }, update: { texte: "Bienvenue à Piedmont, aventurier ! J'ai quelques missions pour vous.", queteId: null, etapeOrdre: null }, create: { id: 1, pnjId: chefVillage.id, type: 'ACCUEIL', texte: "Bienvenue à Piedmont, aventurier ! J'ai quelques missions pour vous.", ordre: 0 } });
+  await prisma.pNJDialogue.upsert({ where: { id: 2 }, update: { texte: "Tout est calme pour l'instant... Revenez quand vous aurez progressé.", queteId: null, etapeOrdre: null }, create: { id: 2, pnjId: chefVillage.id, type: 'SANS_INTERACTION', texte: "Tout est calme pour l'instant... Revenez quand vous aurez progressé.", ordre: 0 } });
+  await prisma.pNJDialogue.upsert({ where: { id: 3 }, update: { texte: "Halte ! Je surveille les environs. Parlez, que voulez-vous ?", queteId: null, etapeOrdre: null }, create: { id: 3, pnjId: gardeVillage.id, type: 'ACCUEIL', texte: "Halte ! Je surveille les environs. Parlez, que voulez-vous ?", ordre: 0 } });
+  await prisma.pNJDialogue.upsert({ where: { id: 4 }, update: { texte: "Je n'ai rien à vous dire pour l'instant. Continuez votre chemin.", queteId: null, etapeOrdre: null }, create: { id: 4, pnjId: gardeVillage.id, type: 'SANS_INTERACTION', texte: "Je n'ai rien à vous dire pour l'instant. Continuez votre chemin.", ordre: 0 } });
+  console.log('Created PNJ dialogues (generiques)');
+
   // ==================== QUÊTES ====================
 
   // Quête 1 : La menace des loups (PARLER_PNJ + TUER_MONSTRE)
@@ -1458,6 +1478,15 @@ async function main() {
   await prisma.queteRecompense.upsert({ where: { id: 1 }, update: {}, create: { queteId: queteMenaceLoup.id, xp: 200, or: 50 } });
 
   console.log('Created quest "La menace des loups"');
+
+  // ==================== DIALOGUES PNJ (liés aux étapes de quêtes) ====================
+  // Garde — étape 1 : briefing initial
+  await prisma.pNJDialogue.upsert({ where: { id: 5 }, update: { texte: "Des loups ont attaqué deux convois cette semaine. Il faut en éliminer quatre avant qu'ils fassent d'autres victimes !", queteId: queteMenaceLoup.id, etapeOrdre: 1 }, create: { id: 5, pnjId: gardeVillage.id, type: 'ACCUEIL', texte: "Des loups ont attaqué deux convois cette semaine. Il faut en éliminer quatre avant qu'ils fassent d'autres victimes !", ordre: 0, queteId: queteMenaceLoup.id, etapeOrdre: 1 } });
+  // Garde — étape 3 : retour après les kills
+  await prisma.pNJDialogue.upsert({ where: { id: 6 }, update: { texte: "Déjà de retour ? Tu as l'air d'un vrai chasseur. Dis-moi que tu as réglé le problème.", queteId: queteMenaceLoup.id, etapeOrdre: 3 }, create: { id: 6, pnjId: gardeVillage.id, type: 'ACCUEIL', texte: "Déjà de retour ? Tu as l'air d'un vrai chasseur. Dis-moi que tu as réglé le problème.", ordre: 0, queteId: queteMenaceLoup.id, etapeOrdre: 3 } });
+  // Chef — étape 4 : récompense finale
+  await prisma.pNJDialogue.upsert({ where: { id: 7 }, update: { texte: "Le garde m'a tout rapporté. Grâce à toi, les routes sont sûres. Tu mérites bien cette récompense.", queteId: queteMenaceLoup.id, etapeOrdre: 4 }, create: { id: 7, pnjId: chefVillage.id, type: 'ACCUEIL', texte: "Le garde m'a tout rapporté. Grâce à toi, les routes sont sûres. Tu mérites bien cette récompense.", ordre: 0, queteId: queteMenaceLoup.id, etapeOrdre: 4 } });
+  console.log('Created PNJ dialogues (quete-specific)');
 
   // Quête 3 : Ravitaillement du village (démo APPORTER_RESSOURCE + APPORTER_EQUIPEMENT)
   // id=3 pour laisser id=2 libre (quête créée manuellement via l'admin)
@@ -1483,6 +1512,19 @@ async function main() {
   });
 
   console.log('Created quest prerequisites');
+
+  // Reset auto-increment sequences for tables with hardcoded IDs in seed
+  const tablesToReset = [
+    '"Effet"', '"MapConnection"', '"PNJDialogue"',
+    '"MonstreSort"', '"MonstreDrop"', '"DonjonSalle"',
+    '"DonjonSalleComposition"', '"GroupeEnnemiMembre"', '"QueteRecompense"',
+  ];
+  for (const table of tablesToReset) {
+    await prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('${table}', 'id'), COALESCE((SELECT MAX(id) FROM ${table}), 0) + 1, false)`
+    );
+  }
+  console.log('Reset sequences for hardcoded-ID tables');
 
   console.log('Seeding completed!');
 }

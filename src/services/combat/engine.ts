@@ -284,6 +284,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
     tourActuel: combat.tourActuel,
     entiteActuelle: combat.entiteActuelleId ?? 0,
     groupeId: combat.groupeId,
+    personnageId: combat.personnageId,
     grille: {
       largeur: combat.grilleLargeur,
       hauteur: combat.grilleHauteur,

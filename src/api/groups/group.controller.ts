@@ -6,6 +6,7 @@ import { Direction } from '../../types';
 const createGroupSchema = z.object({
   nom: z.string().min(2).max(50),
   joueurId: z.number().int().positive(),
+  leaderId: z.number().int().positive(),
 });
 
 const addCharacterSchema = z.object({
@@ -45,6 +46,20 @@ export class GroupController {
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Validation error', details: error.errors });
         return;
+      }
+      if (error instanceof Error) {
+        if (error.message === 'Leader character not found') {
+          res.status(404).json({ error: error.message });
+          return;
+        }
+        if (
+          error.message === 'Leader does not belong to this player' ||
+          error.message === 'Leader must be on a map to create a group' ||
+          error.message === 'Leader is already in a group'
+        ) {
+          res.status(400).json({ error: error.message });
+          return;
+        }
       }
       next(error);
     }
@@ -106,6 +121,8 @@ export class GroupController {
         if (
           error.message === 'Character does not belong to this player' ||
           error.message === 'Character already in group' ||
+          error.message === 'Character is already in a group' ||
+          error.message === 'Character must be on the same map as the group leader' ||
           error.message === 'Group is full (max 6 characters)'
         ) {
           res.status(400).json({ error: error.message });
@@ -302,6 +319,10 @@ export class GroupController {
       await groupService.delete(id);
       res.status(204).send();
     } catch (error) {
+      if (error instanceof Error && error.message === 'Cannot delete group during active dungeon run') {
+        res.status(400).json({ error: error.message });
+        return;
+      }
       next(error);
     }
   }

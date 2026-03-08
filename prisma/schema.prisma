@@ -336,7 +336,7 @@ model Map {
   groupesEnnemis  GroupeEnnemi[]
   connectionsFrom MapConnection[] @relation("FromMap")
   connectionsTo   MapConnection[] @relation("ToMap")
-  groupes         Groupe[]
+  personnages     Personnage[]    @relation("PersonnageMap")
   donjonSalles    DonjonSalle[]
   cases           MapCase[]
   spawns          MapSpawn[]
@@ -468,12 +468,19 @@ model Personnage {
   joueur                 Joueur             @relation(fields: [joueurId], references: [id])
   raceId                 Int
   race                   Race               @relation(fields: [raceId], references: [id])
+  mapId                  Int?
+  positionX              Int                @default(0)
+  positionY              Int                @default(0)
+  map                    Map?               @relation("PersonnageMap", fields: [mapId], references: [id])
   groupes                GroupePersonnage[]
+  groupesLeader          Groupe[]           @relation("GroupeLeader")
   equipements            Json               @default("{}")
   sortsAppris            PersonnageSort[]
   inventaireItems        InventaireItem[]
   inventaireRessources   InventaireRessource[]
   quetes                 QuetePersonnage[]
+  combatsSolo            Combat[]           @relation("CombatSolo")
+  donjonRunSolo          DonjonRun?         @relation("DonjonRunSolo")
 }
 
 model PersonnageSort {
@@ -489,12 +496,10 @@ model PersonnageSort {
 model Groupe {
   id          Int                @id @default(autoincrement())
   nom         String
-  positionX   Int                @default(0)
-  positionY   Int                @default(0)
-  mapId       Int?
-  map         Map?               @relation(fields: [mapId], references: [id])
   joueurId    Int
   joueur      Joueur             @relation(fields: [joueurId], references: [id])
+  leaderId    Int?
+  leader      Personnage?        @relation("GroupeLeader", fields: [leaderId], references: [id])
   personnages GroupePersonnage[]
   donjonRun   DonjonRun?
 }
@@ -516,6 +521,8 @@ model Combat {
   grilleLargeur    Int
   grilleHauteur    Int
   groupeId         Int?
+  personnageId     Int?
+  personnage       Personnage?       @relation("CombatSolo", fields: [personnageId], references: [id])
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   entites          CombatEntite[]
@@ -797,6 +804,11 @@ model PanoplieBonus {
 
 // ==================== PNJ MARCHANDS ====================
 
+enum DialogueType {
+  ACCUEIL
+  SANS_INTERACTION
+}
+
 model PNJ {
   id          Int             @id @default(autoincrement())
   nom         String
@@ -807,8 +819,23 @@ model PNJ {
   positionY   Int
   estMarchand Boolean         @default(true)
   lignes      MarchandLigne[]
+  dialogues   PNJDialogue[]
   quetesDepart Quete[]         @relation("QuetePnjDepart")
   quetesEtapes QueteEtape[]   @relation("QueteEtapePnj")
+}
+
+model PNJDialogue {
+  id         Int          @id @default(autoincrement())
+  pnjId      Int
+  pnj        PNJ          @relation(fields: [pnjId], references: [id], onDelete: Cascade)
+  type       DialogueType
+  texte      String
+  ordre      Int          @default(0)
+  queteId    Int?
+  quete      Quete?       @relation(fields: [queteId], references: [id], onDelete: SetNull)
+  etapeOrdre Int?
+
+  @@index([pnjId])
 }
 
 model MarchandLigne {
@@ -849,6 +876,7 @@ model Quete {
   personnages  QuetePersonnage[]
   prerequis    QueteRequis[]     @relation("QuetePrincipale")
   estPrerequis QueteRequis[]     @relation("QuetePrerequisite")
+  pnjDialogues PNJDialogue[]
 }
 
 model QueteRequis {
@@ -971,19 +999,22 @@ model DonjonSalleComposition {
 }
 
 model DonjonRun {
-  id             Int       @id @default(autoincrement())
+  id             Int        @id @default(autoincrement())
   donjonId       Int
-  donjon         Donjon    @relation(fields: [donjonId], references: [id])
-  groupeId       Int       @unique  // Un seul run actif par groupe
-  groupe         Groupe    @relation(fields: [groupeId], references: [id])
-  salleActuelle  Int       @default(1)  // 1-4
-  difficulte     Int       // 4, 6 ou 8 ennemis par salle
-  termine        Boolean   @default(false)
-  victoire       Boolean?  // null = en cours, true = gagné, false = perdu
-  combatActuel   Int?      // ID du combat en cours (null si aucun)
-  mapOrigineId   Int?      // Map d'où le joueur vient (pour y retourner)
-  monstresCaches Json?     // Monstres pré-calculés avec boss boost pour la salle courante
-  createdAt      DateTime  @default(now())
+  donjon         Donjon     @relation(fields: [donjonId], references: [id])
+  groupeId       Int?       @unique  // Un seul run actif par groupe (null si solo)
+  groupe         Groupe?    @relation(fields: [groupeId], references: [id])
+  personnageId   Int?       @unique  // Un seul run actif par personnage solo (null si groupe)
+  personnage     Personnage? @relation("DonjonRunSolo", fields: [personnageId], references: [id])
+  salleActuelle  Int        @default(1)  // 1-4
+  difficulte     Int        // 4, 6 ou 8 ennemis par salle
+  termine        Boolean    @default(false)
+  victoire       Boolean?   // null = en cours, true = gagné, false = perdu
+  combatActuel   Int?       // ID du combat en cours (null si aucun)
+  mapOrigineId   Int?       // Map d'où le joueur vient (pour y retourner)
+  monstresCaches Json?      // Monstres pré-calculés avec boss boost pour la salle courante
+  createdAt      DateTime   @default(now())
 
   @@index([groupeId])
+  @@index([personnageId])
 }

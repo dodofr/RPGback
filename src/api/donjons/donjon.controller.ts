@@ -4,10 +4,13 @@ import { donjonService } from '../../services/donjon.service';
 
 // Validation schemas
 const enterDungeonSchema = z.object({
-  groupeId: z.number().int().positive(),
+  groupeId: z.number().int().positive().optional(),
+  personnageId: z.number().int().positive().optional(),
   difficulte: z.number().int().refine(val => [4, 6, 8].includes(val), {
     message: 'Difficulty must be 4, 6, or 8',
   }),
+}).refine(d => d.groupeId !== undefined || d.personnageId !== undefined, {
+  message: 'groupeId or personnageId is required',
 });
 
 export class DonjonController {
@@ -138,7 +141,10 @@ export class DonjonController {
       }
 
       const data = enterDungeonSchema.parse(req.body);
-      const result = await donjonService.enterDungeon(donjonId, data.groupeId, data.difficulte);
+      const actor = data.groupeId !== undefined
+        ? { groupeId: data.groupeId }
+        : { personnageId: data.personnageId! };
+      const result = await donjonService.enterDungeon(donjonId, actor, data.difficulte);
       res.status(201).json(result);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -146,7 +152,7 @@ export class DonjonController {
         return;
       }
       if (error instanceof Error) {
-        const notFoundErrors = ['Group not found', 'Dungeon not found', 'First room not found'];
+        const notFoundErrors = ['Group not found', 'Character not found', 'Dungeon not found', 'First room not found'];
         if (notFoundErrors.some(msg => error.message.includes(msg))) {
           res.status(404).json({ error: error.message });
           return;
@@ -155,6 +161,7 @@ export class DonjonController {
           'Difficulty must be',
           'Group has no characters',
           'Group already has an active dungeon run',
+          'Character already has an active dungeon run',
           'Dungeon is not properly configured',
         ];
         if (badRequestErrors.some(msg => error.message.includes(msg))) {
@@ -176,13 +183,29 @@ export class DonjonController {
         res.status(400).json({ error: 'Invalid group ID' });
         return;
       }
-
-      const state = await donjonService.getDungeonState(groupeId);
+      const state = await donjonService.getDungeonState({ groupeId });
       if (!state) {
         res.status(404).json({ error: 'No active dungeon run found for this group' });
         return;
       }
+      res.json(state);
+    } catch (error) {
+      next(error);
+    }
+  }
 
+  async getDungeonStateSolo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const personnageId = parseInt(req.params.charId, 10);
+      if (isNaN(personnageId)) {
+        res.status(400).json({ error: 'Invalid character ID' });
+        return;
+      }
+      const state = await donjonService.getDungeonState({ personnageId });
+      if (!state) {
+        res.status(404).json({ error: 'No active dungeon run found for this character' });
+        return;
+      }
       res.json(state);
     } catch (error) {
       next(error);
@@ -199,8 +222,25 @@ export class DonjonController {
         res.status(400).json({ error: 'Invalid group ID' });
         return;
       }
+      const result = await donjonService.abandonDungeon({ groupeId });
+      res.json(result);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('No active dungeon run')) {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      next(error);
+    }
+  }
 
-      const result = await donjonService.abandonDungeon(groupeId);
+  async abandonDungeonSolo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const personnageId = parseInt(req.params.charId, 10);
+      if (isNaN(personnageId)) {
+        res.status(400).json({ error: 'Invalid character ID' });
+        return;
+      }
+      const result = await donjonService.abandonDungeon({ personnageId });
       res.json(result);
     } catch (error) {
       if (error instanceof Error && error.message.includes('No active dungeon run')) {

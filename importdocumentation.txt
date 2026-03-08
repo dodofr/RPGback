@@ -32,7 +32,7 @@ Succès (200) :
       "monstres": 2,     "monstreSorts": 2,      "monstreDrops": 3,
       "equipements": 1,  "lignesDegats": 1,
       "recettes": 1,     "recetteIngredients": 1,
-      "pnj": 1,          "marchandLignes": 2,
+      "pnj": 1,          "marchandLignes": 2,    "pnjDialogues": 4,
       "quetes": 1,       "queteEtapes": 3,       "queteRecompenses": 1,  "quetePrerequisites": 1
     }
   }
@@ -392,12 +392,39 @@ par ceux définis dans le pack.
       "prixMarchand": 15,
       "prixRachat":    5
     }
+  ],
+
+  // Dialogues — absent → préservés | [] → suppression | [...] → remplacement
+  // Traités APRÈS les quêtes (STEP 16) pour résoudre les références de quêtes.
+  "dialogues": [
+    {
+      "type":   "ACCUEIL",          // REQUIS — ACCUEIL | SANS_INTERACTION
+      "texte":  "Bienvenue !",      // REQUIS
+      "ordre":  0,                  // défaut: 0 (ordre d'affichage si plusieurs)
+      "quete":  null,               // nom quête → queteId (null = dialogue générique)
+      "etapeOrdre": null            // numéro d'étape concernée (null = toute la quête)
+    },
+    {
+      "type":   "ACCUEIL",
+      "texte":  "Des loups ont attaqué...",
+      "ordre":  0,
+      "quete":  "La menace des loups",  // déclenché si cette quête est EN_COURS
+      "etapeOrdre": 1                   // et que le joueur en est à l'étape 1
+    }
   ]
 }
 
 Idempotence : résolution par nom (findFirst). Si un PNJ avec ce nom
-existe déjà, il est mis à jour (position, map, catalogue).
+existe déjà, il est mis à jour (position, map, catalogue, dialogues).
 Note : un PNJ peut être marchand ET donneur de quête simultanément.
+
+LOGIQUE DE SÉLECTION DES DIALOGUES (côté serveur, interactWithPnj) :
+  Priorité décroissante :
+    1. quete + etapeOrdre exact → dialogue lié à l'étape active du joueur
+    2. quete seul (etapeOrdre null) → dialogue générique pour toute la quête
+    3. type ACCUEIL sans quete → texte d'accueil générique (quête dispo / marchand)
+    4. type SANS_INTERACTION sans quete → texte de repli (rien à faire)
+  Un seul texte est retourné (dialogueTexte dans InteractResponse).
 
 ── QUÊTES ─────────────────────────────────────────────────────────
 
@@ -456,6 +483,8 @@ Note : un PNJ peut être marchand ET donneur de quête simultanément.
 
 QueteEtapeType : PARLER_PNJ | TUER_MONSTRE | APPORTER_RESSOURCE | APPORTER_EQUIPEMENT
 
+DialogueType   : ACCUEIL | SANS_INTERACTION
+
 COMPORTEMENT DES RÉFÉRENCES :
   • pnjDepart / pnj : PNJ en BDD ou créé dans la section "pnj" du même pack
   • monstre : MonstreTemplate en BDD ou section "monstres" du même pack
@@ -465,6 +494,7 @@ IMPORTANT — ordre de résolution dans la transaction :
   • Les PNJ sont traités APRÈS les équipements (marchandLignes résolvables)
   • Les quêtes sont traitées APRÈS les PNJ (pnjDepart/pnj résolvables)
   • Les prérequis sont traités en 2e passe (toutes les quêtes du pack disponibles)
+  • Les dialogues PNJ sont traités en STEP 16, après les quêtes (refs quete par nom)
   • Erreur si une quête tente d'être son propre prérequis
 
 
@@ -494,6 +524,8 @@ IAType       : EQUILIBRE | AGGRESSIF | SOUTIEN | DISTANCE
 
 QueteEtapeType : PARLER_PNJ | TUER_MONSTRE | APPORTER_RESSOURCE | APPORTER_EQUIPEMENT
 
+DialogueType   : ACCUEIL | SANS_INTERACTION
+
 
 ====================================================================
   ORDRE DE TRAITEMENT ET DÉPENDANCES
@@ -519,6 +551,7 @@ Les entités sont traitées dans cet ordre au sein de la transaction :
   14.  PNJ                → résout map + équipements/ressources (marchandLignes)
   15a. Quêtes             → résout PNJ, monstres, ressources, équipements (étapes + récompenses)
   15b. Prérequis quêtes   → 2e passe, toutes les quêtes du pack disponibles
+  16.  PNJ Dialogues      → APRÈS quêtes (refs quete par nom résolues depuis cache)
 
 Règles de résolution des références :
   • Une référence est cherchée d'abord dans le cache du pack (entités
@@ -694,6 +727,24 @@ Règles de résolution des références :
       "marchandLignes": [
         { "equipement": "Épée en bois", "prixMarchand": 120, "prixRachat": 40 },
         { "ressource": "Cuir", "prixMarchand": 15, "prixRachat": 5 }
+      ],
+      "dialogues": [
+        { "type": "ACCUEIL",          "texte": "Besoin d'une arme ? Je suis votre homme.", "ordre": 0 },
+        { "type": "SANS_INTERACTION", "texte": "Je suis occupé, revenez plus tard.", "ordre": 0 }
+      ]
+    },
+    {
+      "nom": "Garde du village",
+      "map": "Village de Piedmont",
+      "positionX": 3, "positionY": 9,
+      "estMarchand": false,
+      "dialogues": [
+        { "type": "ACCUEIL",          "texte": "Halte ! Que puis-je faire pour vous ?", "ordre": 0 },
+        { "type": "SANS_INTERACTION", "texte": "Circulez, il n'y a rien à voir.", "ordre": 0 },
+        { "type": "ACCUEIL", "texte": "Des bandits rôdent à l'est. Élimine-en 3 et reviens me voir.", "ordre": 0,
+          "quete": "La chasse aux bandits", "etapeOrdre": 1 },
+        { "type": "ACCUEIL", "texte": "Bien joué ! Rapporte la nouvelle au chef du village.", "ordre": 0,
+          "quete": "La chasse aux bandits", "etapeOrdre": 3 }
       ]
     }
   ],
@@ -707,13 +758,18 @@ Règles de résolution des références :
       "etapes": [
         { "ordre": 1, "description": "Parle au garde.", "type": "PARLER_PNJ", "pnj": "Garde du village" },
         { "ordre": 2, "description": "Élimine 3 bandits.", "type": "TUER_MONSTRE", "monstre": "Bandit", "quantite": 3 },
-        { "ordre": 3, "description": "Retourne voir le chef.", "type": "PARLER_PNJ", "pnj": "Chef du village" }
+        { "ordre": 3, "description": "Retourne voir le garde.", "type": "PARLER_PNJ", "pnj": "Garde du village" },
+        { "ordre": 4, "description": "Retourne voir le chef.", "type": "PARLER_PNJ", "pnj": "Chef du village" }
       ],
       "recompenses": [{ "xp": 300, "or": 80 }],
       "prerequis": ["La menace des loups"]
     }
   ]
 }
+
+NOTE : les dialogues des PNJ référençant "La chasse aux bandits" sont traités
+en STEP 16, APRÈS la création de la quête en STEP 15a — la résolution fonctionne
+même si PNJ et quêtes sont dans le même pack.
 
 
 ====================================================================

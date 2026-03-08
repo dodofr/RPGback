@@ -108,6 +108,7 @@ export interface CombatState {
   tourActuel: number;
   entiteActuelle: number;
   groupeId: number | null;
+  personnageId: number | null;
   grille: {
     largeur: number;
     hauteur: number;
@@ -347,10 +348,12 @@ export interface CreateCharacterRequest {
 export interface CreateGroupRequest {
   nom: string;
   joueurId: number;
+  leaderId: number;
 }
 
 export interface CreateCombatRequest {
-  groupeId: number;
+  groupeId?: number;
+  personnageId?: number;
   monstres: MonsterDefinition[];
   mapId: number;
 }

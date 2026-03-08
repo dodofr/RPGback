@@ -66,7 +66,10 @@
       "Bash(ls:*)",
       "Bash(cmd:*)",
       "Bash(node_modules/.bin/tsc:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(xargs grep:*)",
+      "Bash(\"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\frontend\\\\node_modules\\\\.bin\\\\tsc\":*)",
+      "Bash(npx:*)"
     ]
   }
 }

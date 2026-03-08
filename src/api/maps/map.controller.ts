@@ -55,7 +55,8 @@ const addConnectionSchema = z.object({
 });
 
 const engageSchema = z.object({
-  groupeId: z.number().int().positive(),
+  groupeId: z.number().int().positive().optional(),
+  personnageId: z.number().int().positive().optional(),
   groupeEnnemiId: z.number().int().positive(),
 });
 
@@ -254,7 +255,7 @@ export class MapController {
         return;
       }
 
-      const combat = await mapService.engageEnemyGroup(mapId, data.groupeEnnemiId, data.groupeId);
+      const combat = await mapService.engageEnemyGroup(mapId, data.groupeEnnemiId, data.groupeId, data.personnageId);
 
       res.status(201).json(combat);
     } catch (error) {
@@ -263,12 +264,12 @@ export class MapController {
         return;
       }
       if (error instanceof Error) {
-        const notFoundErrors = ['Map not found', 'Enemy group not found on this map', 'Group not found'];
+        const notFoundErrors = ['Map not found', 'Enemy group not found on this map', 'Group not found', 'Character not found'];
         if (notFoundErrors.includes(error.message)) {
           res.status(404).json({ error: error.message });
           return;
         }
-        const badRequestErrors = ['Enemy group already defeated'];
+        const badRequestErrors = ['Enemy group already defeated', 'Either groupeId or personnageId is required'];
         if (badRequestErrors.includes(error.message)) {
           res.status(400).json({ error: error.message });
           return;

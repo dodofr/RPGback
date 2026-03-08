@@ -2,12 +2,91 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { pnjService } from '../../services/pnj.service';
 import { questService } from '../../services/quest.service';
+import { QueteEtapeType, QueteStatut } from '@prisma/client';
+import prisma from '../../config/database';
 
 const router = Router();
 
 // ============================================================
 // Admin CRUD
 // ============================================================
+
+// GET /api/pnj/map-status?mapId=X&personnageIds=1,2,3
+// MUST be before GET /:id
+router.get('/map-status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({
+      mapId: z.string().transform(v => parseInt(v, 10)),
+      personnageIds: z.string().transform(s => s.split(',').map(Number)),
+    });
+    const { mapId, personnageIds } = schema.parse(req.query);
+    if (isNaN(mapId) || personnageIds.some(isNaN)) {
+      res.status(400).json({ error: 'Invalid parameters' }); return;
+    }
+
+    const [pnjs, personnages, allQP] = await Promise.all([
+      prisma.pNJ.findMany({
+        where: { mapId },
+        select: {
+          id: true,
+          quetesDepart: {
+            select: { id: true, niveauRequis: true, prerequis: { select: { prerequisId: true } } },
+          },
+          quetesEtapes: {
+            select: { id: true, queteId: true, ordre: true, type: true, pnjId: true },
+          },
+        },
+      }),
+      prisma.personnage.findMany({
+        where: { id: { in: personnageIds } },
+        select: { id: true, niveau: true },
+      }),
+      prisma.quetePersonnage.findMany({
+        where: { personnageId: { in: personnageIds } },
+        select: { personnageId: true, queteId: true, statut: true, etapeActuelle: true },
+      }),
+    ]);
+
+    const result = pnjs.map(pnj => {
+      let hasAvailable = false;
+      let hasPending = false;
+
+      for (const perso of personnages) {
+        const qpForPerso = allQP.filter(qp => qp.personnageId === perso.id);
+        const acceptedIds = new Set(qpForPerso.map(qp => qp.queteId));
+        const completedIds = new Set(qpForPerso.filter(qp => qp.statut === 'TERMINEE').map(qp => qp.queteId));
+
+        // Check available quests
+        for (const q of pnj.quetesDepart) {
+          if (q.niveauRequis > perso.niveau) continue;
+          if (acceptedIds.has(q.id)) continue;
+          if ((q as any).prerequis?.some((p: any) => !completedIds.has(p.prerequisId))) continue;
+          hasAvailable = true;
+          break;
+        }
+
+        // Check pending steps (manual types at this PNJ)
+        for (const qp of qpForPerso) {
+          if (qp.statut !== QueteStatut.EN_COURS) continue;
+          const etape = pnj.quetesEtapes.find(
+            e => e.queteId === qp.queteId && e.ordre === qp.etapeActuelle && e.pnjId === pnj.id &&
+            (e.type === QueteEtapeType.PARLER_PNJ || e.type === QueteEtapeType.APPORTER_RESSOURCE || e.type === QueteEtapeType.APPORTER_EQUIPEMENT)
+          );
+          if (etape) { hasPending = true; break; }
+        }
+
+        if (hasAvailable && hasPending) break;
+      }
+
+      return { pnjId: pnj.id, hasAvailable, hasPending };
+    });
+
+    res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
 
 // GET /api/pnj
 router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
@@ -133,6 +212,56 @@ router.delete('/:id/lignes/:ligneId', async (req: Request, res: Response, next: 
     const ligneId = parseInt(req.params.ligneId, 10);
     if (isNaN(ligneId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
     await pnjService.deleteLigne(ligneId);
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
+
+// ============================================================
+// Dialogues
+// ============================================================
+
+const dialogueSchema = z.object({
+  type: z.enum(['ACCUEIL', 'SANS_INTERACTION']),
+  texte: z.string().min(1),
+  ordre: z.number().int().min(0).optional(),
+  queteId: z.number().int().positive().nullable().optional(),
+  etapeOrdre: z.number().int().positive().nullable().optional(),
+});
+
+// POST /api/pnj/:id/dialogues
+router.post('/:id/dialogues', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pnjId = parseInt(req.params.id, 10);
+    if (isNaN(pnjId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const data = dialogueSchema.parse(req.body);
+    const dialogue = await pnjService.addDialogue(pnjId, data);
+    res.status(201).json(dialogue);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+// PATCH /api/pnj/:id/dialogues/:dialogueId
+router.patch('/:id/dialogues/:dialogueId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dialogueId = parseInt(req.params.dialogueId, 10);
+    if (isNaN(dialogueId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const data = dialogueSchema.partial().parse(req.body);
+    const dialogue = await pnjService.updateDialogue(dialogueId, data);
+    res.json(dialogue);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+// DELETE /api/pnj/:id/dialogues/:dialogueId
+router.delete('/:id/dialogues/:dialogueId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dialogueId = parseInt(req.params.dialogueId, 10);
+    if (isNaN(dialogueId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    await pnjService.deleteDialogue(dialogueId);
     res.status(204).send();
   } catch (error) { next(error); }
 });

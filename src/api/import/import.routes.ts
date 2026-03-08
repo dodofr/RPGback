@@ -234,6 +234,16 @@ const marchandLigneInlineSchema = z.object({
   prixRachat:   z.number().int().min(0).optional(),
 });
 
+const DialogueTypeEnum = z.enum(['ACCUEIL', 'SANS_INTERACTION']);
+
+const pnjDialogueInlineSchema = z.object({
+  type:       DialogueTypeEnum,
+  texte:      z.string().min(1),
+  ordre:      z.number().int().default(0),
+  quete:      z.string().min(1).optional(), // nom quête → queteId
+  etapeOrdre: z.number().int().optional(),
+});
+
 const pnjImportSchema = z.object({
   nom:         z.string().min(1),
   map:         z.string().min(1),
@@ -242,6 +252,8 @@ const pnjImportSchema = z.object({
   description: z.string().optional(),
   estMarchand: z.boolean().default(true),
   marchandLignes: z.array(marchandLigneInlineSchema).optional(),
+  dialogues:      z.array(pnjDialogueInlineSchema).optional(),
+  // absent → préservés | [] → suppression | [...] → remplacement
 });
 
 const queteEtapeInlineSchema = z.object({
@@ -405,7 +417,7 @@ router.post('/', async (req: Request, res: Response) => {
       monstreSorts: 0, monstreDrops: 0,
       equipements: 0, lignesDegats: 0,
       recettes: 0, recetteIngredients: 0,
-      pnj: 0, marchandLignes: 0,
+      pnj: 0, marchandLignes: 0, pnjDialogues: 0,
       quetes: 0, queteEtapes: 0, queteRecompenses: 0, quetePrerequisites: 0,
     };
 
@@ -1028,6 +1040,32 @@ router.post('/', async (req: Request, res: Response) => {
           if (prerequisId === queteId) throw new ImportRefError(`Quête '${q.nom}' : une quête ne peut pas être son propre prérequis`);
           await tx.queteRequis.create({ data: { queteId, prerequisId } });
           counters.quetePrerequisites++;
+        }
+      }
+      // ── STEP 16: PNJ Dialogues (après quêtes, pour résoudre les refs) ──
+      for (const p of pack.pnj ?? []) {
+        if (p.dialogues === undefined) continue; // absent → préservés
+        const pnjId = cache.pnj.get(p.nom)!;
+        await tx.pNJDialogue.deleteMany({ where: { pnjId } });
+        for (const d of p.dialogues) {
+          let queteId: number | null = null;
+          if (d.quete) {
+            if (!cache.quetes.has(d.quete)) {
+              throw new ImportRefError(`PNJ '${p.nom}' dialogue : quête '${d.quete}' introuvable en BDD ni dans le pack`);
+            }
+            queteId = cache.quetes.get(d.quete)!;
+          }
+          await tx.pNJDialogue.create({
+            data: {
+              pnjId,
+              type: d.type as any,
+              texte: d.texte,
+              ordre: d.ordre,
+              queteId,
+              etapeOrdre: d.etapeOrdre ?? null,
+            },
+          });
+          counters.pnjDialogues++;
         }
       }
     }, { timeout: 30000 });

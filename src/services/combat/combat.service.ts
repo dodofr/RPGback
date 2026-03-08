@@ -8,28 +8,34 @@ import { addLog } from './combatLog';
 
 export class CombatService {
   async create(data: CreateCombatRequest) {
-    // Get group with characters
-    const group = await prisma.groupe.findUnique({
-      where: { id: data.groupeId },
-      include: {
-        personnages: {
-          include: {
-            personnage: {
-              include: {
-                race: true,
+    // Gather player characters — either from a group or a solo character
+    let playerChars: { id: number; nom: string; joueurId: number; raceId: number; force: number; intelligence: number; dexterite: number; agilite: number; vie: number; chance: number; or: number; poidsMaxInventaire: number; niveau: number; experience: number; pointsStatsDisponibles: number; mapId: number | null; positionX: number; positionY: number; equipements: any }[] = [];
+
+    if (data.groupeId) {
+      const group = await prisma.groupe.findUnique({
+        where: { id: data.groupeId },
+        include: {
+          personnages: {
+            include: {
+              personnage: {
+                include: { race: true },
               },
             },
           },
         },
-      },
-    });
-
-    if (!group) {
-      throw new Error('Group not found');
-    }
-
-    if (group.personnages.length === 0) {
-      throw new Error('Group has no characters');
+      });
+      if (!group) throw new Error('Group not found');
+      if (group.personnages.length === 0) throw new Error('Group has no characters');
+      playerChars = group.personnages.map(gp => gp.personnage as any);
+    } else if (data.personnageId) {
+      const char = await prisma.personnage.findUnique({
+        where: { id: data.personnageId },
+        include: { race: true },
+      });
+      if (!char) throw new Error('Character not found');
+      playerChars = [char as any];
+    } else {
+      throw new Error('Either groupeId or personnageId is required');
     }
 
     // Get map with cases and spawns
@@ -50,7 +56,7 @@ export class CombatService {
       .filter(s => s.equipe === 1)
       .sort((a, b) => a.ordre - b.ordre);
 
-    if (group.personnages.length > playerSpawns.length) {
+    if (playerChars.length > playerSpawns.length) {
       throw new Error('Not enough player spawn positions');
     }
 
@@ -64,13 +70,14 @@ export class CombatService {
         status: CombatStatus.EN_COURS,
         grilleLargeur: map.largeur,
         grilleHauteur: map.hauteur,
-        groupeId: data.groupeId,
+        groupeId: data.groupeId ?? null,
+        personnageId: data.personnageId ?? null,
       },
     });
 
     // Create entities for player characters (team 0) at spawn positions
-    for (let i = 0; i < group.personnages.length; i++) {
-      const char = group.personnages[i].personnage;
+    for (let i = 0; i < playerChars.length; i++) {
+      const char = playerChars[i];
       const spawn = playerSpawns[i];
 
       const totalStats = await characterService.getTotalStats(char.id);

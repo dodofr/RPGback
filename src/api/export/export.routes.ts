@@ -47,6 +47,7 @@ router.get('/', async (_req: Request, res: Response) => {
         include: {
           map: true,
           lignes: { include: { equipement: true, ressource: true } },
+          dialogues: { include: { quete: { select: { nom: true } } }, orderBy: { ordre: 'asc' } },
         },
       }),
       prisma.quete.findMany({
@@ -301,6 +302,13 @@ router.get('/', async (_req: Request, res: Response) => {
         if (l.ressource) base.ressource = l.ressource.nom;
         return base;
       }),
+      dialogues: p.dialogues.map((d: any) => ({
+        type: d.type,
+        texte: d.texte,
+        ordre: d.ordre,
+        quete: d.quete?.nom ?? null,
+        etapeOrdre: d.etapeOrdre ?? null,
+      })),
     }));
 
     // ── Quêtes ──

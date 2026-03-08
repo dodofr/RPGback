@@ -1,6 +1,3 @@
-Quete
-Penser a un sytheme de quete
-
 Faire tout les test front pour voir les comportement
 ameliorer les pages 
 passer au graphisme

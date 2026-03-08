@@ -8,6 +8,7 @@ const PNJ_INCLUDE = {
       ressource: { select: { id: true, nom: true, poids: true } },
     },
   },
+  dialogues: { orderBy: { ordre: 'asc' as const } },
 };
 
 export class PNJService {
@@ -77,6 +78,18 @@ export class PNJService {
 
   async deleteLigne(ligneId: number) {
     return prisma.marchandLigne.delete({ where: { id: ligneId } });
+  }
+
+  async addDialogue(pnjId: number, data: { type: string; texte: string; ordre?: number; queteId?: number | null; etapeOrdre?: number | null }) {
+    return prisma.pNJDialogue.create({ data: { pnjId, type: data.type as any, texte: data.texte, ordre: data.ordre ?? 0, queteId: data.queteId ?? null, etapeOrdre: data.etapeOrdre ?? null } });
+  }
+
+  async updateDialogue(dialogueId: number, data: { type?: string; texte?: string; ordre?: number; queteId?: number | null; etapeOrdre?: number | null }) {
+    return prisma.pNJDialogue.update({ where: { id: dialogueId }, data: { ...data, type: data.type as any } });
+  }
+
+  async deleteDialogue(dialogueId: number) {
+    return prisma.pNJDialogue.delete({ where: { id: dialogueId } });
   }
 
   async buyFromMerchant(pnjId: number, personnageId: number, ligneId: number, quantite: number = 1) {

@@ -40,7 +40,7 @@ backend/
 │   ├── api/
 │   │   ├── routes.ts            # Agrégation routes
 │   │   ├── players/             # CRUD joueurs (controller/service/routes)
-│   │   ├── characters/          # CRUD personnages + équipement + progression + quêtes actives
+│   │   ├── characters/          # CRUD personnages + équipement + progression + quêtes actives + navigation solo
 │   │   ├── groups/              # Gestion groupes + navigation
 │   │   ├── combat/              # Endpoints combat
 │   │   ├── maps/                # Régions, maps, monstres, spawns + relations
@@ -52,7 +52,8 @@ backend/
 │   ├── services/
 │   │   ├── player.service.ts
 │   │   ├── character.service.ts # + stats totales, équipement
-│   │   ├── group.service.ts     # + navigation entre maps, engagement auto
+│   │   ├── character-navigation.service.ts  # Navigation solo (enterMap, move, direction, connection, leaveMap)
+│   │   ├── group.service.ts     # + navigation groupe entre maps, engagement auto (position via leader)
 │   │   ├── region.service.ts    # + update, delete
 │   │   ├── map.service.ts       # + update, delete, deleteConnection, updateWorldPositions
 │   │   ├── monstre.service.ts   # + update, delete, findById incl. drops
@@ -101,6 +102,8 @@ POST `/` | GET `/` | GET `/:id` | GET `/:id/characters` | GET `/:id/groups` | PA
 ### Characters (`/api/characters`)
 POST `/` | GET `/` | GET `/:id` (avec stats totales) | PATCH `/:id` | PUT `/:id/equipment` | GET `/:id/spells` | POST `/:id/sync-spells` | POST `/:id/allocate-stats` | POST `/:id/reset-stats` | GET `/:id/progression` | POST `/:id/craft/:recetteId` | GET `/:id/quetes` | DELETE `/:id`
 
+Navigation solo : POST `/:id/enter-map` | PATCH `/:id/move` | POST `/:id/move-direction` | POST `/:id/use-connection` | POST `/:id/leave-map`
+
 ### Inventory (`/api/characters/:id/inventory`)
 GET `/` | DELETE `/items/:itemId` | DELETE `/resources/:ressourceId` | POST `/equip/:itemId` | POST `/unequip` | POST `/send`
 
@@ -108,7 +111,7 @@ GET `/` | DELETE `/items/:itemId` | DELETE `/resources/:ressourceId` | POST `/eq
 GET `/` | GET `/:id`
 
 ### Groups (`/api/groups`)
-POST `/` | GET `/` | GET `/:id` | POST `/:id/characters` (max 6) | DELETE `/:id/characters/:charId` | PATCH `/:id/move` | POST `/:id/enter-map` | POST `/:id/use-connection` | POST `/:id/move-direction` (NORD/SUD/EST/OUEST) | POST `/:id/leave-map` | DELETE `/:id`
+POST `/` (body: `nom, joueurId, leaderId`) | GET `/` | GET `/:id` | POST `/:id/characters` (max 6, perso sur même map) | DELETE `/:id/characters/:charId` | PATCH `/:id/move` | POST `/:id/enter-map` | POST `/:id/use-connection` | POST `/:id/move-direction` (NORD/SUD/EST/OUEST) | POST `/:id/leave-map` | DELETE `/:id`
 
 ### Combat (`/api/combats`)
 POST `/` | GET `/` | GET `/:id` | POST `/:id/action` (sort ou arme) | POST `/:id/move` | POST `/:id/end-turn` | POST `/:id/flee` | DELETE `/:id`
@@ -123,11 +126,13 @@ GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/mons
 GET `/` | GET `/:id` (incl. drops) | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/sorts` | DELETE `/:id/sorts/:sortId` | POST `/:id/drops` | PATCH `/:id/drops/:dropId` | DELETE `/:id/drops/:dropId`
 
 ### Donjons (`/api/donjons`)
-GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/enter` | GET `/run/:groupeId` | POST `/run/:groupeId/abandon`
+GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id` | POST `/:id/enter` | GET `/run/:groupeId` | POST `/run/:groupeId/abandon` | GET `/run/solo/:charId` | POST `/run/solo/:charId/abandon`
 
 ### PNJ (`/api/pnj`)
+GET `/map-status?mapId=X&personnageIds=1,2,3` ← **DOIT être avant `/:id`**
 GET `/` | GET `/:id` | POST `/` | PATCH `/:id` | DELETE `/:id`
 POST `/:id/lignes` | PATCH `/:id/lignes/:ligneId` | DELETE `/:id/lignes/:ligneId`
+POST `/:id/dialogues` | PATCH `/:id/dialogues/:dialogueId` | DELETE `/:id/dialogues/:dialogueId`
 POST `/:id/buy` | POST `/:id/sell`
 POST `/:id/interact` | POST `/:id/accept-quest` | POST `/:id/advance-quest`
 
@@ -171,10 +176,10 @@ POST `/maps` | POST `/monstres`
 
 ### Tables principales
 - `Joueur` - Comptes joueurs
-- `Personnage` - Stats, niveau, XP, équipement (JSON)
+- `Personnage` - Stats, niveau, XP, équipement (JSON). **`mapId`, `positionX`, `positionY`** — position propre sur la map (nullable)
 - `PersonnageSort` - Sorts appris par personnage
-- `Groupe` / `GroupePersonnage` - Équipes (max 6), position sur map
-- `Combat` - Instances de combat (`entiteActuelleId` = tour actif)
+- `Groupe` / `GroupePersonnage` - Équipes (max 6). **`leaderId`** (FK Personnage). La position est portée par les Personnages (plus de positionX/Y/mapId sur Groupe)
+- `Combat` - Instances de combat (`entiteActuelleId` = tour actif). `groupeId` OU `personnageId` (combat solo sans groupe)
 - `CombatEntite` - Snapshot stats + `armeData` JSON (incl. `lignes[]`, `bonusCrit`) + `monstreTemplateId`/`niveau` + `iaType` + `invocateurId`
 - `CombatCase` - Obstacles sur la grille
 - `CombatLog` - Journal de combat côté serveur (Cascade via Combat)
@@ -203,6 +208,7 @@ POST `/maps` | POST `/monstres`
 
 ### Tables PNJ & Quêtes
 - `PNJ` - Personnages non-joueurs sur map (`mapId`, `positionX/Y`, `estMarchand`)
+- `PNJDialogue` - Lignes de dialogue par PNJ (`type: DialogueType`, `texte`, `ordre`, `queteId?`, `etapeOrdre?`) — Cascade via PNJ, SetNull via Quete. Sélection côté serveur dans `interactWithPnj()` : étape active > quête générique > ACCUEIL > SANS_INTERACTION
 - `MarchandLigne` - Catalogue marchand (equipementId ou ressourceId, prixMarchand, prixRachat)
 - `Quete` - Définition d'une quête (nom, niveauRequis, pnjDepartId)
 - `QueteEtape` - Étapes ordonnées d'une quête (type PARLER_PNJ ou TUER_MONSTRE, pnjId, monstreTemplateId, quantite) — Cascade via Quete
@@ -224,7 +230,7 @@ POST `/maps` | POST `/monstres`
 - `Donjon` - Définition d'un donjon (regionId, bossId, niveauMin/Max)
 - `DonjonSalle` - Salles d'un donjon (ordre, mapId) — Cascade via Donjon
 - `DonjonSalleComposition` - Monstres par salle selon difficulté — Cascade via DonjonSalle
-- `DonjonRun` - Run actif d'un groupe dans un donjon (salleActuelle, difficulte, victoire)
+- `DonjonRun` - Run actif (groupe ou solo) dans un donjon. `groupeId Int? @unique` OU `personnageId Int? @unique` (exactement un renseigné). `salleActuelle`, `difficulte`, `victoire`
 
 ### Enums
 ```prisma
@@ -241,6 +247,7 @@ enum CombatMode { MANUEL, AUTO }
 enum IAType { EQUILIBRE, AGGRESSIF, SOUTIEN, DISTANCE }
 enum QueteEtapeType { PARLER_PNJ, TUER_MONSTRE, APPORTER_RESSOURCE, APPORTER_EQUIPEMENT }
 enum QueteStatut { EN_COURS, TERMINEE }
+enum DialogueType { ACCUEIL, SANS_INTERACTION }
 ```
 
 ### Types TypeScript
@@ -457,15 +464,24 @@ POST /pnj/:id/advance-quest { personnageId, quetePersonnageId }
 WILDERNESS (MANUEL, ennemis visibles) | DONJON (AUTO, rencontres aléatoires) | VILLE/SAFE (pas de combat) | BOSS (AUTO)
 
 ### Navigation
-- **Direction** : `POST /groups/:id/move-direction { direction }` → lit `map.nordMapId`/`sudMapId`/etc.
-- **Connexion** : `POST /groups/:id/use-connection { connectionId }` → portail nommé
-- **Déplacement** : `PATCH /groups/:id/move { x, y }` → engagement auto si groupe ennemi
-- **Entrée map** : `POST /groups/:id/enter-map { mapId }` → spawn auto groupes ennemis (MANUEL)
+**Solo (Personnage)** — endpoint prefix `/api/characters/:id`
+- `POST /enter-map { mapId, startX?, startY? }` → entre sur une map, spawn ennemis si WILDERNESS vide
+- `PATCH /move { x, y }` → déplacement + engagement combat (AUTO: dist≤4, MANUEL: même case)
+- `POST /move-direction { direction }` → lit `map.nordMapId`/`sudMapId`/etc.
+- `POST /use-connection { connectionId, destinationConnectionId?, difficulte? }` → portail normal ou entrée donjon solo (`difficulte` requis pour donjon)
+- `POST /leave-map` → mapId=null, pos=(0,0)
+
+**Groupe** — endpoint prefix `/api/groups/:id`
+- `POST /enter-map { mapId }` → tous les membres téléportés + spawn ennemis (MANUEL)
+- `PATCH /move { x, y }` → tous les membres déplacés + engagement auto
+- `POST /move-direction { direction }` → navigation directionnelle groupe
+- `POST /use-connection { connectionId }` → portail + donjons
+- `POST /leave-map` → mapId=null pour tous les membres
 
 ### Grille de combat (par map)
 - `MapCase` : obstacles (`bloqueDeplacement`, `bloqueLigneDeVue`, `estExclue`) — Cascade via Map
 - `MapSpawn` : points de spawn (equipe 0=joueurs, 1=ennemis, ordre 1-8) — Cascade via Map
-- Spawns standard : joueurs x=1, ennemis x=14, y=2,4,6,8,10,12,14,16
+- Spawns standard : joueurs x=1, ennemis x=18, y=[1,3,5,7,9,11,13] (7 positions, maps 20×14)
 - Endpoints : `GET /maps/:id/grid`, `PUT /maps/:id/grid/cases`, `PUT /maps/:id/grid/spawns`
 
 ### Carte du monde (positions)
@@ -482,7 +498,8 @@ WILDERNESS (MANUEL, ennemis visibles) | DONJON (AUTO, rencontres aléatoires) | 
 ### Groupes ennemis
 - MANUEL : 1-3 `GroupeEnnemi` par map, 1-8 `GroupeEnnemiMembre` mixtes, spawn auto via `RegionMonstre`
 - AUTO : engagement automatique à proximité (4 cases Manhattan), monstres via `RegionMonstre` (pondéré)
-- Engagement : automatique (déplacement sur case) ou manuel (`POST /maps/:id/engage`)
+- Engagement : automatique (déplacement solo ou groupe) ou manuel (`POST /maps/:id/engage { groupeEnnemiId, groupeId? | personnageId? }`)
+- `engageEnemyGroup(mapId, ennemiId, groupeId?, personnageId?)` — crée un combat groupe OU solo
 
 ## PNJ marchands
 
@@ -491,6 +508,22 @@ WILDERNESS (MANUEL, ennemis visibles) | DONJON (AUTO, rencontres aléatoires) | 
 - Tous les PNJ sont interactables (bouton "Parler à" dans MapPage) → dialogue modal avec sélecteur de personnage + quêtes + bouton boutique si `estMarchand`
 - Admin : `PNJPage` (liste) → `/admin/pnj/:id` → `PNJDetailPage` (détail avec inventaire marchand + quêtes données)
 - `POST /pnj/:id/buy` / `POST /pnj/:id/sell` : transactions marchandes
+
+## Règles groupe (depuis migration Position par Personnage)
+- **`Groupe.leaderId`** : obligatoire (appliqué dans le service). Transfert auto si leader quitte → nouveau leader = premier membre restant. Si plus de membres → groupe supprimé.
+- **`addCharacter()`** : le perso doit être sur la même map que le leader ET ne pas être déjà dans un autre groupe.
+- **`delete()`** : bloqué si `DonjonRun` actif (groupe ou solo). Les personnages conservent leur position.
+- **Navigation groupe** : toutes les méthodes (`move`, `enterMap`, `leaveMap`) font un `personnage.updateMany` sur tous les membres.
+- **Combat solo** : `combatService.create({ personnageId, monstres, mapId })` — sans groupe. Le `Combat.personnageId` est renseigné, `CombatState.personnageId` retourné.
+- **Seed** : reset automatique des groupes et positions en début de seed (`deleteMany` DonjonRun/Groupe, `updateMany` Personnage).
+
+## Navigation Frontend (UX Groupe/Solo)
+- **DashboardPage** : affiche directement `<CharactersPage>` sans onglet Groupes.
+- **CharactersPage** : mode aventure (`isAdventureMode = !!groupId || (!!charIdParam && !playerIdProp)`) — masque la grille de sélection et les boutons non pertinents. Navigation solo doit passer `playerId` dans l'URL pour que le modal "Envoyer" soit filtré par joueur.
+- **MapPage solo** : au chargement, détecte si le perso est déjà dans un groupe → redirige `?groupId=X` automatiquement.
+- **MapPage groupe** : sidebar avec bouton "✕ Retirer" par membre, section "Sur cette map" avec "+ Inviter" (auto-retire de l'ancien groupe si besoin), bouton "Dissoudre le groupe" pour forcer le retour en solo.
+- **MapPage solo "Sur cette map"** : bouton "+ Groupe" individuel par allié (crée un groupe à nom aléatoire + invite l'allié choisi).
+- **Noms de groupe** : `randomGroupName()` → `Les {Adj} {Nom}` — jamais basé sur le nom du personnage.
 
 ## Conventions de code
 
@@ -571,6 +604,7 @@ Avant de supprimer une ressource, nettoyer les relations :
 - **6 groupes ennemis** : 2 par map WILDERNESS
 - **1 donjon** : Grotte aux Gobelins (4 salles)
 - **2 PNJ** : id=1 Chef du village (map 5, pos 7/9, estMarchand=true), id=2 Garde du village (map 5, pos 3/9, estMarchand=false)
+- **7 dialogues PNJ** : ids 1-4 génériques (chef ACCUEIL+SANS_INTERACTION, garde ACCUEIL+SANS_INTERACTION) + ids 5-7 liés à "La menace des loups" (garde étape 1, garde étape 3, chef étape 4)
 - **2 quêtes** :
   - id=1 "La menace des loups" (4 étapes : PARLER_PNJ→TUER_MONSTRE→PARLER_PNJ→PARLER_PNJ, 200 XP + 50 or)
   - id=3 "Ravitaillement du village" (4 étapes : PARLER_PNJ→APPORTER_RESSOURCE(3×Cuir, Garde)→APPORTER_EQUIPEMENT(1×Bouclier en bois, Chef)→PARLER_PNJ, 100 XP + 30 or) — **prérequis : quête id=1 TERMINEE** — **⚠️ id=2 laissé libre (quête créée manuellement)**

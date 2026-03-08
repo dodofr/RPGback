@@ -22,6 +22,7 @@ export class QuestService {
             },
           },
         },
+        dialogues: { orderBy: { ordre: 'asc' } },
       },
     });
     if (!pnj) throw new Error('PNJ not found');
@@ -73,11 +74,48 @@ export class QuestService {
       ) && etape.pnjId === pnjId;
     });
 
+    // Sélection intelligente du dialogue à afficher
+    const hasQuestContent = quetesDisponibles.length > 0 || etapesEnAttente.length > 0;
+    const dialogueTexte = this.selectDialogue(pnj.dialogues, activeQPs, hasQuestContent, pnj.estMarchand);
+
     return {
       quetesDisponibles,
       etapesEnAttente,
       estMarchand: pnj.estMarchand,
+      dialogues: pnj.dialogues,
+      dialogueTexte,
     };
+  }
+
+  private selectDialogue(
+    dialogues: any[],
+    activeQPs: any[],
+    hasQuestContent: boolean,
+    estMarchand: boolean,
+  ): string | null {
+    // 1. queteId + etapeOrdre exact (étape en cours)
+    for (const qp of activeQPs) {
+      if (qp.statut !== 'EN_COURS') continue;
+      const match = dialogues.find(d => d.queteId === qp.queteId && d.etapeOrdre === qp.etapeActuelle);
+      if (match) return match.texte;
+    }
+
+    // 2. queteId seul, etapeOrdre null (toute la durée de la quête)
+    for (const qp of activeQPs) {
+      if (qp.statut !== 'EN_COURS') continue;
+      const match = dialogues.find(d => d.queteId === qp.queteId && d.etapeOrdre === null);
+      if (match) return match.texte;
+    }
+
+    // 3. ACCUEIL générique (quête dispo, étape en attente, ou marchand)
+    if (hasQuestContent || estMarchand) {
+      const match = dialogues.find(d => d.type === 'ACCUEIL' && !d.queteId);
+      if (match) return match.texte;
+    }
+
+    // 4. SANS_INTERACTION générique
+    const fallback = dialogues.find(d => d.type === 'SANS_INTERACTION' && !d.queteId);
+    return fallback?.texte ?? null;
   }
 
   /**

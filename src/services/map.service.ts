@@ -337,9 +337,10 @@ export class MapService {
 
   /**
    * Engage an enemy group on the map (MANUEL mode)
-   * Creates a combat with all monsters in the group
+   * Creates a combat with all monsters in the group.
+   * Pass either groupeId (group combat) or personnageId (solo combat).
    */
-  async engageEnemyGroup(mapId: number, groupeEnnemiId: number, groupeId: number) {
+  async engageEnemyGroup(mapId: number, groupeEnnemiId: number, groupeId?: number, personnageId?: number) {
     const map = await this.findById(mapId);
     if (!map) {
       throw new Error('Map not found');
@@ -362,26 +363,23 @@ export class MapService {
       throw new Error('Enemy group already defeated');
     }
 
-    // Get player group
-    const groupe = await prisma.groupe.findUnique({
-      where: { id: groupeId },
-      include: {
-        personnages: {
-          include: {
-            personnage: true,
-          },
-        },
-      },
-    });
+    if (!groupeId && !personnageId) {
+      throw new Error('Either groupeId or personnageId is required');
+    }
 
-    if (!groupe) {
-      throw new Error('Group not found');
+    // Validate group or character exists
+    if (groupeId) {
+      const groupe = await prisma.groupe.findUnique({ where: { id: groupeId } });
+      if (!groupe) throw new Error('Group not found');
+    } else if (personnageId) {
+      const char = await prisma.personnage.findUnique({ where: { id: personnageId } });
+      if (!char) throw new Error('Character not found');
     }
 
     // Check if this is a dungeon combat — use monstresCaches if available
-    const donjonRun = await prisma.donjonRun.findFirst({
+    const donjonRun = groupeId ? await prisma.donjonRun.findFirst({
       where: { groupeId, termine: false },
-    });
+    }) : null;
 
     let monstres: {
       nom: string;
@@ -418,6 +416,7 @@ export class MapService {
     // Create the combat
     const combat = await combatService.create({
       groupeId,
+      personnageId,
       monstres,
       mapId,
     });
