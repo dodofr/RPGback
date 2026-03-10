@@ -109,6 +109,9 @@ export interface CombatState {
   entiteActuelle: number;
   groupeId: number | null;
   personnageId: number | null;
+  mapId: number | null;
+  mapImageUrl: string | null;
+  mapPremierPlan: { x: number; y: number }[];
   grille: {
     largeur: number;
     hauteur: number;

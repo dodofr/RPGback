@@ -41,9 +41,16 @@ export async function createInvocation(
     throw new Error('Invoker not found or dead');
   }
 
-  // Check if position is valid (in bounds and not occupied)
+  // Check if position is valid (in bounds, not an obstacle, not occupied)
   if (x < 0 || x >= combat.grilleLargeur || y < 0 || y >= combat.grilleHauteur) {
     throw new Error('Position out of bounds');
+  }
+
+  const obstacle = await prisma.combatCase.findFirst({
+    where: { combatId, x, y, bloqueDeplacement: true },
+  });
+  if (obstacle) {
+    throw new Error('Position is blocked by an obstacle');
   }
 
   const occupant = combat.entites.find(

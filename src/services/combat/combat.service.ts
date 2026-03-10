@@ -72,6 +72,7 @@ export class CombatService {
         grilleHauteur: map.hauteur,
         groupeId: data.groupeId ?? null,
         personnageId: data.personnageId ?? null,
+        mapId: data.mapId,
       },
     });
 

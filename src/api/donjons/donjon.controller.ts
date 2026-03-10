@@ -251,6 +251,38 @@ export class DonjonController {
     }
   }
 
+  /**
+   * POST /api/donjons/run/:groupeId/spawn-enemies - Respawn enemies in current dungeon room (recovery)
+   */
+  async spawnEnemiesForGroup(req: Request, res: Response, next: NextFunction) {
+    try {
+      const groupeId = parseInt(req.params.groupeId, 10);
+      if (isNaN(groupeId)) { res.status(400).json({ error: 'Invalid group ID' }); return; }
+      const state = await donjonService.getDungeonState({ groupeId });
+      if (!state) { res.status(404).json({ error: 'No active dungeon run found' }); return; }
+      const groupeEnnemi = await donjonService.spawnDungeonGroupeEnnemi(state.run.id);
+      res.json({ groupeEnnemi });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/donjons/run/solo/:charId/spawn-enemies - Respawn enemies in current dungeon room (recovery)
+   */
+  async spawnEnemiesForSolo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const personnageId = parseInt(req.params.charId, 10);
+      if (isNaN(personnageId)) { res.status(400).json({ error: 'Invalid character ID' }); return; }
+      const state = await donjonService.getDungeonState({ personnageId });
+      if (!state) { res.status(404).json({ error: 'No active dungeon run found' }); return; }
+      const groupeEnnemi = await donjonService.spawnDungeonGroupeEnnemi(state.run.id);
+      res.json({ groupeEnnemi });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // ──────────────────────── COMPOSITIONS ────────────────────────
 
   /**

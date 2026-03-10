@@ -69,7 +69,8 @@
       "Bash(powershell:*)",
       "Bash(xargs grep:*)",
       "Bash(\"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\frontend\\\\node_modules\\\\.bin\\\\tsc\":*)",
-      "Bash(npx:*)"
+      "Bash(npx:*)",
+      "Bash(mkdir:*)"
     ]
   }
 }

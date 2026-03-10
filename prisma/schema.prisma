@@ -319,6 +319,16 @@ model Map {
   hauteur         Int             @default(18)
   worldX          Int?
   worldY          Int?
+  imageUrl        String?
+  // Directional exits (position de la case de sortie directionnelle)
+  nordExitX       Int?
+  nordExitY       Int?
+  sudExitX        Int?
+  sudExitY        Int?
+  estExitX        Int?
+  estExitY        Int?
+  ouestExitX      Int?
+  ouestExitY      Int?
   // Directional neighbors (self-referential)
   nordMapId       Int?
   nordMap         Map?            @relation("NordNeighbor", fields: [nordMapId], references: [id])
@@ -341,6 +351,7 @@ model Map {
   cases           MapCase[]
   spawns          MapSpawn[]
   pnjs            PNJ[]
+  combats         Combat[]        @relation("CombatMap")
 }
 
 model MapConnection {
@@ -522,6 +533,8 @@ model Combat {
   grilleHauteur    Int
   groupeId         Int?
   personnageId     Int?
+  mapId            Int?
+  mapRef           Map?              @relation("CombatMap", fields: [mapId], references: [id])
   personnage       Personnage?       @relation("CombatSolo", fields: [personnageId], references: [id])
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -663,6 +676,7 @@ model MapCase {
   bloqueDeplacement Boolean @default(false)
   bloqueLigneDeVue  Boolean @default(false)
   estExclue         Boolean @default(false)
+  estPremierPlan    Boolean @default(false)
 
   @@unique([mapId, x, y])
 }

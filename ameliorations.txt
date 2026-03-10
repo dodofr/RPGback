@@ -2,6 +2,10 @@ Faire tout les test front pour voir les comportement
 ameliorer les pages 
 passer au graphisme
 
-
-
- 
+Fait un plan.
+1. il faudrait que je puisse ajouter l'image d'un personnage dans l'admin un peu comme les image de map. Le personnage pourra dépassé de sa case mais il ne compte que pour la case sur laquel il est. On ne change pas le comportement
+Sur le meme principe je veux pareil pour les pnj / monstre / portail / cases de direction.
+je pense qu'on peut réutiliser la fonction upload.route.ts que tu as fais
+2. je ne devrais pas avoir de bouton retour au camp et quiter map. les personnage creer devrait arriver directement sur le village de piedmont et ensuite faire leurs aventure. il faudra verifier les personnage déja creer.
+il faudra enlever la page ou on fait le choix de la map d'arriver. Un personnage ne sort plus du jeu, il est forcement sur une map. 
+faire une analyse des .md 

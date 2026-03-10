@@ -75,6 +75,15 @@ export class MapService {
     sudMapId: number | null;
     estMapId: number | null;
     ouestMapId: number | null;
+    imageUrl: string | null;
+    nordExitX: number | null;
+    nordExitY: number | null;
+    sudExitX: number | null;
+    sudExitY: number | null;
+    estExitX: number | null;
+    estExitY: number | null;
+    ouestExitX: number | null;
+    ouestExitY: number | null;
   }>) {
     return prisma.map.update({
       where: { id },
@@ -377,9 +386,11 @@ export class MapService {
     }
 
     // Check if this is a dungeon combat — use monstresCaches if available
-    const donjonRun = groupeId ? await prisma.donjonRun.findFirst({
-      where: { groupeId, termine: false },
-    }) : null;
+    const donjonRun = groupeId
+      ? await prisma.donjonRun.findFirst({ where: { groupeId, termine: false } })
+      : personnageId
+        ? await prisma.donjonRun.findFirst({ where: { personnageId, termine: false } })
+        : null;
 
     let monstres: {
       nom: string;

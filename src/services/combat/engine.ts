@@ -72,6 +72,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
         orderBy: { id: 'asc' },
       },
       zonesActives: true,
+      mapRef: { select: { id: true, imageUrl: true, cases: { select: { x: true, y: true, estPremierPlan: true } } } },
     },
   });
 
@@ -285,6 +286,9 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
     entiteActuelle: combat.entiteActuelleId ?? 0,
     groupeId: combat.groupeId,
     personnageId: combat.personnageId,
+    mapId: combat.mapId,
+    mapImageUrl: (combat as any).mapRef?.imageUrl ?? null,
+    mapPremierPlan: ((combat as any).mapRef?.cases ?? []).filter((c: any) => c.estPremierPlan),
     grille: {
       largeur: combat.grilleLargeur,
       hauteur: combat.grilleHauteur,
@@ -1846,7 +1850,8 @@ async function checkCombatEnd(combatId: number): Promise<void> {
         try {
           await donjonService.advanceToNextRoom(run.id);
         } catch (error) {
-          console.error('Error advancing dungeon room:', error);
+          console.error('Error advancing dungeon room (run', run.id, '):', error instanceof Error ? error.message : error);
+          if (error instanceof Error && error.stack) console.error(error.stack);
         }
       }
     }

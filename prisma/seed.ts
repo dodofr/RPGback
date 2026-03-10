@@ -828,11 +828,12 @@ async function main() {
   // (Map 3 supprimée, Clairière supprimée, doublons >= 10 nettoyés)
 
   const oreeForet = await prisma.map.upsert({
-    where: { id: 1 }, update: { worldX: 2, worldY: 1, largeur: 20, hauteur: 14 },
+    where: { id: 1 }, update: { worldX: 2, worldY: 1, largeur: 20, hauteur: 14, imageUrl: '/assets/maps/oreedelaforet.png' },
     create: {
       nom: 'Orée de la forêt', regionId: foretVertbois.id,
       type: MapType.WILDERNESS, combatMode: CombatMode.MANUEL,
       largeur: 20, hauteur: 14, worldX: 2, worldY: 1,
+      imageUrl: '/assets/maps/oreedelaforet.png',
     },
   });
 

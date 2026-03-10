@@ -329,6 +329,7 @@ export class MapController {
           bloqueDeplacement: z.boolean().default(false),
           bloqueLigneDeVue: z.boolean().default(false),
           estExclue: z.boolean().default(false),
+          estPremierPlan: z.boolean().default(false),
         })),
       });
       const { cases } = schema.parse(req.body);
@@ -497,6 +498,15 @@ export class MapController {
         sudMapId: z.number().int().positive().nullable().optional(),
         estMapId: z.number().int().positive().nullable().optional(),
         ouestMapId: z.number().int().positive().nullable().optional(),
+        imageUrl: z.string().nullable().optional(),
+        nordExitX: z.number().int().min(0).nullable().optional(),
+        nordExitY: z.number().int().min(0).nullable().optional(),
+        sudExitX: z.number().int().min(0).nullable().optional(),
+        sudExitY: z.number().int().min(0).nullable().optional(),
+        estExitX: z.number().int().min(0).nullable().optional(),
+        estExitY: z.number().int().min(0).nullable().optional(),
+        ouestExitX: z.number().int().min(0).nullable().optional(),
+        ouestExitY: z.number().int().min(0).nullable().optional(),
       });
       const data = updateMapSchema.parse(req.body);
       const map = await mapService.update(id, data);

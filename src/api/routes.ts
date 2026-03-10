@@ -13,6 +13,7 @@ import queteRoutes from './quetes/quetes.routes';
 
 import inventoryRoutes from './inventory/inventory.routes';
 import craftRoutes from './craft/craft.routes';
+import uploadRoutes from './upload/upload.routes';
 
 const router = Router();
 
@@ -47,6 +48,7 @@ router.use('/passives', staticRoutes.passives);
 router.use('/pnj', pnjRoutes);
 router.use('/import', importRoutes);
 router.use('/export', exportRoutes);
+router.use('/upload', uploadRoutes);
 router.use('/quetes', queteRoutes);
 
 export default router;

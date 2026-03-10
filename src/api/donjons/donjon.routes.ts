@@ -15,11 +15,17 @@ router.get('/run/:groupeId', (req, res, next) => donjonController.getDungeonStat
 // POST /api/donjons/run/:groupeId/abandon - Abandon the dungeon
 router.post('/run/:groupeId/abandon', (req, res, next) => donjonController.abandonDungeon(req, res, next));
 
+// POST /api/donjons/run/:groupeId/spawn-enemies - Manually respawn enemies in current room
+router.post('/run/:groupeId/spawn-enemies', (req, res, next) => donjonController.spawnEnemiesForGroup(req, res, next));
+
 // GET /api/donjons/run/solo/:charId - Get current dungeon run state for solo character
 router.get('/run/solo/:charId', (req, res, next) => donjonController.getDungeonStateSolo(req, res, next));
 
 // POST /api/donjons/run/solo/:charId/abandon - Abandon the dungeon for solo character
 router.post('/run/solo/:charId/abandon', (req, res, next) => donjonController.abandonDungeonSolo(req, res, next));
+
+// POST /api/donjons/run/solo/:charId/spawn-enemies - Manually respawn enemies in current room
+router.post('/run/solo/:charId/spawn-enemies', (req, res, next) => donjonController.spawnEnemiesForSolo(req, res, next));
 
 // GET /api/donjons/:id - Get dungeon details
 router.get('/:id', (req, res, next) => donjonController.getDonjonById(req, res, next));

@@ -182,9 +182,16 @@ export class CharacterNavigationService {
     const char = await prisma.personnage.findUnique({ where: { id: charId } });
     if (!char) throw new Error('Character not found');
 
+    const activeRun = await prisma.donjonRun.findFirst({ where: { personnageId: charId, termine: false } });
+    if (activeRun) throw new Error('Cannot leave during dungeon. Use abandon.');
+
+    const map5 = await prisma.map.findUnique({ where: { id: 5 } });
+    const posX = map5 ? Math.floor(map5.largeur * 0.1) : 0;
+    const posY = map5 ? Math.floor(map5.hauteur / 2) : 0;
+
     return prisma.personnage.update({
       where: { id: charId },
-      data: { mapId: null, positionX: 0, positionY: 0 },
+      data: { mapId: 5, positionX: posX, positionY: posY },
       include: { race: true },
     });
   }
