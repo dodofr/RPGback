@@ -21,6 +21,11 @@ const createRaceSchema = z.object({
   bonusAgilite: z.number().int().default(0),
   bonusVie: z.number().int().default(0),
   bonusChance: z.number().int().default(0),
+  imageUrlHomme: z.string().nullable().optional(),
+  imageUrlFemme: z.string().nullable().optional(),
+  spriteScale: z.number().min(0.1).max(5).optional(),
+  spriteOffsetX: z.number().min(-100).max(100).optional(),
+  spriteOffsetY: z.number().min(-100).max(100).optional(),
 });
 
 const updateRaceSchema = createRaceSchema.partial();

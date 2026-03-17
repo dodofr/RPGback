@@ -10,10 +10,11 @@ async function main() {
   //   - Groupe n'a plus positionX/Y/mapId — il a leaderId
   //   - Chaque Personnage a sa propre position (mapId, positionX, positionY)
   // On remet tout à zéro pour garder un état propre entre seeds.
+  // Les positions seront replacées sur map 5 (Village de Piedmont) après les upserts de maps.
   await prisma.donjonRun.deleteMany({});           // références FK vers Groupe (RESTRICT)
   await prisma.groupePersonnage.deleteMany({});    // membres des groupes
   await prisma.groupe.deleteMany({});              // groupes joueurs
-  await prisma.personnage.updateMany({            // reset positions
+  await prisma.personnage.updateMany({            // reset positions temporairement à null
     data: { mapId: null, positionX: 0, positionY: 0 },
   });
   console.log('Reset player groups and character positions');
@@ -21,31 +22,35 @@ async function main() {
   // ==================== RACES (3) ====================
   const humain = await prisma.race.upsert({
     where: { nom: 'Humain' },
-    update: {},
+    update: { imageUrlHomme: null, imageUrlFemme: null, spriteScale: 1.0, spriteOffsetX: 0, spriteOffsetY: 0 },
     create: {
       nom: 'Humain',
       bonusForce: 5, bonusIntelligence: 5, bonusDexterite: 5,
       bonusAgilite: 5, bonusVie: 5, bonusChance: 5,
+      imageUrlHomme: null, imageUrlFemme: null, spriteScale: 1.0, spriteOffsetX: 0, spriteOffsetY: 0,
     },
   });
 
   const elfe = await prisma.race.upsert({
     where: { nom: 'Elfe' },
-    update: {},
+    update: { imageUrlFemme: '/assets/races/elfe-femme.png', spriteScale: 1.0, spriteOffsetX: 0, spriteOffsetY: 0 },
     create: {
       nom: 'Elfe',
       bonusForce: 0, bonusIntelligence: 15, bonusDexterite: 10,
       bonusAgilite: 10, bonusVie: -5, bonusChance: 0,
+      imageUrlHomme: null, imageUrlFemme: '/assets/races/elfe-femme.png',
+      spriteScale: 1.0, spriteOffsetX: 0, spriteOffsetY: 0,
     },
   });
 
   const nain = await prisma.race.upsert({
     where: { nom: 'Nain' },
-    update: {},
+    update: { imageUrlHomme: null, imageUrlFemme: null, spriteScale: 1.0, spriteOffsetX: 0, spriteOffsetY: 0 },
     create: {
       nom: 'Nain',
       bonusForce: 15, bonusIntelligence: -5, bonusDexterite: 5,
       bonusAgilite: -5, bonusVie: 20, bonusChance: 0,
+      imageUrlHomme: null, imageUrlFemme: null, spriteScale: 1.0, spriteOffsetX: 0, spriteOffsetY: 0,
     },
   });
 
@@ -566,22 +571,24 @@ async function main() {
 
   // ==================== MONSTER TEMPLATES (4 + 3 invocations) ====================
   const gobelin = await prisma.monstreTemplate.upsert({
-    where: { id: 1 }, update: { iaType: IAType.AGGRESSIF },
+    where: { id: 1 }, update: { iaType: IAType.AGGRESSIF, imageUrl: '/assets/monsters/gobelin.png' },
     create: {
       nom: 'Gobelin',
       force: 8, intelligence: 5, dexterite: 12, agilite: 15, vie: 6, chance: 5,
       pvBase: 30, paBase: 6, pmBase: 4,
       niveauBase: 1, xpRecompense: 15, iaType: IAType.AGGRESSIF,
+      imageUrl: '/assets/monsters/gobelin.png',
     },
   });
 
   const loup = await prisma.monstreTemplate.upsert({
-    where: { id: 2 }, update: { iaType: IAType.AGGRESSIF },
+    where: { id: 2 }, update: { iaType: IAType.AGGRESSIF, imageUrl: '/assets/monsters/loup.png' },
     create: {
       nom: 'Loup',
       force: 12, intelligence: 3, dexterite: 10, agilite: 18, vie: 8, chance: 5,
       pvBase: 35, paBase: 6, pmBase: 5,
       niveauBase: 1, xpRecompense: 20, iaType: IAType.AGGRESSIF,
+      imageUrl: '/assets/monsters/loup.png',
     },
   });
 
@@ -875,6 +882,14 @@ async function main() {
       largeur: 20, hauteur: 14, worldX: 0, worldY: 1,
     },
   });
+
+  // Replacer tous les personnages sans map sur le Village de Piedmont (map 5)
+  // Invariant : un personnage est toujours sur une map (plus de "retour au camp")
+  await prisma.personnage.updateMany({
+    where: { mapId: null },
+    data: { mapId: villageDepart.id, positionX: 2, positionY: 7 },
+  });
+  console.log('Personnages sans map replacés sur Village de Piedmont');
 
   // Salles de donjon (ids 6-9) — pas de worldX/Y, pas de liens directionnels
   const donjonSalle1 = await prisma.map.upsert({

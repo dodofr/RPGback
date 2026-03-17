@@ -84,6 +84,10 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
   const entitesWithSpells = await Promise.all(
     combat.entites.map(async (e) => {
       let sorts: CombatSpellState[] = [];
+      let imageUrl: string | null = null;
+      let spriteScale: number = 1.0;
+      let spriteOffsetX: number = 0;
+      let spriteOffsetY: number = 0;
 
       if (e.personnageId) {
         // Player entity: get learned spells via PersonnageSort
@@ -218,6 +222,37 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             })),
           };
         });
+
+        // Load monster sprite data
+        const monstreTemplate = await prisma.monstreTemplate.findUnique({
+          where: { id: e.monstreTemplateId },
+          select: { imageUrl: true, spriteScale: true, spriteOffsetX: true, spriteOffsetY: true },
+        });
+        if (monstreTemplate) {
+          imageUrl = monstreTemplate.imageUrl;
+          spriteScale = monstreTemplate.spriteScale;
+          spriteOffsetX = monstreTemplate.spriteOffsetX;
+          spriteOffsetY = monstreTemplate.spriteOffsetY;
+        }
+      }
+
+      // Load personnage race sprite data
+      if (e.personnageId) {
+        const personnage = await prisma.personnage.findUnique({
+          where: { id: e.personnageId },
+          select: {
+            sexe: true,
+            race: { select: { imageUrlHomme: true, imageUrlFemme: true, spriteScale: true, spriteOffsetX: true, spriteOffsetY: true } },
+          },
+        });
+        if (personnage?.race) {
+          imageUrl = personnage.sexe === 'FEMME'
+            ? (personnage.race.imageUrlFemme ?? personnage.race.imageUrlHomme ?? null)
+            : (personnage.race.imageUrlHomme ?? null);
+          spriteScale = personnage.race.spriteScale;
+          spriteOffsetX = personnage.race.spriteOffsetX;
+          spriteOffsetY = personnage.race.spriteOffsetY;
+        }
       }
 
       return {
@@ -274,6 +309,10 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
             ea.effet.statCiblee === 'SOINS'
           )
           .reduce((sum, ea) => sum + ea.effet.valeur, 0),
+        imageUrl,
+        spriteScale,
+        spriteOffsetX,
+        spriteOffsetY,
         sorts,
       };
     })

@@ -26,17 +26,26 @@ export class CharacterService {
       chance: data.chance ?? 10,
     };
 
+    // Get Village de Piedmont (map 5) for starting position
+    const startMap = await prisma.map.findUnique({ where: { id: 5 } });
+    const startX = startMap ? Math.floor(startMap.largeur * 0.1) : 2;
+    const startY = startMap ? Math.floor(startMap.hauteur / 2) : 7;
+
     const personnage = await prisma.personnage.create({
       data: {
         nom: data.nom,
         joueurId: data.joueurId,
         raceId: data.raceId,
+        sexe: (data.sexe as 'HOMME' | 'FEMME') ?? 'HOMME',
         force: baseStats.force,
         intelligence: baseStats.intelligence,
         dexterite: baseStats.dexterite,
         agilite: baseStats.agilite,
         vie: baseStats.vie,
         chance: baseStats.chance,
+        mapId: startMap ? 5 : null,
+        positionX: startX,
+        positionY: startY,
       },
       include: {
         race: true,
@@ -50,7 +59,7 @@ export class CharacterService {
   }
 
   async findById(id: number) {
-    return prisma.personnage.findUnique({
+    const personnage = await prisma.personnage.findUnique({
       where: { id },
       include: {
         race: true,
@@ -62,22 +71,34 @@ export class CharacterService {
         },
       },
     });
+    if (!personnage) return null;
+    const imageUrl = personnage.sexe === 'FEMME'
+      ? (personnage.race?.imageUrlFemme ?? personnage.race?.imageUrlHomme ?? null)
+      : (personnage.race?.imageUrlHomme ?? null);
+    return { ...personnage, imageUrl };
   }
 
   async findAll() {
-    return prisma.personnage.findMany({
+    const personnages = await prisma.personnage.findMany({
       include: {
         race: true,
       },
       orderBy: { id: 'desc' },
     });
+    return personnages.map(p => {
+      const imageUrl = p.sexe === 'FEMME'
+        ? (p.race?.imageUrlFemme ?? p.race?.imageUrlHomme ?? null)
+        : (p.race?.imageUrlHomme ?? null);
+      return { ...p, imageUrl };
+    });
   }
 
-  async update(id: number, data: Partial<CreateCharacterRequest>) {
-    return prisma.personnage.update({
+  async update(id: number, data: Partial<CreateCharacterRequest & { sexe?: 'HOMME' | 'FEMME' }>) {
+    const personnage = await prisma.personnage.update({
       where: { id },
       data: {
         nom: data.nom,
+        sexe: data.sexe as 'HOMME' | 'FEMME' | undefined,
         force: data.force,
         intelligence: data.intelligence,
         dexterite: data.dexterite,
@@ -89,6 +110,10 @@ export class CharacterService {
         race: true,
       },
     });
+    const imageUrl = personnage.sexe === 'FEMME'
+      ? (personnage.race?.imageUrlFemme ?? personnage.race?.imageUrlHomme ?? null)
+      : (personnage.race?.imageUrlHomme ?? null);
+    return { ...personnage, imageUrl };
   }
 
   async equipItem(characterId: number, slot: string, equipmentId: number | null) {

@@ -70,7 +70,9 @@
       "Bash(xargs grep:*)",
       "Bash(\"C:\\\\Users\\\\dorian\\\\Desktop\\\\JeuRPG\\\\frontend\\\\node_modules\\\\.bin\\\\tsc\":*)",
       "Bash(npx:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(pip install:*)",
+      "Bash(grep:*)"
     ]
   }
 }

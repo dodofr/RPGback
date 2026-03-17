@@ -142,19 +142,6 @@ router.post('/:id/use-connection', async (req, res, next) => {
   }
 });
 
-// POST /api/characters/:id/leave-map
-router.post('/:id/leave-map', async (req, res, next) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
-    const result = await characterNavigationService.leaveMap(id);
-    res.json(result);
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Character not found') { res.status(404).json({ error: error.message }); return; }
-    next(error);
-  }
-});
-
 // DELETE /api/characters/:id - Delete a character
 router.delete('/:id', (req, res, next) => characterController.delete(req, res, next));
 

@@ -111,6 +111,11 @@ enum CombatLogType {
   FIN
 }
 
+enum Sexe {
+  HOMME
+  FEMME
+}
+
 // ==================== TABLES STATIQUES ====================
 
 model Race {
@@ -122,6 +127,11 @@ model Race {
   bonusAgilite      Int          @default(0)
   bonusVie          Int          @default(0)
   bonusChance       Int          @default(0)
+  imageUrlHomme     String?
+  imageUrlFemme     String?
+  spriteScale       Float        @default(1.0)
+  spriteOffsetX     Float        @default(0)
+  spriteOffsetY     Float        @default(0)
   personnages       Personnage[]
   sorts             Sort[]
 }
@@ -329,6 +339,11 @@ model Map {
   estExitY        Int?
   ouestExitX      Int?
   ouestExitY      Int?
+  // Images des cases de sortie directionnelle
+  nordExitImageUrl  String?
+  sudExitImageUrl   String?
+  estExitImageUrl   String?
+  ouestExitImageUrl String?
   // Directional neighbors (self-referential)
   nordMapId       Int?
   nordMap         Map?            @relation("NordNeighbor", fields: [nordMapId], references: [id])
@@ -363,6 +378,7 @@ model MapConnection {
   positionX Int
   positionY Int
   nom       String
+  imageUrl  String?
   donjonId  Int?
   donjon    Donjon? @relation(fields: [donjonId], references: [id])
 }
@@ -370,6 +386,10 @@ model MapConnection {
 model MonstreTemplate {
   id             Int                  @id @default(autoincrement())
   nom            String
+  imageUrl       String?
+  spriteScale    Float                @default(1.0)
+  spriteOffsetX  Float                @default(0)
+  spriteOffsetY  Float                @default(0)
   force          Int
   intelligence   Int
   dexterite      Int
@@ -464,6 +484,7 @@ model Joueur {
 model Personnage {
   id                     Int                @id @default(autoincrement())
   nom                    String
+  sexe                   Sexe               @default(HOMME)
   niveau                 Int                @default(1)
   experience             Int                @default(0)
   pointsStatsDisponibles Int                @default(0)
@@ -824,9 +845,13 @@ enum DialogueType {
 }
 
 model PNJ {
-  id          Int             @id @default(autoincrement())
-  nom         String
-  description String?
+  id            Int             @id @default(autoincrement())
+  nom           String
+  imageUrl      String?
+  spriteScale   Float           @default(1.0)
+  spriteOffsetX Float           @default(0)
+  spriteOffsetY Float           @default(0)
+  description   String?
   mapId       Int
   map         Map             @relation(fields: [mapId], references: [id])
   positionX   Int

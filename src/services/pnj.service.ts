@@ -41,7 +41,7 @@ export class PNJService {
     return prisma.pNJ.create({ data, include: PNJ_INCLUDE });
   }
 
-  async update(id: number, data: Partial<{ nom: string; mapId: number; positionX: number; positionY: number; description: string | null; estMarchand: boolean }>) {
+  async update(id: number, data: Partial<{ nom: string; mapId: number; positionX: number; positionY: number; description: string | null; estMarchand: boolean; imageUrl: string | null }>) {
     return prisma.pNJ.update({ where: { id }, data, include: PNJ_INCLUDE });
   }
 

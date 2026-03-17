@@ -23,12 +23,16 @@ export class PlayerService {
   }
 
   async getCharacters(joueurId: number) {
-    return prisma.personnage.findMany({
+    const chars = await prisma.personnage.findMany({
       where: { joueurId },
-      include: {
-        race: true,
-      },
+      include: { race: true },
     });
+    return chars.map(c => ({
+      ...c,
+      imageUrl: c.sexe === 'FEMME'
+        ? (c.race?.imageUrlFemme ?? c.race?.imageUrlHomme ?? null)
+        : (c.race?.imageUrlHomme ?? null),
+    }));
   }
 
   async getGroups(joueurId: number) {

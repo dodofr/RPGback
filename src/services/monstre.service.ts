@@ -91,6 +91,7 @@ export class MonstreService {
     orMax: number;
     iaType: 'EQUILIBRE' | 'AGGRESSIF' | 'SOUTIEN' | 'DISTANCE';
     pvScalingInvocation: number | null;
+    imageUrl: string | null;
   }>) {
     return prisma.monstreTemplate.update({
       where: { id },

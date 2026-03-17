@@ -38,13 +38,21 @@ export class GroupService {
     return this.findById(group.id);
   }
 
+  private addImageUrl<T extends { sexe: string; race?: { imageUrlHomme?: string | null; imageUrlFemme?: string | null } | null }>(p: T) {
+    const imageUrl = p.sexe === 'FEMME'
+      ? (p.race?.imageUrlFemme ?? p.race?.imageUrlHomme ?? null)
+      : (p.race?.imageUrlHomme ?? null);
+    return { ...p, imageUrl };
+  }
+
   async findById(id: number) {
-    return prisma.groupe.findUnique({
+    const group = await prisma.groupe.findUnique({
       where: { id },
       include: {
         joueur: true,
         leader: {
           include: {
+            race: true,
             map: true,
           },
         },
@@ -60,24 +68,41 @@ export class GroupService {
         },
       },
     });
+    if (!group) return null;
+    return {
+      ...group,
+      leader: group.leader ? this.addImageUrl(group.leader) : group.leader,
+      personnages: group.personnages.map(gp => ({
+        ...gp,
+        personnage: this.addImageUrl(gp.personnage),
+      })),
+    };
   }
 
   async findAll() {
-    return prisma.groupe.findMany({
+    const groups = await prisma.groupe.findMany({
       include: {
         leader: {
-          include: { map: true },
+          include: { race: true, map: true },
         },
         personnages: {
           include: {
             personnage: {
-              include: { map: true },
+              include: { race: true, map: true },
             },
           },
         },
       },
       orderBy: { id: 'desc' },
     });
+    return groups.map(group => ({
+      ...group,
+      leader: group.leader ? this.addImageUrl(group.leader) : group.leader,
+      personnages: group.personnages.map(gp => ({
+        ...gp,
+        personnage: this.addImageUrl(gp.personnage),
+      })),
+    }));
   }
 
   async addCharacter(groupId: number, characterId: number) {

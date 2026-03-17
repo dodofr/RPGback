@@ -45,6 +45,9 @@ const createMonstreSchema = z.object({
   resistanceIntelligence: z.number().int().min(0).default(0),
   resistanceDexterite: z.number().int().min(0).default(0),
   resistanceAgilite: z.number().int().min(0).default(0),
+  spriteScale: z.number().min(0.1).default(1.0),
+  spriteOffsetX: z.number().default(0),
+  spriteOffsetY: z.number().default(0),
 });
 
 const addConnectionSchema = z.object({
@@ -52,6 +55,7 @@ const addConnectionSchema = z.object({
   positionX: z.number().int().min(0),
   positionY: z.number().int().min(0),
   nom: z.string().min(2).max(100),
+  imageUrl: z.string().nullable().optional(),
 });
 
 const engageSchema = z.object({
@@ -452,6 +456,10 @@ export class MapController {
         resistanceIntelligence: z.number().int().min(0).optional(),
         resistanceDexterite: z.number().int().min(0).optional(),
         resistanceAgilite: z.number().int().min(0).optional(),
+        imageUrl: z.string().nullable().optional(),
+        spriteScale: z.number().min(0.1).optional(),
+        spriteOffsetX: z.number().optional(),
+        spriteOffsetY: z.number().optional(),
       });
       const data = updateMonstreSchema.parse(req.body);
       const monstre = await monstreService.update(id, data);
@@ -507,6 +515,10 @@ export class MapController {
         estExitY: z.number().int().min(0).nullable().optional(),
         ouestExitX: z.number().int().min(0).nullable().optional(),
         ouestExitY: z.number().int().min(0).nullable().optional(),
+        nordExitImageUrl: z.string().nullable().optional(),
+        sudExitImageUrl: z.string().nullable().optional(),
+        estExitImageUrl: z.string().nullable().optional(),
+        ouestExitImageUrl: z.string().nullable().optional(),
       });
       const data = updateMapSchema.parse(req.body);
       const map = await mapService.update(id, data);

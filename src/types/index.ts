@@ -166,6 +166,10 @@ export interface CombatEntityState {
   resistanceAgilite?: number;
   bonusDommages?: number;
   bonusSoins?: number;
+  imageUrl?: string | null;
+  spriteScale?: number;
+  spriteOffsetX?: number;
+  spriteOffsetY?: number;
   sorts?: CombatSpellState[];
 }
 
@@ -340,6 +344,7 @@ export interface CreateCharacterRequest {
   nom: string;
   joueurId: number;
   raceId: number;
+  sexe?: string;
   force?: number;
   intelligence?: number;
   dexterite?: number;

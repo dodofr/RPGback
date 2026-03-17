@@ -29,9 +29,6 @@ router.post('/:id/enter-map', (req, res, next) => groupController.enterMap(req, 
 // POST /api/groups/:id/use-connection - Use a connection to travel to another map
 router.post('/:id/use-connection', (req, res, next) => groupController.useConnection(req, res, next));
 
-// POST /api/groups/:id/leave-map - Leave current map
-router.post('/:id/leave-map', (req, res, next) => groupController.leaveMap(req, res, next));
-
 // POST /api/groups/:id/move-direction - Move to another map by direction
 router.post('/:id/move-direction', (req, res, next) => groupController.moveByDirection(req, res, next));
 

@@ -8,6 +8,7 @@ const createCharacterSchema = z.object({
   nom: z.string().min(2).max(50),
   joueurId: z.number().int().positive(),
   raceId: z.number().int().positive(),
+  sexe: z.enum(['HOMME', 'FEMME']).optional(),
   force: z.number().int().min(1).max(100).optional(),
   intelligence: z.number().int().min(1).max(100).optional(),
   dexterite: z.number().int().min(1).max(100).optional(),
@@ -18,6 +19,7 @@ const createCharacterSchema = z.object({
 
 const updateCharacterSchema = z.object({
   nom: z.string().min(2).max(50).optional(),
+  sexe: z.enum(['HOMME', 'FEMME']).optional(),
   force: z.number().int().min(1).max(100).optional(),
   intelligence: z.number().int().min(1).max(100).optional(),
   dexterite: z.number().int().min(1).max(100).optional(),

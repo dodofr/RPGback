@@ -139,6 +139,10 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
       positionY: z.number().int().min(0).optional(),
       description: z.string().nullable().optional(),
       estMarchand: z.boolean().optional(),
+      imageUrl: z.string().nullable().optional(),
+      spriteScale: z.number().optional(),
+      spriteOffsetX: z.number().optional(),
+      spriteOffsetY: z.number().optional(),
     });
     const data = schema.parse(req.body);
     const existing = await pnjService.getById(id);

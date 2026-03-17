@@ -84,6 +84,10 @@ export class MapService {
     estExitY: number | null;
     ouestExitX: number | null;
     ouestExitY: number | null;
+    nordExitImageUrl: string | null;
+    sudExitImageUrl: string | null;
+    estExitImageUrl: string | null;
+    ouestExitImageUrl: string | null;
   }>) {
     return prisma.map.update({
       where: { id },
@@ -115,6 +119,7 @@ export class MapService {
     positionX: number;
     positionY: number;
     nom: string;
+    imageUrl?: string | null;
   }) {
     return prisma.mapConnection.create({
       data: {
@@ -123,6 +128,7 @@ export class MapService {
         positionX: data.positionX,
         positionY: data.positionY,
         nom: data.nom,
+        imageUrl: data.imageUrl ?? null,
       },
     });
   }

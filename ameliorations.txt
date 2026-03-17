@@ -2,10 +2,22 @@ Faire tout les test front pour voir les comportement
 ameliorer les pages 
 passer au graphisme
 
-Fait un plan.
-1. il faudrait que je puisse ajouter l'image d'un personnage dans l'admin un peu comme les image de map. Le personnage pourra dépassé de sa case mais il ne compte que pour la case sur laquel il est. On ne change pas le comportement
-Sur le meme principe je veux pareil pour les pnj / monstre / portail / cases de direction.
-je pense qu'on peut réutiliser la fonction upload.route.ts que tu as fais
-2. je ne devrais pas avoir de bouton retour au camp et quiter map. les personnage creer devrait arriver directement sur le village de piedmont et ensuite faire leurs aventure. il faudra verifier les personnage déja creer.
-il faudra enlever la page ou on fait le choix de la map d'arriver. Un personnage ne sort plus du jeu, il est forcement sur une map. 
-faire une analyse des .md 
+preparer les packs pour les assets
+Les 7 animations (dans l'ordre des lignes)
+
+  ┌───────┬──────────────────┬────────┬────────────────────────────────────────────────────────────────────────┐
+  │ Ligne │    Animation     │ Frames │                              Description                               │
+  ├───────┼──────────────────┼────────┼────────────────────────────────────────────────────────────────────────┤
+  │ 0     │ Marche droite    │ 4      │ Personnage marchant vers la droite                                     │
+  ├───────┼──────────────────┼────────┼────────────────────────────────────────────────────────────────────────┤
+  │ 1     │ Marche gauche    │ 4      │ Personnage marchant vers la gauche                                     │
+  ├───────┼──────────────────┼────────┼────────────────────────────────────────────────────────────────────────┤
+  │ 2     │ Marche bas       │ 4      │ Personnage marchant vers la caméra (face)                              │
+  ├───────┼──────────────────┼────────┼────────────────────────────────────────────────────────────────────────┤
+  │ 3     │ Marche haut      │ 4      │ Personnage marchant de dos                                             │
+  ├───────┼──────────────────┼────────┼────────────────────────────────────────────────────────────────────────┤
+  │ 4     │ Idle             │ 1      │ Personnage debout au repos, face caméra (1 frame suffit)               │
+  ├───────┼──────────────────┼────────┼────────────────────────────────────────────────────────────────────────┤
+  │ 5     │ Attaque + touché │ 3 + 1  │ 3 frames d'attaque, puis 1 frame de réaction au coup (éclairs, recul…) │
+  ├───────┼──────────────────┼────────┼────────────────────────────────────────────────────────────────────────┤
+  │ 6     │ Mort             │ 3      │ Personnage qui tombe au sol   
