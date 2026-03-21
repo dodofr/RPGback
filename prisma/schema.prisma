@@ -35,6 +35,7 @@ enum ZoneType {
   CARRE
   ANNEAU
   CONE_INVERSE
+  T_FORME
 }
 
 enum SortType {
@@ -116,6 +117,17 @@ enum Sexe {
   FEMME
 }
 
+enum MetierType {
+  RECOLTE
+  CRAFT
+}
+
+enum EnclosType {
+  ENTRAINEMENT
+  BONHEUR
+  RENCONTRE
+}
+
 // ==================== TABLES STATIQUES ====================
 
 model Race {
@@ -129,11 +141,16 @@ model Race {
   bonusChance       Int          @default(0)
   imageUrlHomme     String?
   imageUrlFemme     String?
-  spriteScale       Float        @default(1.0)
-  spriteOffsetX     Float        @default(0)
-  spriteOffsetY     Float        @default(0)
-  personnages       Personnage[]
-  sorts             Sort[]
+  spriteScale        Float        @default(1.0)
+  spriteOffsetX      Float        @default(0)
+  spriteOffsetY      Float        @default(0)
+  spriteScaleFemme   Float        @default(1.0)
+  spriteOffsetXFemme Float        @default(0)
+  spriteOffsetYFemme Float        @default(0)
+  spriteConfigHomme  Json?
+  spriteConfigFemme  Json?
+  personnages        Personnage[]
+  sorts              Sort[]
 }
 
 model Zone {
@@ -367,6 +384,8 @@ model Map {
   spawns          MapSpawn[]
   pnjs            PNJ[]
   combats         Combat[]        @relation("CombatMap")
+  mapRessources        MapRessource[]
+  enclosAssignments    FamilierEnclosAssignment[]
 }
 
 model MapConnection {
@@ -390,6 +409,7 @@ model MonstreTemplate {
   spriteScale    Float                @default(1.0)
   spriteOffsetX  Float                @default(0)
   spriteOffsetY  Float                @default(0)
+  spriteConfig   Json?
   force          Int
   intelligence   Int
   dexterite      Int
@@ -513,6 +533,10 @@ model Personnage {
   quetes                 QuetePersonnage[]
   combatsSolo            Combat[]           @relation("CombatSolo")
   donjonRunSolo          DonjonRun?         @relation("DonjonRunSolo")
+  metiers                PersonnageMetier[]
+  familiers              Familier[]
+  familierEquipeId       Int?               @unique
+  familierEquipe         Familier?          @relation("FamilierEquipe", fields: [familierEquipeId], references: [id])
 }
 
 model PersonnageSort {
@@ -760,6 +784,7 @@ model Ressource {
   marchandLignes   MarchandLigne[]
   queteRecompenses QueteRecompense[]
   queteEtapes      QueteEtape[]          @relation("QueteEtapeRessource")
+  noeudRessources  NoeudRessource[]
 }
 
 model InventaireRessource {
@@ -779,24 +804,30 @@ model MonstreDrop {
   monstre       MonstreTemplate  @relation(fields: [monstreId], references: [id], onDelete: Cascade)
   ressourceId   Int?
   ressource     Ressource?       @relation(fields: [ressourceId], references: [id])
-  equipementId  Int?
-  equipement    Equipement?      @relation(fields: [equipementId], references: [id])
-  tauxDrop      Float            @default(0.3)
-  quantiteMin   Int              @default(1)
-  quantiteMax   Int              @default(1)
+  equipementId     Int?
+  equipement       Equipement?      @relation(fields: [equipementId], references: [id])
+  familierRaceId   Int?
+  familierRace     FamilierRace?    @relation(fields: [familierRaceId], references: [id])
+  tauxDrop         Float            @default(0.3)
+  quantiteMin      Int              @default(1)
+  quantiteMax      Int              @default(1)
 
   @@index([monstreId])
 }
 
 model Recette {
-  id            Int                @id @default(autoincrement())
-  nom           String             @unique
-  description   String?
-  equipementId  Int
-  equipement    Equipement         @relation(fields: [equipementId], references: [id])
-  niveauMinimum Int                @default(1)
-  coutOr        Int                @default(0)
-  ingredients   RecetteIngredient[]
+  id                 Int                @id @default(autoincrement())
+  nom                String             @unique
+  description        String?
+  equipementId       Int
+  equipement         Equipement         @relation(fields: [equipementId], references: [id])
+  niveauMinimum      Int                @default(1)
+  coutOr             Int                @default(0)
+  metierId           Int?
+  metier             Metier?            @relation(fields: [metierId], references: [id])
+  niveauMetierRequis Int                @default(1)
+  xpCraft            Int                @default(10)
+  ingredients        RecetteIngredient[]
 }
 
 model RecetteIngredient {
@@ -856,11 +887,13 @@ model PNJ {
   map         Map             @relation(fields: [mapId], references: [id])
   positionX   Int
   positionY   Int
-  estMarchand Boolean         @default(true)
+  estMarchand       Boolean         @default(true)
+  estGardienEnclos  Boolean         @default(false)
   lignes      MarchandLigne[]
   dialogues   PNJDialogue[]
   quetesDepart Quete[]         @relation("QuetePnjDepart")
   quetesEtapes QueteEtape[]   @relation("QueteEtapePnj")
+  metiers      PnjMetier[]
 }
 
 model PNJDialogue {
@@ -883,10 +916,12 @@ model MarchandLigne {
   pnj          PNJ        @relation(fields: [pnjId], references: [id], onDelete: Cascade)
   equipementId Int?
   equipement   Equipement? @relation(fields: [equipementId], references: [id])
-  ressourceId  Int?
-  ressource    Ressource?  @relation(fields: [ressourceId], references: [id])
-  prixMarchand Int?
-  prixRachat   Int?
+  ressourceId    Int?
+  ressource      Ressource?    @relation(fields: [ressourceId], references: [id])
+  familierRaceId Int?
+  familierRace   FamilierRace? @relation(fields: [familierRaceId], references: [id])
+  prixMarchand   Int?
+  prixRachat     Int?
 }
 
 // ==================== QUÊTES ====================
@@ -1056,4 +1091,194 @@ model DonjonRun {
 
   @@index([groupeId])
   @@index([personnageId])
+}
+
+// ==================== MÉTIERS DE RÉCOLTE ====================
+
+model Metier {
+  id          Int               @id @default(autoincrement())
+  nom         String            @unique
+  description String?
+  type        MetierType        @default(RECOLTE)
+  personnages PersonnageMetier[]
+  pnjs        PnjMetier[]
+  noeuds      NoeudRecolte[]
+  recettes    Recette[]
+}
+
+model PersonnageMetier {
+  id           Int        @id @default(autoincrement())
+  personnageId Int
+  personnage   Personnage @relation(fields: [personnageId], references: [id], onDelete: Cascade)
+  metierId     Int
+  metier       Metier     @relation(fields: [metierId], references: [id])
+  niveau       Int        @default(1)
+  xp           Int        @default(0)
+
+  @@unique([personnageId, metierId])
+  @@index([personnageId])
+}
+
+model PnjMetier {
+  id       Int    @id @default(autoincrement())
+  pnjId    Int
+  pnj      PNJ    @relation(fields: [pnjId], references: [id], onDelete: Cascade)
+  metierId Int
+  metier   Metier @relation(fields: [metierId], references: [id])
+
+  @@unique([pnjId, metierId])
+}
+
+model NoeudRecolte {
+  id             Int              @id @default(autoincrement())
+  nom            String
+  imageUrl       String?
+  metierId       Int
+  metier         Metier           @relation(fields: [metierId], references: [id])
+  niveauMinAcces Int              @default(1)
+  xpRecolte      Int              @default(10)
+  ressources     NoeudRessource[]
+  mapRessources  MapRessource[]
+}
+
+model NoeudRessource {
+  id            Int          @id @default(autoincrement())
+  noeudId       Int
+  noeud         NoeudRecolte @relation(fields: [noeudId], references: [id], onDelete: Cascade)
+  niveauRequis  Int          @default(1)
+  ressourceId   Int
+  ressource     Ressource    @relation(fields: [ressourceId], references: [id])
+  quantiteMin   Int          @default(1)
+  quantiteMax   Int          @default(1)
+  tauxDrop      Float        @default(1.0)
+
+  @@index([noeudId])
+}
+
+model MapRessource {
+  id             Int          @id @default(autoincrement())
+  mapId          Int
+  map            Map          @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  caseX          Int
+  caseY          Int
+  noeudId        Int
+  noeud          NoeudRecolte @relation(fields: [noeudId], references: [id])
+  respawnMinutes Int          @default(10)
+  lastHarvestAt  DateTime?
+
+  @@unique([mapId, caseX, caseY])
+  @@index([mapId])
+}
+
+// ==================== FAMILIERS ====================
+
+model FamilierFamille {
+  id     Int           @id @default(autoincrement())
+  nom    String        @unique
+  races  FamilierRace[]
+}
+
+model FamilierRace {
+  id            Int              @id @default(autoincrement())
+  nom           String
+  familleId     Int
+  famille       FamilierFamille  @relation(fields: [familleId], references: [id])
+  imageUrl      String?
+  spriteScale   Float            @default(1.0)
+  spriteOffsetX Float            @default(0)
+  spriteOffsetY Float            @default(0)
+  generation    Int              @default(1)
+  // Stats de base niveau 1
+  baseForce          Int @default(0)
+  baseIntelligence   Int @default(0)
+  baseDexterite      Int @default(0)
+  baseAgilite        Int @default(0)
+  baseVie            Int @default(0)
+  baseChance         Int @default(0)
+  basePA             Int @default(0)
+  basePM             Int @default(0)
+  basePO             Int @default(0)
+  baseCritique       Int @default(0)
+  baseDommages       Int @default(0)
+  baseSoins          Int @default(0)
+  // Croissance par niveau
+  croissanceForce        Float @default(0.0)
+  croissanceIntelligence Float @default(0.0)
+  croissanceDexterite    Float @default(0.0)
+  croissanceAgilite      Float @default(0.0)
+  croissanceVie          Float @default(0.0)
+  croissanceChance       Float @default(0.0)
+  croissancePA           Float @default(0.0)
+  croissancePM           Float @default(0.0)
+  croissancePO           Float @default(0.0)
+  croissanceCritique     Float @default(0.0)
+  croissanceDommages     Float @default(0.0)
+  croissanceSoins        Float @default(0.0)
+
+  familiers      Familier[]
+  croisementsA   FamilierCroisement[] @relation("RaceA")
+  croisementsB   FamilierCroisement[] @relation("RaceB")
+  croisementsEnfant FamilierCroisement[] @relation("RaceEnfant")
+  drops          MonstreDrop[]
+  marchandLignes MarchandLigne[]
+}
+
+model FamilierCroisement {
+  id            Int          @id @default(autoincrement())
+  raceAId       Int
+  raceA         FamilierRace @relation("RaceA", fields: [raceAId], references: [id])
+  raceBId       Int
+  raceB         FamilierRace @relation("RaceB", fields: [raceBId], references: [id])
+  raceEnfantId  Int
+  raceEnfant    FamilierRace @relation("RaceEnfant", fields: [raceEnfantId], references: [id])
+  probabilite   Float        @default(1.0)
+
+  @@unique([raceAId, raceBId, raceEnfantId])
+}
+
+model Familier {
+  id           Int                      @id @default(autoincrement())
+  nom          String?
+  raceId       Int
+  race         FamilierRace             @relation(fields: [raceId], references: [id])
+  personnageId Int
+  personnage   Personnage               @relation(fields: [personnageId], references: [id], onDelete: Cascade)
+  niveau       Int                      @default(1)
+  xp           Int                      @default(0)
+  bonheur      Int                      @default(0)
+  statForce       Int
+  statIntelligence Int
+  statDexterite   Int
+  statAgilite     Int
+  statVie         Int
+  statChance      Int
+  statPA          Int
+  statPM          Int
+  statPO          Int
+  statCritique    Int
+  statDommages    Int
+  statSoins       Int
+  estEquipe    Boolean                  @default(false)
+  parentAId    Int?
+  parentBId    Int?
+  createdAt    DateTime                 @default(now())
+  enclosAssignment FamilierEnclosAssignment?
+  personnageEquipe Personnage?          @relation("FamilierEquipe")
+
+  @@index([personnageId])
+}
+
+model FamilierEnclosAssignment {
+  id          Int        @id @default(autoincrement())
+  familierId  Int        @unique
+  familier    Familier   @relation(fields: [familierId], references: [id], onDelete: Cascade)
+  enclosType  EnclosType
+  mapId       Int
+  map         Map        @relation(fields: [mapId], references: [id])
+  debutAt     DateTime   @default(now())
+  dureeMinutes Int
+  estTermine  Boolean    @default(false)
+  partenaireAssignmentId Int? @unique
+  partenaireAssignment   FamilierEnclosAssignment? @relation("Partenaires", fields: [partenaireAssignmentId], references: [id])
+  partenaireDeThis       FamilierEnclosAssignment? @relation("Partenaires")
 }

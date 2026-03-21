@@ -1,14 +1,17 @@
 import prisma from '../config/database';
 import { inventoryService } from './inventory.service';
+import { familierService } from './familier.service';
 
 const PNJ_INCLUDE = {
   lignes: {
     include: {
       equipement: { select: { id: true, nom: true, slot: true, poids: true } },
       ressource: { select: { id: true, nom: true, poids: true } },
+      familierRace: { select: { id: true, nom: true, imageUrl: true } },
     },
   },
   dialogues: { orderBy: { ordre: 'asc' as const } },
+  metiers: { include: { metier: true } },
 };
 
 export class PNJService {
@@ -49,18 +52,20 @@ export class PNJService {
     return prisma.pNJ.delete({ where: { id } });
   }
 
-  async addLigne(pnjId: number, data: { equipementId?: number | null; ressourceId?: number | null; prixMarchand?: number | null; prixRachat?: number | null }) {
-    if (!data.equipementId && !data.ressourceId) {
-      throw new Error('equipementId ou ressourceId requis');
+  async addLigne(pnjId: number, data: { equipementId?: number | null; ressourceId?: number | null; familierRaceId?: number | null; prixMarchand?: number | null; prixRachat?: number | null }) {
+    const filled = [data.equipementId, data.ressourceId, data.familierRaceId].filter(Boolean).length;
+    if (filled === 0) {
+      throw new Error('equipementId, ressourceId ou familierRaceId requis');
     }
-    if (data.equipementId && data.ressourceId) {
-      throw new Error('equipementId et ressourceId ne peuvent pas être définis ensemble');
+    if (filled > 1) {
+      throw new Error('Un seul parmi equipementId, ressourceId, familierRaceId à la fois');
     }
     return prisma.marchandLigne.create({
       data: { pnjId, ...data },
       include: {
         equipement: { select: { id: true, nom: true, slot: true } },
         ressource: { select: { id: true, nom: true } },
+        familierRace: { select: { id: true, nom: true } },
       },
     });
   }
@@ -72,6 +77,7 @@ export class PNJService {
       include: {
         equipement: { select: { id: true, nom: true, slot: true } },
         ressource: { select: { id: true, nom: true } },
+        familierRace: { select: { id: true, nom: true } },
       },
     });
   }
@@ -101,6 +107,7 @@ export class PNJService {
       include: {
         equipement: true,
         ressource: true,
+        familierRace: true,
       },
     });
     if (!ligne || ligne.pnjId !== pnjId) throw new Error('Ligne not found');
@@ -112,7 +119,12 @@ export class PNJService {
     const coutTotal = ligne.prixMarchand * quantite;
     if (personnage.or < coutTotal) throw new Error('Or insuffisant');
 
-    if (ligne.equipementId && ligne.equipement) {
+    if (ligne.familierRaceId && ligne.familierRace) {
+      // Acheter un familier
+      const familier = await familierService.createFamilier(personnageId, ligne.familierRaceId);
+      await prisma.personnage.update({ where: { id: personnageId }, data: { or: { decrement: ligne.prixMarchand } } });
+      return { familier, orRestant: personnage.or - ligne.prixMarchand };
+    } else if (ligne.equipementId && ligne.equipement) {
       // Acheter un équipement (1 seul à la fois)
       const item = await inventoryService.addItem(personnageId, ligne.equipementId);
       await prisma.personnage.update({ where: { id: personnageId }, data: { or: { decrement: ligne.prixMarchand } } });

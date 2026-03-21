@@ -7,10 +7,27 @@ import { z } from 'zod';
 // ============================================================
 
 const StatTypeEnum = z.enum(['FORCE', 'INTELLIGENCE', 'DEXTERITE', 'AGILITE', 'VIE', 'CHANCE', 'PA', 'PM', 'PO', 'DOMMAGES', 'SOINS']);
+
+// Sprite config schema
+const animDefSchema = z.object({
+  row: z.number().int().min(0),
+  frames: z.number().int().min(1),
+  startFrame: z.number().int().min(0).optional(),
+  fps: z.number().min(0).optional(),
+  freeze: z.boolean().optional(),
+});
+const spriteConfigSchema = z.object({
+  sheet: z.string(),
+  frameW: z.number().int().min(1),
+  frameH: z.number().int().min(1),
+  cols: z.number().int().min(1),
+  rows: z.number().int().min(1),
+  animations: z.record(animDefSchema),
+}).nullable().optional();
 const SortTypeEnum = z.enum(['ARME', 'SORT']);
 const SlotTypeEnum = z.enum(['ARME', 'COIFFE', 'AMULETTE', 'BOUCLIER', 'HAUT', 'BAS', 'ANNEAU1', 'ANNEAU2', 'FAMILIER']);
 const EffetTypeEnum = z.enum(['BUFF', 'DEBUFF', 'DISPEL', 'POUSSEE', 'ATTIRANCE', 'POISON', 'BOUCLIER', 'RESISTANCE']);
-const ZoneTypeEnum = z.enum(['CASE', 'CROIX', 'LIGNE', 'CONE', 'CERCLE', 'LIGNE_PERPENDICULAIRE', 'DIAGONALE', 'CARRE', 'ANNEAU', 'CONE_INVERSE']);
+const ZoneTypeEnum = z.enum(['CASE', 'CROIX', 'LIGNE', 'CONE', 'CERCLE', 'LIGNE_PERPENDICULAIRE', 'DIAGONALE', 'CARRE', 'ANNEAU', 'CONE_INVERSE', 'T_FORME']);
 
 // Race schemas
 const createRaceSchema = z.object({
@@ -26,6 +43,11 @@ const createRaceSchema = z.object({
   spriteScale: z.number().min(0.1).max(5).optional(),
   spriteOffsetX: z.number().min(-100).max(100).optional(),
   spriteOffsetY: z.number().min(-100).max(100).optional(),
+  spriteScaleFemme: z.number().min(0.1).max(5).optional(),
+  spriteOffsetXFemme: z.number().min(-100).max(100).optional(),
+  spriteOffsetYFemme: z.number().min(-100).max(100).optional(),
+  spriteConfigHomme: spriteConfigSchema,
+  spriteConfigFemme: spriteConfigSchema,
 });
 
 const updateRaceSchema = createRaceSchema.partial();
@@ -202,7 +224,7 @@ racesRouter.post('/', async (req: Request, res: Response, next: NextFunction) =>
     const data = createRaceSchema.parse(req.body);
 
     const race = await prisma.race.create({
-      data,
+      data: data as any,
       include: {
         sorts: {
           include: {
@@ -241,7 +263,7 @@ racesRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction
 
     const race = await prisma.race.update({
       where: { id },
-      data,
+      data: data as any,
       include: {
         sorts: {
           include: {
@@ -1146,7 +1168,7 @@ const recipesRouter = Router();
 recipesRouter.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const recipes = await prisma.recette.findMany({
-      include: { equipement: true, ingredients: { include: { ressource: true } } },
+      include: { equipement: true, ingredients: { include: { ressource: true } }, metier: { select: { id: true, nom: true } } },
       orderBy: { id: 'asc' },
     });
     res.json(recipes);
@@ -1159,7 +1181,7 @@ recipesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction
     if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
     const recipe = await prisma.recette.findUnique({
       where: { id },
-      include: { equipement: true, ingredients: { include: { ressource: true } } },
+      include: { equipement: true, ingredients: { include: { ressource: true } }, metier: { select: { id: true, nom: true } } },
     });
     if (!recipe) { res.status(404).json({ error: 'Recipe not found' }); return; }
     res.json(recipe);
@@ -1174,9 +1196,12 @@ recipesRouter.post('/', async (req: Request, res: Response, next: NextFunction) 
       equipementId: z.number().int().positive(),
       niveauMinimum: z.number().int().min(1).default(1),
       coutOr: z.number().int().min(0).default(0),
+      metierId: z.number().int().positive().nullable().optional(),
+      niveauMetierRequis: z.number().int().min(1).default(1),
+      xpCraft: z.number().int().min(0).default(10),
     });
     const data = schema.parse(req.body);
-    const recipe = await prisma.recette.create({ data, include: { equipement: true } });
+    const recipe = await prisma.recette.create({ data, include: { equipement: true, metier: { select: { id: true, nom: true } } } });
     res.status(201).json(recipe);
   } catch (error) {
     if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
@@ -1194,6 +1219,9 @@ recipesRouter.patch('/:id', async (req: Request, res: Response, next: NextFuncti
       equipementId: z.number().int().positive().optional(),
       niveauMinimum: z.number().int().min(1).optional(),
       coutOr: z.number().int().min(0).optional(),
+      metierId: z.number().int().positive().nullable().optional(),
+      niveauMetierRequis: z.number().int().min(1).optional(),
+      xpCraft: z.number().int().min(0).optional(),
     });
     const data = schema.parse(req.body);
     const existing = await prisma.recette.findUnique({ where: { id } });

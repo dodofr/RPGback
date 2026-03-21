@@ -4,6 +4,7 @@ import { characterController } from './character.controller';
 import { craftController } from '../craft/craft.controller';
 import { questService } from '../../services/quest.service';
 import { characterNavigationService } from '../../services/character-navigation.service';
+import { metierService } from '../../services/metier.service';
 
 const router = Router();
 
@@ -45,6 +46,32 @@ router.get('/:id/quetes', async (req, res, next) => {
     const quetes = await questService.getActiveQuests(id);
     res.json(quetes);
   } catch (error) { next(error); }
+});
+
+// GET /api/characters/:id/metiers - Get character's professions
+router.get('/:id/metiers', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    res.json(await metierService.getPersonnageMetiers(id));
+  } catch (error) { next(error); }
+});
+
+// POST /api/characters/:id/harvest/:mapRessourceId - Harvest a resource node
+router.post('/:id/harvest/:mapRessourceId', async (req, res, next) => {
+  try {
+    const personnageId = parseInt(req.params.id, 10);
+    const mapRessourceId = parseInt(req.params.mapRessourceId, 10);
+    if (isNaN(personnageId) || isNaN(mapRessourceId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const result = await metierService.harvest(personnageId, mapRessourceId);
+    res.json(result);
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === 'Resource node not found') { res.status(404).json({ error: error.message }); return; }
+      res.status(400).json({ error: error.message }); return;
+    }
+    next(error);
+  }
 });
 
 // ==================== Navigation solo ====================

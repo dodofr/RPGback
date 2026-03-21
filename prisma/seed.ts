@@ -1393,41 +1393,51 @@ async function main() {
 
   // ==================== RECETTES (6) ====================
   // Casque de fer (equip 3): 3x Minerai + 2x Cuir, 10 or, lvl 1
+  // Métiers de craft (upsert par nom, avant les recettes pour avoir les IDs)
+  const forgeronMetier = await prisma.metier.upsert({
+    where: { nom: 'Forgeron' }, update: { type: 'CRAFT' },
+    create: { nom: 'Forgeron', description: 'Forgez des armes et armures en métal.', type: 'CRAFT' },
+  });
+  const tailleurMetier = await prisma.metier.upsert({
+    where: { nom: 'Tailleur' }, update: { type: 'CRAFT' },
+    create: { nom: 'Tailleur', description: 'Confectionnez armures légères, amulettes et bijoux.', type: 'CRAFT' },
+  });
+
   const recetteCasque = await prisma.recette.upsert({
-    where: { nom: 'Forger un Casque de fer' }, update: {},
-    create: { nom: 'Forger un Casque de fer', description: 'Forge un casque solide', equipementId: 3, niveauMinimum: 1, coutOr: 10 },
+    where: { nom: 'Forger un Casque de fer' }, update: { metierId: forgeronMetier.id, niveauMetierRequis: 1, xpCraft: 15 },
+    create: { nom: 'Forger un Casque de fer', description: 'Forge un casque solide', equipementId: 3, niveauMinimum: 1, coutOr: 10, metierId: forgeronMetier.id, niveauMetierRequis: 1, xpCraft: 15 },
   });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteCasque.id, ressourceId: mineraiFer.id } }, update: {}, create: { recetteId: recetteCasque.id, ressourceId: mineraiFer.id, quantite: 3 } });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteCasque.id, ressourceId: cuir.id } }, update: {}, create: { recetteId: recetteCasque.id, ressourceId: cuir.id, quantite: 2 } });
 
   // Plastron de cuir (equip 6): 5x Cuir + 2x Laine, 15 or, lvl 2
   const recettePlastron = await prisma.recette.upsert({
-    where: { nom: 'Coudre un Plastron de cuir' }, update: {},
-    create: { nom: 'Coudre un Plastron de cuir', description: 'Assemble un plastron résistant', equipementId: 6, niveauMinimum: 2, coutOr: 15 },
+    where: { nom: 'Coudre un Plastron de cuir' }, update: { metierId: tailleurMetier.id, niveauMetierRequis: 1, xpCraft: 20 },
+    create: { nom: 'Coudre un Plastron de cuir', description: 'Assemble un plastron résistant', equipementId: 6, niveauMinimum: 2, coutOr: 15, metierId: tailleurMetier.id, niveauMetierRequis: 1, xpCraft: 20 },
   });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recettePlastron.id, ressourceId: cuir.id } }, update: {}, create: { recetteId: recettePlastron.id, ressourceId: cuir.id, quantite: 5 } });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recettePlastron.id, ressourceId: laine.id } }, update: {}, create: { recetteId: recettePlastron.id, ressourceId: laine.id, quantite: 2 } });
 
   // Bouclier en bois (equip 5): 4x Bois + 2x Minerai, 12 or, lvl 1
   const recetteBouclier = await prisma.recette.upsert({
-    where: { nom: 'Assembler un Bouclier en bois' }, update: {},
-    create: { nom: 'Assembler un Bouclier en bois', description: 'Fabrique un bouclier robuste', equipementId: 5, niveauMinimum: 1, coutOr: 12 },
+    where: { nom: 'Assembler un Bouclier en bois' }, update: { metierId: forgeronMetier.id, niveauMetierRequis: 1, xpCraft: 15 },
+    create: { nom: 'Assembler un Bouclier en bois', description: 'Fabrique un bouclier robuste', equipementId: 5, niveauMinimum: 1, coutOr: 12, metierId: forgeronMetier.id, niveauMetierRequis: 1, xpCraft: 15 },
   });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteBouclier.id, ressourceId: bois.id } }, update: {}, create: { recetteId: recetteBouclier.id, ressourceId: bois.id, quantite: 4 } });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteBouclier.id, ressourceId: mineraiFer.id } }, update: {}, create: { recetteId: recetteBouclier.id, ressourceId: mineraiFer.id, quantite: 2 } });
 
   // Amulette de vie (equip 4): 2x Herbe + 1x Pierre, 20 or, lvl 3
   const recetteAmulette = await prisma.recette.upsert({
-    where: { nom: 'Enchanter une Amulette de vie' }, update: {},
-    create: { nom: 'Enchanter une Amulette de vie', description: 'Crée une amulette protectrice', equipementId: 4, niveauMinimum: 3, coutOr: 20 },
+    where: { nom: 'Enchanter une Amulette de vie' }, update: { metierId: tailleurMetier.id, niveauMetierRequis: 3, xpCraft: 25 },
+    create: { nom: 'Enchanter une Amulette de vie', description: 'Crée une amulette protectrice', equipementId: 4, niveauMinimum: 3, coutOr: 20, metierId: tailleurMetier.id, niveauMetierRequis: 3, xpCraft: 25 },
   });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteAmulette.id, ressourceId: herbeMedicinale.id } }, update: {}, create: { recetteId: recetteAmulette.id, ressourceId: herbeMedicinale.id, quantite: 2 } });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteAmulette.id, ressourceId: pierrePrecieuse.id } }, update: {}, create: { recetteId: recetteAmulette.id, ressourceId: pierrePrecieuse.id, quantite: 1 } });
 
   // Anneau de force (equip 8): 3x Os + 1x Pierre + 2x Minerai, 25 or, lvl 3
   const recetteAnneauForce = await prisma.recette.upsert({
-    where: { nom: 'Forger un Anneau de force' }, update: {},
-    create: { nom: 'Forger un Anneau de force', description: 'Forge un anneau puissant', equipementId: 8, niveauMinimum: 3, coutOr: 25 },
+    where: { nom: 'Forger un Anneau de force' }, update: { metierId: forgeronMetier.id, niveauMetierRequis: 3, xpCraft: 20 },
+    create: { nom: 'Forger un Anneau de force', description: 'Forge un anneau puissant', equipementId: 8, niveauMinimum: 3, coutOr: 25, metierId: forgeronMetier.id, niveauMetierRequis: 3, xpCraft: 20 },
   });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteAnneauForce.id, ressourceId: os.id } }, update: {}, create: { recetteId: recetteAnneauForce.id, ressourceId: os.id, quantite: 3 } });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteAnneauForce.id, ressourceId: pierrePrecieuse.id } }, update: {}, create: { recetteId: recetteAnneauForce.id, ressourceId: pierrePrecieuse.id, quantite: 1 } });
@@ -1435,8 +1445,8 @@ async function main() {
 
   // Marteau vampirique (equip 10): 3x Cuir troll + 2x Bois + 2x Minerai, 30 or, lvl 5
   const recetteMarteau = await prisma.recette.upsert({
-    where: { nom: 'Forger un Marteau vampirique' }, update: {},
-    create: { nom: 'Forger un Marteau vampirique', description: 'Forge un marteau drainant la vie', equipementId: 10, niveauMinimum: 5, coutOr: 30 },
+    where: { nom: 'Forger un Marteau vampirique' }, update: { metierId: forgeronMetier.id, niveauMetierRequis: 5, xpCraft: 30 },
+    create: { nom: 'Forger un Marteau vampirique', description: 'Forge un marteau drainant la vie', equipementId: 10, niveauMinimum: 5, coutOr: 30, metierId: forgeronMetier.id, niveauMetierRequis: 5, xpCraft: 30 },
   });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteMarteau.id, ressourceId: cuirTroll.id } }, update: {}, create: { recetteId: recetteMarteau.id, ressourceId: cuirTroll.id, quantite: 3 } });
   await prisma.recetteIngredient.upsert({ where: { recetteId_ressourceId: { recetteId: recetteMarteau.id, ressourceId: bois.id } }, update: {}, create: { recetteId: recetteMarteau.id, ressourceId: bois.id, quantite: 2 } });
@@ -1460,23 +1470,43 @@ async function main() {
 
   console.log('Created 3 passive skills');
 
-  // ==================== PNJ (2) ====================
+  // ==================== PNJ (3) ====================
   const chefVillage = await prisma.pNJ.upsert({
-    where: { id: 1 }, update: { nom: 'Chef du village', mapId: villageDepart.id, positionX: 7, positionY: 9, estMarchand: true },
-    create: { nom: 'Chef du village', description: 'Le chef du Village de Piedmont.', mapId: villageDepart.id, positionX: 7, positionY: 9, estMarchand: true },
+    where: { id: 1 }, update: { nom: 'Chef du village', mapId: villageDepart.id, positionX: 7, positionY: 9, estMarchand: true, estGardienEnclos: false },
+    create: { nom: 'Chef du village', description: 'Le chef du Village de Piedmont.', mapId: villageDepart.id, positionX: 7, positionY: 9, estMarchand: true, estGardienEnclos: false },
   });
   const gardeVillage = await prisma.pNJ.upsert({
-    where: { id: 2 }, update: { nom: 'Garde du village', mapId: villageDepart.id, positionX: 3, positionY: 9, estMarchand: false },
-    create: { nom: 'Garde du village', description: 'Un garde qui surveille les environs.', mapId: villageDepart.id, positionX: 3, positionY: 9, estMarchand: false },
+    where: { id: 2 }, update: { nom: 'Garde du village', mapId: villageDepart.id, positionX: 3, positionY: 9, estMarchand: false, estGardienEnclos: false },
+    create: { nom: 'Garde du village', description: 'Un garde qui surveille les environs.', mapId: villageDepart.id, positionX: 3, positionY: 9, estMarchand: false, estGardienEnclos: false },
+  });
+  const forgeronVillage = await prisma.pNJ.upsert({
+    where: { id: 3 }, update: { nom: 'Forgeron', mapId: villageDepart.id, positionX: 10, positionY: 9, estMarchand: false, estGardienEnclos: false },
+    create: { nom: 'Forgeron', description: 'Le forgeron du Village de Piedmont. Il enseigne les métiers de forge et de couture.', mapId: villageDepart.id, positionX: 10, positionY: 9, estMarchand: false, estGardienEnclos: false },
+  });
+  // PNJ id=4 : Gardien de l'enclos — placé ici pour le seed de référence. L'admin peut en créer d'autres sur d'autres maps VILLE.
+  await prisma.pNJ.upsert({
+    where: { id: 4 }, update: { nom: "Gardien de l'enclos", mapId: villageDepart.id, positionX: 13, positionY: 9, estMarchand: false, estGardienEnclos: true },
+    create: { nom: "Gardien de l'enclos", description: "Il s'occupe de l'enclos du village et peut accueillir vos familiers.", mapId: villageDepart.id, positionX: 13, positionY: 9, estMarchand: false, estGardienEnclos: true },
   });
 
-  console.log('Created 2 PNJs');
+  console.log('Created 4 PNJs');
 
   // ==================== DIALOGUES PNJ (génériques) ====================
   await prisma.pNJDialogue.upsert({ where: { id: 1 }, update: { texte: "Bienvenue à Piedmont, aventurier ! J'ai quelques missions pour vous.", queteId: null, etapeOrdre: null }, create: { id: 1, pnjId: chefVillage.id, type: 'ACCUEIL', texte: "Bienvenue à Piedmont, aventurier ! J'ai quelques missions pour vous.", ordre: 0 } });
   await prisma.pNJDialogue.upsert({ where: { id: 2 }, update: { texte: "Tout est calme pour l'instant... Revenez quand vous aurez progressé.", queteId: null, etapeOrdre: null }, create: { id: 2, pnjId: chefVillage.id, type: 'SANS_INTERACTION', texte: "Tout est calme pour l'instant... Revenez quand vous aurez progressé.", ordre: 0 } });
   await prisma.pNJDialogue.upsert({ where: { id: 3 }, update: { texte: "Halte ! Je surveille les environs. Parlez, que voulez-vous ?", queteId: null, etapeOrdre: null }, create: { id: 3, pnjId: gardeVillage.id, type: 'ACCUEIL', texte: "Halte ! Je surveille les environs. Parlez, que voulez-vous ?", ordre: 0 } });
   await prisma.pNJDialogue.upsert({ where: { id: 4 }, update: { texte: "Je n'ai rien à vous dire pour l'instant. Continuez votre chemin.", queteId: null, etapeOrdre: null }, create: { id: 4, pnjId: gardeVillage.id, type: 'SANS_INTERACTION', texte: "Je n'ai rien à vous dire pour l'instant. Continuez votre chemin.", ordre: 0 } });
+  await prisma.pNJDialogue.upsert({ where: { id: 8 }, update: { texte: "Bienvenue à la forge ! Je peux t'apprendre à forger et à coudre. Parle-moi si tu veux apprendre un métier.", queteId: null, etapeOrdre: null }, create: { id: 8, pnjId: forgeronVillage.id, type: 'ACCUEIL', texte: "Bienvenue à la forge ! Je peux t'apprendre à forger et à coudre. Parle-moi si tu veux apprendre un métier.", ordre: 0 } });
+  await prisma.pNJDialogue.upsert({ where: { id: 9 }, update: { texte: "Reviens quand tu voudras progresser dans ton métier.", queteId: null, etapeOrdre: null }, create: { id: 9, pnjId: forgeronVillage.id, type: 'SANS_INTERACTION', texte: "Reviens quand tu voudras progresser dans ton métier.", ordre: 0 } });
+  // PnjMetier : Forgeron enseigne Forgeron + Tailleur
+  await prisma.pnjMetier.upsert({
+    where: { pnjId_metierId: { pnjId: forgeronVillage.id, metierId: forgeronMetier.id } }, update: {},
+    create: { pnjId: forgeronVillage.id, metierId: forgeronMetier.id },
+  });
+  await prisma.pnjMetier.upsert({
+    where: { pnjId_metierId: { pnjId: forgeronVillage.id, metierId: tailleurMetier.id } }, update: {},
+    create: { pnjId: forgeronVillage.id, metierId: tailleurMetier.id },
+  });
   console.log('Created PNJ dialogues (generiques)');
 
   // ==================== QUÊTES ====================
@@ -1529,9 +1559,164 @@ async function main() {
 
   console.log('Created quest prerequisites');
 
+  // ==================== MÉTIERS DE RÉCOLTE ====================
+  // Nouvelles ressources récoltables
+  const ble = await prisma.ressource.upsert({ where: { nom: 'Blé' }, update: {}, create: { nom: 'Blé', description: 'Céréale de base', poids: 1 } });
+  const lin = await prisma.ressource.upsert({ where: { nom: 'Lin' }, update: {}, create: { nom: 'Lin', description: 'Fibre végétale fine', poids: 1 } });
+  const boisQualite = await prisma.ressource.upsert({ where: { nom: 'Bois de qualité' }, update: {}, create: { nom: 'Bois de qualité', description: 'Bois travaillé, robuste et fin', poids: 2 } });
+
+  // Métiers
+  const bucheronMetier = await prisma.metier.upsert({
+    where: { nom: 'Bûcheron' }, update: { type: 'RECOLTE' },
+    create: { nom: 'Bûcheron', description: 'Récoltez du bois dans les forêts.', type: 'RECOLTE' },
+  });
+  const agriculteurMetier = await prisma.metier.upsert({
+    where: { nom: 'Agriculteur' }, update: { type: 'RECOLTE' },
+    create: { nom: 'Agriculteur', description: 'Récoltez des céréales et plantes cultivées.', type: 'RECOLTE' },
+  });
+
+  // Noeuds Bûcheron
+  const noeudChene = await prisma.noeudRecolte.upsert({
+    where: { id: 1 }, update: {},
+    create: { nom: 'Chêne', imageUrl: '/assets/nodes/chene.png', metierId: bucheronMetier.id, niveauMinAcces: 1 },
+  });
+  const noeudFrene = await prisma.noeudRecolte.upsert({
+    where: { id: 2 }, update: {},
+    create: { nom: 'Frêne', imageUrl: '/assets/nodes/frene.png', metierId: bucheronMetier.id, niveauMinAcces: 3 },
+  });
+
+  // Noeuds Agriculteur
+  const noeudBle = await prisma.noeudRecolte.upsert({
+    where: { id: 3 }, update: {},
+    create: { nom: 'Champ de blé', imageUrl: '/assets/nodes/ble.png', metierId: agriculteurMetier.id, niveauMinAcces: 1 },
+  });
+
+  // Table de loot — Chêne
+  // Niv 1 : Bois 1-2 à 100% | Niv 3 : Bois 1-3 à 100% | Niv 5 : Bois de qualité 1-1 à 10%
+  await prisma.noeudRessource.upsert({
+    where: { id: 1 }, update: { tauxDrop: 1.0, quantiteMin: 1, quantiteMax: 2 },
+    create: { noeudId: noeudChene.id, niveauRequis: 1, ressourceId: bois.id, quantiteMin: 1, quantiteMax: 2, tauxDrop: 1.0 },
+  });
+  await prisma.noeudRessource.upsert({
+    where: { id: 2 }, update: { tauxDrop: 1.0, quantiteMin: 1, quantiteMax: 3 },
+    create: { noeudId: noeudChene.id, niveauRequis: 3, ressourceId: bois.id, quantiteMin: 1, quantiteMax: 3, tauxDrop: 1.0 },
+  });
+  await prisma.noeudRessource.upsert({
+    where: { id: 3 }, update: { tauxDrop: 0.1, quantiteMin: 1, quantiteMax: 1 },
+    create: { noeudId: noeudChene.id, niveauRequis: 5, ressourceId: boisQualite.id, quantiteMin: 1, quantiteMax: 1, tauxDrop: 0.1 },
+  });
+
+  // Table de loot — Frêne
+  // Niv 3 : Bois 2-3 à 100% | Niv 5 : Bois de qualité 1-2 à 15%
+  await prisma.noeudRessource.upsert({
+    where: { id: 4 }, update: { tauxDrop: 1.0, quantiteMin: 2, quantiteMax: 3 },
+    create: { noeudId: noeudFrene.id, niveauRequis: 3, ressourceId: bois.id, quantiteMin: 2, quantiteMax: 3, tauxDrop: 1.0 },
+  });
+  await prisma.noeudRessource.upsert({
+    where: { id: 5 }, update: { tauxDrop: 0.15, quantiteMin: 1, quantiteMax: 2 },
+    create: { noeudId: noeudFrene.id, niveauRequis: 5, ressourceId: boisQualite.id, quantiteMin: 1, quantiteMax: 2, tauxDrop: 0.15 },
+  });
+
+  // Table de loot — Blé
+  // Niv 1 : Blé 1-2 à 100% | Niv 2 : Blé 1-3 à 100% | Niv 5 : Lin 1-1 à 10%
+  await prisma.noeudRessource.upsert({
+    where: { id: 6 }, update: { tauxDrop: 1.0, quantiteMin: 1, quantiteMax: 2 },
+    create: { noeudId: noeudBle.id, niveauRequis: 1, ressourceId: ble.id, quantiteMin: 1, quantiteMax: 2, tauxDrop: 1.0 },
+  });
+  await prisma.noeudRessource.upsert({
+    where: { id: 7 }, update: { tauxDrop: 1.0, quantiteMin: 1, quantiteMax: 3 },
+    create: { noeudId: noeudBle.id, niveauRequis: 2, ressourceId: ble.id, quantiteMin: 1, quantiteMax: 3, tauxDrop: 1.0 },
+  });
+  await prisma.noeudRessource.upsert({
+    where: { id: 8 }, update: { tauxDrop: 0.1, quantiteMin: 1, quantiteMax: 1 },
+    create: { noeudId: noeudBle.id, niveauRequis: 5, ressourceId: lin.id, quantiteMin: 1, quantiteMax: 1, tauxDrop: 0.1 },
+  });
+
+  // MapRessources — quelques nœuds sur l'Orée de la forêt (map 1)
+  await prisma.mapRessource.upsert({
+    where: { mapId_caseX_caseY: { mapId: oreeForet.id, caseX: 5, caseY: 3 } }, update: {},
+    create: { mapId: oreeForet.id, caseX: 5, caseY: 3, noeudId: noeudChene.id, respawnMinutes: 10 },
+  });
+  await prisma.mapRessource.upsert({
+    where: { mapId_caseX_caseY: { mapId: oreeForet.id, caseX: 12, caseY: 5 } }, update: {},
+    create: { mapId: oreeForet.id, caseX: 12, caseY: 5, noeudId: noeudChene.id, respawnMinutes: 10 },
+  });
+  await prisma.mapRessource.upsert({
+    where: { mapId_caseX_caseY: { mapId: oreeForet.id, caseX: 8, caseY: 14 } }, update: {},
+    create: { mapId: oreeForet.id, caseX: 8, caseY: 14, noeudId: noeudFrene.id, respawnMinutes: 15 },
+  });
+
+  // PNJ enseignant les métiers — Chef du village enseigne Bûcheron, Garde enseigne Agriculteur
+  await prisma.pnjMetier.upsert({
+    where: { pnjId_metierId: { pnjId: chefVillage.id, metierId: bucheronMetier.id } }, update: {},
+    create: { pnjId: chefVillage.id, metierId: bucheronMetier.id },
+  });
+  await prisma.pnjMetier.upsert({
+    where: { pnjId_metierId: { pnjId: gardeVillage.id, metierId: agriculteurMetier.id } }, update: {},
+    create: { pnjId: gardeVillage.id, metierId: agriculteurMetier.id },
+  });
+
+  console.log('Created métiers, noeuds, loot tables, map ressources, pnj metiers');
+
+  // ==================== FAMILIERS ====================
+  // Famille de base : Loup
+  const familleLoup = await prisma.familierFamille.upsert({
+    where: { nom: 'Loup' }, update: {},
+    create: { nom: 'Loup' },
+  });
+
+  // Races : Loup Gris (génération 1), Loup Sombre (génération 2)
+  const loupGris = await prisma.familierRace.upsert({
+    where: { id: 1 },
+    update: { nom: 'Loup Gris', familleId: familleLoup.id },
+    create: {
+      nom: 'Loup Gris', familleId: familleLoup.id, generation: 1,
+      baseForce: 5, baseAgilite: 4, baseVie: 8,
+      croissanceForce: 1.2, croissanceAgilite: 0.8, croissanceVie: 1.5,
+    },
+  });
+
+  const loupSombre = await prisma.familierRace.upsert({
+    where: { id: 2 },
+    update: { nom: 'Loup Sombre', familleId: familleLoup.id },
+    create: {
+      nom: 'Loup Sombre', familleId: familleLoup.id, generation: 2,
+      baseForce: 8, baseAgilite: 6, baseVie: 10,
+      croissanceForce: 1.8, croissanceAgilite: 1.2, croissanceVie: 2.0,
+    },
+  });
+
+  // Croisements : Gris × Gris → Gris (70%) ou Sombre (30%)
+  await prisma.familierCroisement.upsert({
+    where: { raceAId_raceBId_raceEnfantId: { raceAId: loupGris.id, raceBId: loupGris.id, raceEnfantId: loupGris.id } },
+    update: { probabilite: 0.7 },
+    create: { raceAId: loupGris.id, raceBId: loupGris.id, raceEnfantId: loupGris.id, probabilite: 0.7 },
+  });
+  await prisma.familierCroisement.upsert({
+    where: { raceAId_raceBId_raceEnfantId: { raceAId: loupGris.id, raceBId: loupGris.id, raceEnfantId: loupSombre.id } },
+    update: { probabilite: 0.3 },
+    create: { raceAId: loupGris.id, raceBId: loupGris.id, raceEnfantId: loupSombre.id, probabilite: 0.3 },
+  });
+
+  // Drop : le Loup (monstre id=2) a 15% de chance de lâcher un Loup Gris
+  await prisma.monstreDrop.upsert({
+    where: { id: 10 },
+    update: { familierRaceId: loupGris.id, tauxDrop: 0.15 },
+    create: { monstreId: loup.id, familierRaceId: loupGris.id, tauxDrop: 0.15 },
+  });
+
+  // Vente : le Chef du village vend un Loup Gris à 500 or
+  await prisma.marchandLigne.upsert({
+    where: { id: 10 },
+    update: { familierRaceId: loupGris.id, prixMarchand: 500 },
+    create: { pnjId: chefVillage.id, familierRaceId: loupGris.id, prixMarchand: 500 },
+  });
+
+  console.log('Created familier famille, races, croisements, drop & marchand ligne');
+
   // Reset auto-increment sequences for tables with hardcoded IDs in seed
   const tablesToReset = [
-    '"Effet"', '"MapConnection"', '"PNJDialogue"',
+    '"Effet"', '"MapConnection"', '"PNJDialogue"', '"PNJ"',
     '"MonstreSort"', '"MonstreDrop"', '"DonjonSalle"',
     '"DonjonSalleComposition"', '"GroupeEnnemiMembre"', '"QueteRecompense"',
   ];

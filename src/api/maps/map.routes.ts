@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../../config/database';
 import { mapController } from './map.controller';
+import { metierService } from '../../services/metier.service';
+import { familierService } from '../../services/familier.service';
 
 // ==================== REGIONS ====================
 const regionsRouter = Router();
@@ -78,6 +80,53 @@ mapsRouter.delete('/:id', (req, res, next) => mapController.deleteMap(req, res, 
 // DELETE /api/maps/:id/connections/:connId - Delete a map connection
 mapsRouter.delete('/:id/connections/:connId', (req, res, next) => mapController.deleteConnection(req, res, next));
 
+// GET /api/maps/:id/enclos - Get familier enclos assignments on a map
+mapsRouter.get('/:id/enclos', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const mapId = parseInt(req.params.id, 10);
+    if (isNaN(mapId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    res.json(await familierService.getEnclosByMap(mapId));
+  } catch (error) { next(error); }
+});
+
+// GET /api/maps/:id/ressources - Get resource nodes on a map
+mapsRouter.get('/:id/ressources', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const mapId = parseInt(req.params.id, 10);
+    if (isNaN(mapId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    res.json(await metierService.getMapRessources(mapId));
+  } catch (error) { next(error); }
+});
+
+// POST /api/maps/:id/ressources - Add resource node on a map
+mapsRouter.post('/:id/ressources', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const mapId = parseInt(req.params.id, 10);
+    if (isNaN(mapId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      caseX: z.number().int().min(0),
+      caseY: z.number().int().min(0),
+      noeudId: z.number().int().positive(),
+      respawnMinutes: z.number().int().min(1).optional(),
+    });
+    const data = schema.parse(req.body);
+    res.status(201).json(await metierService.addMapRessource({ ...data, mapId }));
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+// DELETE /api/maps/:id/ressources/:ressourceId - Remove resource node from map
+mapsRouter.delete('/:id/ressources/:ressourceId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.ressourceId, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    await metierService.deleteMapRessource(id);
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
+
 // ==================== MONSTRES ====================
 const monstresRouter = Router();
 
@@ -110,6 +159,7 @@ monstresRouter.post('/:id/drops', async (req: Request, res: Response, next: Next
     const schema = z.object({
       ressourceId: z.number().int().positive().nullable().optional(),
       equipementId: z.number().int().positive().nullable().optional(),
+      familierRaceId: z.number().int().positive().nullable().optional(),
       tauxDrop: z.number().min(0).max(1).default(0.3),
       quantiteMin: z.number().int().min(1).default(1),
       quantiteMax: z.number().int().min(1).default(1),
@@ -117,7 +167,7 @@ monstresRouter.post('/:id/drops', async (req: Request, res: Response, next: Next
     const data = schema.parse(req.body);
     const drop = await prisma.monstreDrop.create({
       data: { monstreId, ...data },
-      include: { ressource: true, equipement: true },
+      include: { ressource: true, equipement: true, familierRace: true },
     });
     res.status(201).json(drop);
   } catch (error) {
@@ -134,6 +184,7 @@ monstresRouter.patch('/:id/drops/:dropId', async (req: Request, res: Response, n
     const schema = z.object({
       ressourceId: z.number().int().positive().nullable().optional(),
       equipementId: z.number().int().positive().nullable().optional(),
+      familierRaceId: z.number().int().positive().nullable().optional(),
       tauxDrop: z.number().min(0).max(1).optional(),
       quantiteMin: z.number().int().min(1).optional(),
       quantiteMax: z.number().int().min(1).optional(),
@@ -142,7 +193,7 @@ monstresRouter.patch('/:id/drops/:dropId', async (req: Request, res: Response, n
     const drop = await prisma.monstreDrop.update({
       where: { id: dropId },
       data,
-      include: { ressource: true, equipement: true },
+      include: { ressource: true, equipement: true, familierRace: true },
     });
     res.json(drop);
   } catch (error) {

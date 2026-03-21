@@ -4,6 +4,7 @@ import { pnjService } from '../../services/pnj.service';
 import { questService } from '../../services/quest.service';
 import { QueteEtapeType, QueteStatut } from '@prisma/client';
 import prisma from '../../config/database';
+import { metierService } from '../../services/metier.service';
 
 const router = Router();
 
@@ -117,6 +118,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       positionY: z.number().int().min(0),
       description: z.string().nullable().optional(),
       estMarchand: z.boolean().default(true),
+      estGardienEnclos: z.boolean().default(false),
     });
     const data = schema.parse(req.body);
     const pnj = await pnjService.create(data);
@@ -139,6 +141,7 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
       positionY: z.number().int().min(0).optional(),
       description: z.string().nullable().optional(),
       estMarchand: z.boolean().optional(),
+      estGardienEnclos: z.boolean().optional(),
       imageUrl: z.string().nullable().optional(),
       spriteScale: z.number().optional(),
       spriteOffsetX: z.number().optional(),
@@ -179,6 +182,7 @@ router.post('/:id/lignes', async (req: Request, res: Response, next: NextFunctio
     const schema = z.object({
       equipementId: z.number().int().positive().nullable().optional(),
       ressourceId: z.number().int().positive().nullable().optional(),
+      familierRaceId: z.number().int().positive().nullable().optional(),
       prixMarchand: z.number().int().min(0).nullable().optional(),
       prixRachat: z.number().int().min(0).nullable().optional(),
     });
@@ -340,6 +344,61 @@ router.post('/:id/advance-quest', async (req: Request, res: Response, next: Next
 // ============================================================
 // Gameplay: achat/vente
 // ============================================================
+
+// ============================================================
+// Gameplay: métiers
+// ============================================================
+
+// POST /api/pnj/:id/learn-metier
+router.post('/:id/learn-metier', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pnjId = parseInt(req.params.id, 10);
+    if (isNaN(pnjId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({
+      personnageId: z.number().int().positive(),
+      metierId: z.number().int().positive(),
+    });
+    const { personnageId, metierId } = schema.parse(req.body);
+    const result = await metierService.learnMetier(personnageId, pnjId, metierId);
+    res.status(201).json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    if (error instanceof Error) {
+      if (error.message === 'PNJ not found') { res.status(404).json({ error: error.message }); return; }
+      res.status(400).json({ error: error.message }); return;
+    }
+    next(error);
+  }
+});
+
+// ============================================================
+// Admin: métiers enseignés par le PNJ
+// ============================================================
+
+// POST /api/pnj/:id/metiers
+router.post('/:id/metiers', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pnjId = parseInt(req.params.id, 10);
+    if (isNaN(pnjId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    const schema = z.object({ metierId: z.number().int().positive() });
+    const { metierId } = schema.parse(req.body);
+    res.status(201).json(await metierService.addPnjMetier(pnjId, metierId));
+  } catch (error) {
+    if (error instanceof z.ZodError) { res.status(400).json({ error: 'Validation error', details: error.errors }); return; }
+    next(error);
+  }
+});
+
+// DELETE /api/pnj/:id/metiers/:metierId
+router.delete('/:id/metiers/:metierId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pnjId = parseInt(req.params.id, 10);
+    const metierId = parseInt(req.params.metierId, 10);
+    if (isNaN(pnjId) || isNaN(metierId)) { res.status(400).json({ error: 'Invalid ID' }); return; }
+    await metierService.deletePnjMetier(pnjId, metierId);
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
 
 // POST /api/pnj/:id/buy
 router.post('/:id/buy', async (req: Request, res: Response, next: NextFunction) => {

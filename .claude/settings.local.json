@@ -72,7 +72,8 @@
       "Bash(npx:*)",
       "Bash(mkdir:*)",
       "Bash(pip install:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(for id:*)"
     ]
   }
 }

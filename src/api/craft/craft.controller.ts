@@ -39,11 +39,11 @@ export class CraftController {
         return;
       }
 
-      const item = await craftService.craft(personnageId, recetteId);
-      res.status(201).json(item);
+      const result = await craftService.craft(personnageId, recetteId);
+      res.status(201).json(result);
     } catch (error) {
       if (error instanceof Error) {
-        if (error.message.includes('not found') || error.message.includes('Need') || error.message.includes('Cannot') || error.message.includes('full') || error.message.includes('enough')) {
+        if (error.message.includes('not found') || error.message.includes('Need') || error.message.includes('Cannot') || error.message.includes('full') || error.message.includes('enough') || error.message.includes('métier') || error.message.includes('Niveau')) {
           res.status(400).json({ error: error.message });
           return;
         }

@@ -278,6 +278,55 @@ export function getAffectedCells(
       }
       break;
     }
+
+    case ZoneType.T_FORME: {
+      // T-shape: perpendicular line (taille cells each side) + 1 cell forward (away from caster)
+      // Example with caster below, taille=1:
+      //   [F]        ← 1 cell forward beyond target
+      // [L][T][R]    ← target + perpendicular cells
+      if (!casterPosition) {
+        affected.push({ ...targetPosition });
+        break;
+      }
+      const tdx = targetPosition.x - casterPosition.x;
+      const tdy = targetPosition.y - casterPosition.y;
+
+      // Primary direction: caster → target
+      let tFwdX: number, tFwdY: number;
+      let tPerpX: number, tPerpY: number;
+      if (Math.abs(tdx) > Math.abs(tdy)) {
+        tFwdX = tdx > 0 ? 1 : -1;
+        tFwdY = 0;
+        tPerpX = 0;
+        tPerpY = 1;
+      } else {
+        tFwdX = 0;
+        tFwdY = tdy > 0 ? 1 : -1;
+        tPerpX = 1;
+        tPerpY = 0;
+      }
+
+      // Target cell
+      affected.push({ ...targetPosition });
+
+      // Perpendicular cells (taille each side)
+      for (let i = 1; i <= zone.taille; i++) {
+        const px1 = targetPosition.x + tPerpX * i;
+        const py1 = targetPosition.y + tPerpY * i;
+        const px2 = targetPosition.x - tPerpX * i;
+        const py2 = targetPosition.y - tPerpY * i;
+        if (isInBounds(px1, py1, grid.width, grid.height)) affected.push({ x: px1, y: py1 });
+        if (isInBounds(px2, py2, grid.width, grid.height)) affected.push({ x: px2, y: py2 });
+      }
+
+      // 1 cell forward beyond target
+      const fwdX = targetPosition.x + tFwdX;
+      const fwdY = targetPosition.y + tFwdY;
+      if (isInBounds(fwdX, fwdY, grid.width, grid.height)) {
+        affected.push({ x: fwdX, y: fwdY });
+      }
+      break;
+    }
   }
 
   return affected;

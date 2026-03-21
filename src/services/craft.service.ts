@@ -1,6 +1,10 @@
 import prisma from '../config/database';
 import { inventoryService } from './inventory.service';
 
+function xpRequis(niveau: number): number {
+  return niveau * 100;
+}
+
 export class CraftService {
   /**
    * Get all recipes
@@ -12,6 +16,7 @@ export class CraftService {
         ingredients: {
           include: { ressource: true },
         },
+        metier: { select: { id: true, nom: true } },
       },
       orderBy: { id: 'asc' },
     });
@@ -28,6 +33,7 @@ export class CraftService {
         ingredients: {
           include: { ressource: true },
         },
+        metier: { select: { id: true, nom: true } },
       },
     });
   }
@@ -58,6 +64,19 @@ export class CraftService {
       return { canCraft: false, reason: `Need ${recette.coutOr} gold, have ${personnage.or}` };
     }
 
+    // Check métier
+    if (recette.metierId) {
+      const pm = await prisma.personnageMetier.findUnique({
+        where: { personnageId_metierId: { personnageId, metierId: recette.metierId } },
+      });
+      if (!pm) {
+        return { canCraft: false, reason: `Ce craft requiert le métier associé (niveau ${recette.niveauMetierRequis})` };
+      }
+      if (pm.niveau < recette.niveauMetierRequis) {
+        return { canCraft: false, reason: `Niveau métier insuffisant — Niveau ${recette.niveauMetierRequis} requis, vous êtes niveau ${pm.niveau}` };
+      }
+    }
+
     // Check resources
     for (const ingredient of recette.ingredients) {
       const owned = await prisma.inventaireRessource.findUnique({
@@ -81,7 +100,7 @@ export class CraftService {
   }
 
   /**
-   * Craft a recipe: consume resources/gold, create item with rolled stats
+   * Craft a recipe: consume resources/gold, create item with rolled stats, award métier XP
    */
   async craft(personnageId: number, recetteId: number) {
     const check = await this.canCraft(personnageId, recetteId);
@@ -94,6 +113,7 @@ export class CraftService {
       include: {
         equipement: true,
         ingredients: true,
+        metier: { select: { id: true, nom: true } },
       },
     });
     if (!recette) throw new Error('Recipe not found');
@@ -112,7 +132,36 @@ export class CraftService {
     const rolledStats = inventoryService.rollStats(recette.equipement);
     const item = await inventoryService.addItem(personnageId, recette.equipementId, rolledStats);
 
-    return item;
+    // Award métier XP if recipe requires a métier
+    let metierProgression: { nom: string; niveau: number; xp: number; xpRequis: number; levelUp: boolean } | null = null;
+    if (recette.metierId && recette.metier) {
+      const pm = await prisma.personnageMetier.findUnique({
+        where: { personnageId_metierId: { personnageId, metierId: recette.metierId } },
+      });
+      if (pm) {
+        let newXp = pm.xp + recette.xpCraft;
+        let newNiveau = pm.niveau;
+        let levelUp = false;
+        while (newXp >= xpRequis(newNiveau)) {
+          newXp -= xpRequis(newNiveau);
+          newNiveau++;
+          levelUp = true;
+        }
+        await prisma.personnageMetier.update({
+          where: { id: pm.id },
+          data: { xp: newXp, niveau: newNiveau },
+        });
+        metierProgression = {
+          nom: recette.metier.nom,
+          niveau: newNiveau,
+          xp: newXp,
+          xpRequis: xpRequis(newNiveau),
+          levelUp,
+        };
+      }
+    }
+
+    return { item, metierProgression };
   }
 }
 

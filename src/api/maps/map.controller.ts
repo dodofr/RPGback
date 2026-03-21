@@ -48,6 +48,20 @@ const createMonstreSchema = z.object({
   spriteScale: z.number().min(0.1).default(1.0),
   spriteOffsetX: z.number().default(0),
   spriteOffsetY: z.number().default(0),
+  spriteConfig: z.object({
+    sheet: z.string(),
+    frameW: z.number().int().min(1),
+    frameH: z.number().int().min(1),
+    cols: z.number().int().min(1),
+    rows: z.number().int().min(1),
+    animations: z.record(z.object({
+      row: z.number().int().min(0),
+      frames: z.number().int().min(1),
+      startFrame: z.number().int().min(0).optional(),
+      fps: z.number().min(0).optional(),
+      freeze: z.boolean().optional(),
+    })),
+  }).nullable().optional(),
 });
 
 const addConnectionSchema = z.object({
@@ -460,6 +474,20 @@ export class MapController {
         spriteScale: z.number().min(0.1).optional(),
         spriteOffsetX: z.number().optional(),
         spriteOffsetY: z.number().optional(),
+        spriteConfig: z.object({
+          sheet: z.string(),
+          frameW: z.number().int().min(1),
+          frameH: z.number().int().min(1),
+          cols: z.number().int().min(1),
+          rows: z.number().int().min(1),
+          animations: z.record(z.object({
+            row: z.number().int().min(0),
+            frames: z.number().int().min(1),
+            startFrame: z.number().int().min(0).optional(),
+            fps: z.number().min(0).optional(),
+            freeze: z.boolean().optional(),
+          })),
+        }).nullable().optional(),
       });
       const data = updateMonstreSchema.parse(req.body);
       const monstre = await monstreService.update(id, data);

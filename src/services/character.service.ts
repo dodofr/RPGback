@@ -55,7 +55,10 @@ export class CharacterService {
     // Learn level 1 spells for this race
     await spellService.learnSpellsForLevel(personnage.id, 1);
 
-    return personnage;
+    const imageUrl = personnage.sexe === 'FEMME'
+      ? (personnage.race?.imageUrlFemme ?? personnage.race?.imageUrlHomme ?? null)
+      : (personnage.race?.imageUrlHomme ?? null);
+    return { ...personnage, imageUrl };
   }
 
   async findById(id: number) {
@@ -270,6 +273,25 @@ export class CharacterService {
       stats.bonusCritique += p.bonusCritique;
       stats.bonusDommages += p.bonusDommages;
       stats.bonusSoins += p.bonusSoins;
+    }
+
+    // Familier équipé
+    if (character.familierEquipeId) {
+      const familier = await prisma.familier.findUnique({ where: { id: character.familierEquipeId } });
+      if (familier) {
+        stats.force += familier.statForce;
+        stats.intelligence += familier.statIntelligence;
+        stats.dexterite += familier.statDexterite;
+        stats.agilite += familier.statAgilite;
+        stats.vie += familier.statVie;
+        stats.chance += familier.statChance;
+        stats.pa += familier.statPA;
+        stats.pm += familier.statPM;
+        stats.po += familier.statPO;
+        stats.bonusCritique += familier.statCritique;
+        stats.bonusDommages += familier.statDommages;
+        stats.bonusSoins += familier.statSoins;
+      }
     }
 
     return {

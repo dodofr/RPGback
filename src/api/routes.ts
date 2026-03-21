@@ -14,6 +14,8 @@ import queteRoutes from './quetes/quetes.routes';
 import inventoryRoutes from './inventory/inventory.routes';
 import craftRoutes from './craft/craft.routes';
 import uploadRoutes from './upload/upload.routes';
+import metierRoutes from './metiers/metier.routes';
+import { familleRouter, raceRouter, croisementRouter, familierRouter, characterFamilierRouter } from './familiers/familier.routes';
 
 const router = Router();
 
@@ -50,5 +52,13 @@ router.use('/import', importRoutes);
 router.use('/export', exportRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/quetes', queteRoutes);
+router.use('/metiers', metierRoutes);
+
+// Familier routes
+router.use('/familier-familles', familleRouter);
+router.use('/familier-races', raceRouter);
+router.use('/familier-croisements', croisementRouter);
+router.use('/familiers', familierRouter);
+router.use('/characters', characterFamilierRouter); // /characters/:id/familiers/*
 
 export default router;

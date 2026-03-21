@@ -13,6 +13,7 @@ import { executeAITurn } from './ai';
 import { createInvocation, killInvocationsOf } from './invocation';
 import { donjonService } from '../donjon.service';
 import { dropService } from '../drop.service';
+import { familierService } from '../familier.service';
 import { questService } from '../quest.service';
 import { getStatsWithEffects, applySpellEffects, applyShieldEffect, calculateShieldReduction, AppliedEffect, PushPullResult, getResourceModifiers, applyPoisonDamage, removeEffectsByCaster, getEffectiveResistance, getEffectiveBonusDommages, getEffectiveBonusSoins } from './effects';
 import { createZone, triggerGlyphesForEntity, triggerPiegesForEntity, decrementZones, cleanupZones } from './zones';
@@ -88,6 +89,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
       let spriteScale: number = 1.0;
       let spriteOffsetX: number = 0;
       let spriteOffsetY: number = 0;
+      let spriteConfig: any = null;
 
       if (e.personnageId) {
         // Player entity: get learned spells via PersonnageSort
@@ -226,13 +228,14 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
         // Load monster sprite data
         const monstreTemplate = await prisma.monstreTemplate.findUnique({
           where: { id: e.monstreTemplateId },
-          select: { imageUrl: true, spriteScale: true, spriteOffsetX: true, spriteOffsetY: true },
+          select: { imageUrl: true, spriteScale: true, spriteOffsetX: true, spriteOffsetY: true, spriteConfig: true },
         });
         if (monstreTemplate) {
           imageUrl = monstreTemplate.imageUrl;
           spriteScale = monstreTemplate.spriteScale;
           spriteOffsetX = monstreTemplate.spriteOffsetX;
           spriteOffsetY = monstreTemplate.spriteOffsetY;
+          spriteConfig = monstreTemplate.spriteConfig ?? null;
         }
       }
 
@@ -242,16 +245,24 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
           where: { id: e.personnageId },
           select: {
             sexe: true,
-            race: { select: { imageUrlHomme: true, imageUrlFemme: true, spriteScale: true, spriteOffsetX: true, spriteOffsetY: true } },
+            race: { select: { imageUrlHomme: true, imageUrlFemme: true, spriteScale: true, spriteOffsetX: true, spriteOffsetY: true, spriteScaleFemme: true, spriteOffsetXFemme: true, spriteOffsetYFemme: true, spriteConfigHomme: true, spriteConfigFemme: true } },
           },
         });
         if (personnage?.race) {
           imageUrl = personnage.sexe === 'FEMME'
             ? (personnage.race.imageUrlFemme ?? personnage.race.imageUrlHomme ?? null)
             : (personnage.race.imageUrlHomme ?? null);
-          spriteScale = personnage.race.spriteScale;
-          spriteOffsetX = personnage.race.spriteOffsetX;
-          spriteOffsetY = personnage.race.spriteOffsetY;
+          if (personnage.sexe === 'FEMME') {
+            spriteScale = personnage.race.spriteScaleFemme ?? personnage.race.spriteScale;
+            spriteOffsetX = personnage.race.spriteOffsetXFemme ?? personnage.race.spriteOffsetX;
+            spriteOffsetY = personnage.race.spriteOffsetYFemme ?? personnage.race.spriteOffsetY;
+            spriteConfig = personnage.race.spriteConfigFemme ?? personnage.race.spriteConfigHomme ?? null;
+          } else {
+            spriteScale = personnage.race.spriteScale;
+            spriteOffsetX = personnage.race.spriteOffsetX;
+            spriteOffsetY = personnage.race.spriteOffsetY;
+            spriteConfig = personnage.race.spriteConfigHomme ?? null;
+          }
         }
       }
 
@@ -313,6 +324,7 @@ export async function getCombatState(combatId: number): Promise<CombatState | nu
         spriteScale,
         spriteOffsetX,
         spriteOffsetY,
+        spriteConfig,
         sorts,
       };
     })
@@ -1875,6 +1887,29 @@ async function checkCombatEnd(combatId: number): Promise<void> {
         }
       } catch (error) {
         console.error('Error distributing drops:', error);
+      }
+
+      // Distribute familier drops
+      try {
+        const playerEntities = entities.filter(e => e.equipe === 0 && e.personnageId);
+        const deadEnemies = entities.filter(e => e.equipe === 1 && e.monstreTemplateId && e.pvActuels <= 0);
+        for (const enemy of deadEnemies) {
+          const familierDrops = await prisma.monstreDrop.findMany({
+            where: { monstreId: enemy.monstreTemplateId!, familierRaceId: { not: null } },
+          });
+          for (const drop of familierDrops) {
+            if (Math.random() < drop.tauxDrop && drop.familierRaceId && playerEntities.length > 0) {
+              // Give to first living player
+              const recipient = playerEntities[0];
+              if (recipient.personnageId) {
+                const famCreated = await familierService.createFamilier(recipient.personnageId, drop.familierRaceId);
+                await addLog(combatId, tour, `${recipient.nom} reçoit un familier : ${famCreated.race.nom} !`, 'FIN');
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error distributing familier drops:', error);
       }
 
       // Process quest progress (monster kills)

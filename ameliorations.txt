@@ -21,3 +21,26 @@ Les 7 animations (dans l'ordre des lignes)
   │ 5     │ Attaque + touché │ 3 + 1  │ 3 frames d'attaque, puis 1 frame de réaction au coup (éclairs, recul…) │
   ├───────┼──────────────────┼────────┼────────────────────────────────────────────────────────────────────────┤
   │ 6     │ Mort             │ 3      │ Personnage qui tombe au sol   
+
+   Craft de structures placées sur la map → Complexe, mais faisable
+
+  C'est une feature à part entière. Ce que ça implique :
+
+  - Nouveau modèle Structure (template : nom, image, bloque déplacement ?)
+  - Nouveau modèle MapStructure (structure placée : mapId, x, y, poseurId)
+  - Mode "placement" sur MapPage (clic sur une case → poser la structure)
+  - Les structures doivent s'afficher sur la map et bloquer le passage si c'est un mur
+  - Le problème difficile : qui peut construire où ? Sur une map publique (Orée de la forêt) n'importe qui peut poser des murs — ça pose des
+   problèmes de cohabitation
+
+  Les vraies questions avant de se lancer :
+  1. Où peut-on construire ? Uniquement sur des maps dédiées "terrain du joueur" ? Ou n'importe où ?
+  2. Les structures bloquent-elles en combat ? Si oui, le système de grille de combat doit être dynamique
+  3. Peut-on détruire les structures des autres ? Durabilité ?
+  4. Multi-case ? Un mur = 1 case, une maison = zone délimitée ?
+
+  ---
+  Ma recommandation : commencer par les métiers de craft (simple, immédiatement utile), et pour les structures on peut faire une version    
+  simple d'abord — structure 1 case, pas d'impact combat, sur n'importe quelle map — puis étendre.
+
+
